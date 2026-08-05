@@ -365,14 +365,17 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 .ins .iv{margin-left:auto;font:600 15px var(--sans);font-variant-numeric:tabular-nums}
 
 /* ---- the name, said properly ---- */
-.cmdname{margin:0;line-height:.92;letter-spacing:-.015em;
- font:400 clamp(30px,6.2vw,52px) var(--serif);text-transform:uppercase;
- background:linear-gradient(180deg,var(--ink) 0%,var(--ink) 55%,var(--ink2) 100%);
- -webkit-background-clip:text;background-clip:text;color:transparent}
-.cmdname span{display:block;margin-top:6px;color:var(--ink3);
- font:500 clamp(9px,1.5vw,11.5px) var(--sans);letter-spacing:.42em;
- -webkit-text-fill-color:var(--ink3)}
-body:not(.paper) .cmdname{text-shadow:0 0 34px rgba(242,236,222,.14)}
+/* .topbar h1 is declared later at 24px sans — beat it on specificity, not order */
+.topbar h1.cmdname,h1.cmdname{margin:0;line-height:.9;letter-spacing:-.02em;
+ font:400 clamp(38px,7.4vw,68px)/0.9 var(--serif);text-transform:uppercase;
+ background:linear-gradient(176deg,var(--ink) 0%,var(--ink) 52%,var(--ink2) 100%);
+ -webkit-background-clip:text;background-clip:text;
+ -webkit-text-fill-color:transparent;color:transparent}
+.topbar h1.cmdname span,h1.cmdname span{display:block;margin-top:9px;
+ font:500 clamp(10px,1.6vw,13px) var(--sans);letter-spacing:.46em;
+ -webkit-text-fill-color:var(--ink3);color:var(--ink3)}
+body:not(.paper) h1.cmdname{filter:drop-shadow(0 0 26px rgba(242,236,222,.16))}
+@media (max-width:640px){.topbar h1.cmdname span,h1.cmdname span{letter-spacing:.3em}}
 
 /* ---- alive: a faint pulse wherever live numbers land ---- */
 @keyframes bump{0%{transform:translateY(3px);opacity:.35}100%{transform:none;opacity:1}}
