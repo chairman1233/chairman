@@ -128,9 +128,14 @@ h2{font:400 21px/1.15 var(--serif);margin:0;letter-spacing:.005em}
 .ck{width:19px;height:19px;border:1px solid var(--rule2);flex:none;display:grid;place-items:center;
  font-size:11px;background:transparent;border-radius:0}
 .ck.on{background:var(--sig);color:var(--inv);border-color:var(--sig)}
-.ln2{display:flex;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--rule)}
+.ln2{display:grid;grid-template-columns:170px minmax(0,1fr);gap:4px 18px;align-items:baseline;
+ padding:11px 10px;margin:0 -10px;border-bottom:1px solid var(--rule);border-radius:7px}
+.ln2>*{min-width:0}
+.ln2>:nth-child(n+3){grid-column:2}
+.ln2:hover{background:var(--panel2)}
 .ln2:last-child{border-bottom:none}
-.ln2 .k{color:var(--ink3);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.ln2 .k{color:var(--ink3);font-size:12px;letter-spacing:.06em;text-transform:uppercase;line-height:1.35}
+@media(max-width:520px){.ln2{grid-template-columns:118px minmax(0,1fr);gap:3px 12px;padding:10px 8px;margin:0 -8px}}
 .ln2.tot{border-top:1px solid var(--ink);border-bottom:0;margin-top:6px;padding-top:16px;align-items:baseline}
 .ln2.tot .k{font-size:11px;color:var(--ink)}
 .ln2.tot .v{font:400 30px var(--serif)}
@@ -619,7 +624,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-78 · tap to add the owner";
+const BUILD="C-79 · readable detail rows";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
