@@ -384,6 +384,18 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  font-size:1em;font-weight:inherit;font-family:inherit;letter-spacing:.005em;
  color:var(--ink);-webkit-text-fill-color:var(--ink)}
 
+/* map pins carry a name chip, so they must not be clipped to a square icon box */
+.jobpin{background:none;border:0;width:auto!important;height:auto!important}
+.leaflet-popup-content-wrapper{background:var(--panel);color:var(--ink);
+ border:1px solid var(--rule2);border-radius:12px}
+.leaflet-popup-tip{background:var(--panel);border:1px solid var(--rule2)}
+.leaflet-popup-content{margin:13px 15px}
+.leaflet-container a.leaflet-popup-close-button{color:var(--ink3)}
+.leaflet-bar a{background:var(--panel);color:var(--ink);border-bottom-color:var(--rule)}
+.leaflet-bar a:hover{background:var(--panel2);color:var(--ink)}
+.leaflet-control-attribution{background:rgba(0,0,0,.6)!important;color:var(--ink3)!important}
+.leaflet-control-attribution a{color:var(--ink2)!important}
+
 /* ---- alive: a faint pulse wherever live numbers land ---- */
 @keyframes bump{0%{transform:translateY(3px);opacity:.35}100%{transform:none;opacity:1}}
 @keyframes sheen{0%{background-position:-180% 0}100%{background-position:280% 0}}
@@ -572,7 +584,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-66 · crisp wordmark";
+const BUILD="C-67 · phones + readable pins";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1131,12 +1143,22 @@ function pinCard(j){
       style="flex:1;text-align:center;padding:6px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.25);text-decoration:none;color:inherit">Open job</a>
   </div></div>`;
 }
+/* A pin has to be findable at a glance, so it carries the client name with it.
+   Dot + name ride together; the name sits on a chip so it stays readable
+   over roads, parks and water. */
 function statusDot(j){
- const c=getComputedStyle(document.body).getPropertyValue("--c-"+ck(j.status)).trim()||"#829BAB";
+ const c=getComputedStyle(document.body).getPropertyValue("--c-"+ck(j.status)).trim()||"#8FB0C4";
  const done=j.status==="Paid";
- return L.divIcon({className:"",iconSize:[20,20],iconAnchor:[10,10],
-  html:`<div style="width:18px;height:18px;border-radius:50%;background:${c};
-   border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);opacity:${done?.45:1}"></div>`});
+ const name=jobName(j);
+ const label=name.length>20?name.slice(0,20)+"…":name;
+ return L.divIcon({className:"jobpin",iconSize:null,iconAnchor:[11,11],
+  html:`<div style="display:flex;align-items:center;gap:7px;white-space:nowrap;opacity:${done?.55:1}">
+   <div style="width:22px;height:22px;border-radius:50%;background:${c};flex:none;
+     border:3px solid #0B0C0D;box-shadow:0 0 0 2px ${c}66, 0 2px 8px rgba(0,0,0,.85)"></div>
+   <span style="font:600 12.5px -apple-system,Segoe UI,sans-serif;color:#F2ECDE;
+     background:rgba(8,9,10,.86);border:1px solid ${c}88;border-radius:6px;
+     padding:3px 8px;letter-spacing:.01em;text-shadow:0 1px 2px #000">${esc(label)}</span>
+  </div>`});
 }
 function drawMap(){
  const box=document.getElementById("mapbox");if(!box)return;
@@ -1149,14 +1171,23 @@ function drawMap(){
    box.innerHTML="";
    const first=pins[0]||h;
    const map=L.map(box).setView([first.lat,first.lon],11);
-   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {maxZoom:18,attribution:"© OpenStreetMap"}).addTo(map);
+   /* Coloured pins vanish against a bright street map. Match the theme so
+      they read instantly — both basemaps are free. */
+   const night=D.theme!=="paper";
+   L.tileLayer(night
+     ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+     : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    {maxZoom:19,subdomains:"abcd",
+     attribution:"© OpenStreetMap © CARTO"}).addTo(map);
    const g=[];
    if(h){
-    L.marker([h.lat,h.lon],{icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],
-      html:`<div style="width:24px;height:24px;border-radius:7px;background:#E9E3D5;color:#22272B;
-        border:2px solid #22272B;display:grid;place-items:center;
-        font:bold 12px Georgia,serif;box-shadow:0 1px 5px rgba(0,0,0,.5)">C</div>`})})
+    L.marker([h.lat,h.lon],{zIndexOffset:1000,icon:L.divIcon({className:"jobpin",iconSize:null,iconAnchor:[14,14],
+      html:`<div style="display:flex;align-items:center;gap:7px;white-space:nowrap">
+        <div style="width:28px;height:28px;border-radius:8px;background:#F2ECDE;color:#000;
+         border:3px solid #000;display:grid;place-items:center;flex:none;
+         font:bold 14px Georgia,serif;box-shadow:0 2px 8px rgba(0,0,0,.9)">C</div>
+        <span style="font:600 12.5px -apple-system,Segoe UI,sans-serif;color:#000;
+         background:#F2ECDE;border-radius:6px;padding:3px 8px">HOME BASE</span></div>`})})
      .addTo(map).bindPopup("<b>Home base</b><br>"+esc(h.addr||"").replace(/\n/g,"<br>"));
     g.push([h.lat,h.lon]);
    }
@@ -2230,6 +2261,8 @@ function newJob(id){const j=id?job(id):{};
   </div>
   <label><span class="t">Property owner <em>${forContractor(j)?"their client":"your client"}</em></span>
    <input class="in" id="jc" value="${esc(j.owner||j.client||"")}" placeholder="Marcus Whitfield"></label>
+  <label><span class="t">Phone <em>tap to call from the job or the map</em></span>
+   <input class="in" id="jph" type="tel" inputmode="tel" value="${esc(j.phone||"")}" placeholder="713-555-0142"></label>
   <label><span class="t">Property address <em>type a few words and pick it</em></span>
    <input class="in" id="ja" value="${esc(j.address||"")}" placeholder="4821 Oak Hollow"
     oninput="addrSuggest(this.value,'ja','${id||""}')" autocomplete="off"></label>
@@ -2275,6 +2308,8 @@ function newJob(id){const j=id?job(id):{};
     <input class="in" id="jcp" value="${esc(j.contractorContact||"")}" placeholder="Mike, PM"></label>
    <label><span class="t">Contractor email</span>
     <input class="in" id="jce" type="email" value="${esc(j.contractorEmail||"")}" placeholder="mike@abcrestoration.com"></label>
+   <label><span class="t">Contractor phone</span>
+    <input class="in" id="jcph" type="tel" inputmode="tel" value="${esc(j.contractorPhone||"")}" placeholder="713-555-0142"></label>
    <label><span class="t">Owner email <em>optional</em></span>
     <input class="in" id="je" type="email" value="${esc(j.ownerEmail||j.email||"")}" placeholder="name@email.com"></label>
    ${forContractor(j)?`<label><span class="t">Send the invoice to</span>
@@ -2358,6 +2393,8 @@ function saveJob(id){
   contractor:$("#jcn")?$("#jcn").value.trim():"",
   contractorContact:$("#jcp")?$("#jcp").value.trim():"",
   contractorEmail:$("#jce")?$("#jce").value.trim():"",
+  phone:$("#jph")?$("#jph").value.trim():(id?job(id).phone:""),
+  contractorPhone:$("#jcph")?$("#jcph").value.trim():(id?job(id).contractorPhone:""),
   feeMode:_fmode,
   feePct:($("#jfpct")&&$("#jfpct").value!=="")?+$("#jfpct").value:undefined,
   flat:$("#jflat")?(+$("#jflat").value||0):0,
@@ -2417,7 +2454,9 @@ R.job=({id})=>{
    <div class="ln2"><span class="k">Invoice goes to</span>
     <b class="v-rdy">${esc(billParty(j).name)}${billParty(j).email?" · "+esc(billParty(j).email):""}</b></div>`
   :`<div class="ln2"><span class="k">Client</span><b class="v-${C}">${esc(j.owner||"—")}</b></div>
-    ${j.ownerEmail?`<div class="ln2"><span class="k">Email</span><b>${esc(j.ownerEmail)}</b></div>`:""}`}
+    ${j.ownerEmail?`<div class="ln2"><span class="k">Email</span><b>${esc(j.ownerEmail)}</b></div>`:""}
+    ${j.phone?`<div class="ln2"><span class="k">Phone</span><b><a href="tel:${esc(j.phone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.phone)}</a></b></div>`:""}
+    ${j.contractorPhone?`<div class="ln2"><span class="k">Contractor</span><b><a href="tel:${esc(j.contractorPhone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.contractorPhone)}</a></b></div>`:""}`}
   <div class="ln2"><span class="k">${isProject(j)?"Contract total":"Estimate total"}</span>
    <b class="money ser v-${C}" style="font-size:19px;cursor:pointer" onclick="quickEdit('${j.id}','total','${isProject(j)?"Contract":"Estimate"} total')">${j.total?money0(j.total):"— tap to add —"}</b></div>
   <div class="ln2"><span class="k">Job type</span><b class="v-${C}">${esc(j.loss||"—")}</b></div>
