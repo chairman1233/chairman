@@ -384,6 +384,11 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  font-size:1em;font-weight:inherit;font-family:inherit;letter-spacing:.005em;
  color:var(--ink);-webkit-text-fill-color:var(--ink)}
 
+/* example rows must be unmistakable at a glance */
+.exbadge{display:inline-block;font:700 9px var(--sans);letter-spacing:.18em;
+ padding:2px 6px;border-radius:4px;background:var(--c-lost);color:#000;
+ vertical-align:middle;margin-left:7px}
+
 /* address suggestions float instead of pushing the form around */
 .addrpop:not(:empty){position:absolute;left:0;right:0;top:0;z-index:40;
  background:var(--panel2);border:1px solid var(--rule2);border-radius:11px;
@@ -592,7 +597,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-69 · form holds still";
+const BUILD="C-70 · sync cannot eat work";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -623,7 +628,9 @@ let D=load();
 /* declarations, not consts — load() runs before this point in the file */
 function oldKeys(){return ["chairman_cc_v1","chairman_v1","chairman_os_v1"];}
 function boardIsEmpty(d){
- return !d||(!(d.jobs||[]).length&&!(d.notes||[]).length&&!(d.plans||[]).length);}
+ if(!d)return true;
+ const real=a=>((a||[]).filter(x=>!x._demo)).length;
+ return !real(d.jobs)&&!real(d.notes)&&!real(d.plans);}
 
 function load(){
  let cur=null;
@@ -642,12 +649,58 @@ function load(){
  try{return Object.assign({},JSON.parse(JSON.stringify(BLANK)),cur||{})}
  catch(e){return JSON.parse(JSON.stringify(BLANK))}
 }
+/* ---------- versioned local history ----------
+   A wipe must be visible and reversible. We keep up to 20 dated snapshots and
+   always force one when the board shrinks, because that is the moment work
+   disappears. Real records only — example data never enters history. */
+const HKEY=K+"_hist", HMAX=20;
+const realJobs=d=>((d&&d.jobs)||[]).filter(j=>!j._demo);
+function readHist(){try{return JSON.parse(localStorage.getItem(HKEY)||"[]")}catch(e){return[]}}
+function snapshot(reason){
+ try{
+  const hist=readHist();
+  const last=hist[0];
+  const now=Date.now();
+  const shrank=last&&realJobs(D).length<(last.jobs||0);
+  /* one every 2 minutes is plenty, unless something just got smaller */
+  if(last&&!shrank&&now-last.at<120000)return;
+  hist.unshift({at:now,reason:reason||(shrank?"board shrank":"autosave"),
+   jobs:realJobs(D).length,notes:(D.notes||[]).length,
+   data:JSON.stringify(D)});
+  localStorage.setItem(HKEY,JSON.stringify(hist.slice(0,HMAX)));
+ }catch(e){}
+}
+function restoreVersion(at){
+ const v=readHist().find(x=>x.at===+at);if(!v)return;
+ ask("Roll back to this version",
+     new Date(v.at).toLocaleString()+" — "+plural(v.jobs,"job")+
+     ". Your current board is snapshotted first, so this is reversible too.",
+     "Roll back",()=>{
+  snapshot("before rollback");
+  try{D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),JSON.parse(v.data));}catch(e){return;}
+  save();applyTheme();close_();go("today");toast("Rolled back");
+ });
+}
+function historySheet(){
+ const h=readHist();
+ sheet("Version history",
+  h.length?`<p class="sm dim" style="margin:0 0 16px">Every version kept on this device. Rolling back snapshots what you have now first, so nothing is one-way.</p>`
+   +h.map(v=>`<div class="ins">
+     <div class="grow"><b>${esc(new Date(v.at).toLocaleString())}</b>
+      <div class="in3">${plural(v.jobs,"job")} · ${plural(v.notes,"note")} · ${esc(v.reason)}</div></div>
+     <button class="opt2" style="padding:6px 10px" onclick="restoreVersion(${v.at})">Roll back</button>
+    </div>`).join("")
+   :`<p class="sm dim">No versions saved yet. They start building as you work.</p>`);
+}
+
 function save(){
  D._ts=Date.now();
  try{
   localStorage.setItem(K,JSON.stringify(D));
-  /* keep a rolling copy of the last board that actually had work in it */
-  if(!boardIsEmpty(D))localStorage.setItem(K+"_bak",JSON.stringify(D));
+  /* keep a rolling copy of the last board that had REAL work in it —
+     example rows must never become the thing we fall back to */
+  if(realJobs(D).length||(D.notes||[]).length)localStorage.setItem(K+"_bak",JSON.stringify(D));
+  snapshot();
  }catch(e){}
  /* tell the cloud something changed — without this nothing ever syncs */
  if(typeof cloudDirty==="function"){try{cloudDirty()}catch(e){}}
@@ -705,7 +758,9 @@ const LEADDAYS=3;   /* you work 3 days from the day the matterport + notes land 
 
 /* ---- three parties: who the work is for, who owns the property, who gets billed ---- */
 const forContractor=j=>(j.jobFor||"Homeowner")==="Contractor";
-const jobName=j=>j.owner||j.contractor||j.client||"Untitled";
+/* Example rows carry the tag in their name everywhere they appear, so they can
+   never be mistaken for a real job — on a card, in a list or on a map pin. */
+const jobName=j=>(j&&j._demo?"EXAMPLE · ":"")+((j&&(j.owner||j.contractor||j.client))||"Untitled");
 /* who the invoice is addressed to */
 function billParty(j){
  const toC=forContractor(j)&&(j.billTo||"Contractor")==="Contractor";
@@ -909,13 +964,76 @@ async function cloudPull(){
   if(boardIsEmpty(remote.data)&&!boardIsEmpty(D)&&(D._ts||0)>rts){flushCloud();return;}
   /* Small clock differences between devices should not cause a fight. */
   if(rts<=(D._ts||0)+1500)return;
-  const keepSess=SESS;
-  D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),remote.data);
-  D._ts=rts;
-  try{localStorage.setItem(K,JSON.stringify(D));
-   if(!boardIsEmpty(D))localStorage.setItem(K+"_bak",JSON.stringify(D));}catch(e){}
-  saveSess(keepSess);applyTheme();render();
+
+  /* The cloud is newer — but if this device holds work the cloud has never
+     seen, a straight overwrite destroys it silently. That is the failure that
+     ate real jobs. Ask, and default to keeping everything. */
+  const lost=onlyHere(D,remote.data);
+  if(lost.length){
+   if(_conflictOpen)return;
+   _conflictOpen=true;
+   snapshot("before cloud conflict");
+   askConflict(lost,remote.data,rts);
+   return;
+  }
+  adoptRemote(remote.data,rts);
  }catch(e){}
+}
+let _conflictOpen=false;
+/* records that exist here and nowhere in the incoming copy */
+function onlyHere(local,remote){
+ const out=[];
+ [["jobs","job"],["notes","note"],["subs","sub"],["plans","plan item"]].forEach(([k,label])=>{
+  const ids=new Set(((remote&&remote[k])||[]).map(x=>x.id));
+  ((local&&local[k])||[]).filter(x=>!x._demo&&!ids.has(x.id))
+   .forEach(x=>out.push({k,label,id:x.id,name:k==="jobs"?jobName(x):(x.text||x.name||label)}));
+ });
+ return out;
+}
+/* union by id — this device wins ties, because he is looking at it */
+function mergeBoards(mine,theirs){
+ const out=Object.assign({},JSON.parse(JSON.stringify(BLANK)),theirs);
+ ["jobs","notes","subs","plans","log","files"].forEach(k=>{
+  const seen=new Map();
+  ((theirs&&theirs[k])||[]).forEach(x=>seen.set(x.id,x));
+  ((mine&&mine[k])||[]).forEach(x=>seen.set(x.id,x));
+  out[k]=[...seen.values()];
+ });
+ return out;
+}
+function adoptRemote(data,rts){
+ const keepSess=SESS;
+ D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),data);
+ D._ts=rts;
+ try{localStorage.setItem(K,JSON.stringify(D));
+  if(realJobs(D).length)localStorage.setItem(K+"_bak",JSON.stringify(D));}catch(e){}
+ saveSess(keepSess);applyTheme();render();
+}
+function askConflict(lost,remoteData,rts){
+ const names=lost.slice(0,6).map(x=>"· "+esc(x.name)).join("<br>");
+ sheet("This device has work the cloud doesn't",
+  `<p class="sm" style="margin:0 0 14px">Another device saved something newer. These
+    ${plural(lost.length,"item")} exist only here:</p>
+   <div class="pan" style="margin:0 0 18px">${names}${lost.length>6?"<br>· and "+(lost.length-6)+" more":""}</div>
+   <p class="sm dim" style="margin:0 0 18px">Keeping both is almost always right. Nothing is deleted either way —
+    a snapshot was taken before this prompt, under Settings → Version history.</p>
+   <button class="btn" style="margin:0 0 10px" onclick="resolveConflict('merge')">Keep both — merge them</button>
+   <button class="btn sec" style="margin:0 0 10px" onclick="resolveConflict('mine')">Keep only what's on this device</button>
+   <button class="btn sec" style="margin:0" onclick="resolveConflict('theirs')">Use the cloud copy instead</button>`);
+ _pendingRemote={data:remoteData,rts};
+}
+let _pendingRemote=null;
+function resolveConflict(choice){
+ const p=_pendingRemote;_pendingRemote=null;_conflictOpen=false;close_();
+ if(!p)return;
+ if(choice==="theirs"){adoptRemote(p.data,p.rts);toast("Using the cloud copy");return;}
+ if(choice==="merge"){
+  const keepSess=SESS;
+  D=mergeBoards(D,p.data);
+  saveSess(keepSess);save();applyTheme();render();toast("Merged — nothing dropped");
+  return;
+ }
+ save();flushCloud();toast("Kept this device's copy");
 }
 /* ---- storage: photos & docs follow you ---- */
 async function cloudUpload(fid,dataUrl,name){
@@ -4450,6 +4568,7 @@ function settings(){const m=D.me;
   <div class="lab" style="margin-bottom:12px">Data</div>
   <button class="btn sec" onclick="backup()">Back up my data</button>
   <button class="btn sec" onclick="$('#imp').click()">Restore backup</button>
+  <button class="btn sec" onclick="close_();historySheet()">Version history <em style="font-style:normal;opacity:.6">(roll back a mistake)</em></button>
   <input type="file" id="imp" accept=".json" style="display:none" onchange="restore(this)">
   <button class="btn sec" onclick="demo()">Load example jobs</button>
   <button class="btn sec" onclick="clearTest()">Clear test data <em style="font-style:normal;opacity:.6">(keeps settings)</em></button>
@@ -4495,11 +4614,24 @@ function backup(){
 function restore(el){const f=el.files[0];if(!f)return;const r=new FileReader();
  r.onload=()=>{try{D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),JSON.parse(r.result));save();applyTheme();close_();go("today");toast("Restored")}
  catch(e){toast("Bad file")}};r.readAsText(f);}
-function wipe(){ask("Erase everything","Every job, invoice and schedule item on this device will be deleted. Back up first if you're not sure.","Erase it all",()=>{
+function wipe(){ask("Erase everything","Every job, invoice and schedule item on this device will be deleted. A snapshot is taken first, so this is reversible from Settings \u2192 Version history.","Erase it all",()=>{
+ snapshot("before erase");
  const th=D.theme;D=JSON.parse(JSON.stringify(BLANK));D.theme=th;save();close_();go("today");toast("Erased");});}
-function clearTest(){ask("Clear test data","Deletes every job, note, file and schedule item but keeps your subs, name, rate and settings.","Clear it",async()=>{
- for(const x of D.files)await idbDel(x.fileId);
- D.jobs=[];D.plans=[];D.notes=[];D.files=[];D.log=[];D.last=null;save();close_();go("today");toast("Cleared");});}
+function clearTest(){
+ const demoCount=D.jobs.filter(j=>j._demo).length+(D.notes||[]).filter(n=>n._demo).length
+  +(D.plans||[]).filter(p=>p._demo).length+(D.subs||[]).filter(x=>x._demo).length;
+ if(demoCount){
+  ask("Remove example data","Deletes the "+plural(demoCount,"example record")+" only. Everything you entered yourself stays exactly as it is.","Remove examples",()=>{
+   snapshot("before removing examples");
+   ["jobs","notes","plans","subs","log","files"].forEach(k=>{D[k]=(D[k]||[]).filter(x=>!x._demo)});
+   save();close_();go("today");toast("Examples removed");});
+  return;
+ }
+ ask("Clear test data","Deletes every job, note, file and schedule item but keeps your subs, name, rate and settings. A snapshot is taken first, so you can roll it back.","Clear it",async()=>{
+  snapshot("before clearing");
+  for(const x of D.files)await idbDel(x.fileId);
+  D.jobs=[];D.plans=[];D.notes=[];D.files=[];D.log=[];D.last=null;save();close_();go("today");toast("Cleared — rollback in Settings");});
+}
 /* Example data must never sit one careless tap away from real work. */
 function demo(){
  if(!boardIsEmpty(D)){
@@ -4512,17 +4644,17 @@ function demo(){
 }
 function demoGo(){
  const d=n=>{const x=new Date();x.setDate(x.getDate()-n);return isoDay(x)};
- D.jobs.unshift({id:uid(),status:"Estimating",client:"Marcus Whitfield",email:"mwhitfield@email.com",
+ D.jobs.unshift({_demo:true,id:uid(),status:"Estimating",client:"Marcus Whitfield",email:"mwhitfield@email.com",
   address:"4821 Oak Hollow Dr, Houston",insurer:"State Farm",claim:"SF-2026-88213",total:38500,advance:0,feeMode:"pct",flat:0,created2:d(4)});
- D.jobs.unshift({id:uid(),status:"Complete",client:"Sofia Alvarez",email:"sofia.a@email.com",
+ D.jobs.unshift({_demo:true,id:uid(),status:"Complete",client:"Sofia Alvarez",email:"sofia.a@email.com",
   address:"210 Birchwood Ln, Katy",insurer:"Allstate",claim:"ALS-556210",total:9200,advance:0,feeMode:"flat",flat:500,created2:d(12),readyDate:d(6)});
- D.jobs.unshift({id:uid(),status:"Invoiced",client:"Ben Truong",email:"btruong@email.com",
+ D.jobs.unshift({_demo:true,id:uid(),status:"Invoiced",client:"Ben Truong",email:"btruong@email.com",
   address:"88 Cedar Post, Houston",insurer:"Farmers",claim:"FRM-4471",total:24750,advance:250,feeMode:"pct",flat:0,
   invNo:"INV-1000",invDate:d(17),created2:d(30)});
- D.jobs.unshift({id:uid(),status:"Paid",client:"Linh Nguyen",email:"ln@email.com",address:"15 Palmetto Ct",
+ D.jobs.unshift({_demo:true,id:uid(),status:"Paid",client:"Linh Nguyen",email:"ln@email.com",address:"15 Palmetto Ct",
   insurer:"USAA",claim:"US-9921",total:31000,advance:0,feeMode:"pct",flat:0,invNo:"INV-0999",invDate:d(40),paidDate:d(31),created2:d(52)});
- D.plans.unshift({id:uid(),text:"Adjuster meet at Oak Hollow",time:"10:00 AM",date:today(),done:false});
- D.plans.unshift({id:uid(),text:"Finish Alvarez kitchen scope",time:"",date:today(),done:false});
+ D.plans.unshift({_demo:true,id:uid(),text:"Adjuster meet at Oak Hollow",time:"10:00 AM",date:today(),done:false});
+ D.plans.unshift({_demo:true,id:uid(),text:"Finish Alvarez kitchen scope",time:"",date:today(),done:false});
  D.seeded=true;save();close_();go("today");toast("Examples loaded");}
 
 /* ================= SHEET ================= */
