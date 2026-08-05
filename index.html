@@ -397,6 +397,19 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 .in.bad{border-color:var(--c-out)!important;box-shadow:0 0 0 2px rgba(207,128,67,.18)}
 .fielderr{color:var(--c-out);font:500 12px var(--sans);margin:-12px 0 14px}
 
+/* ---- AI conversation ---- */
+.chatwrap{max-height:58vh;overflow-y:auto;padding:4px 2px 8px;display:flex;flex-direction:column;gap:10px}
+.bub{max-width:82%;padding:11px 14px;border-radius:14px;font-size:15px;line-height:1.55}
+.bub.me{align-self:flex-end;background:var(--panel2);border:1px solid var(--rule2);
+ border-bottom-right-radius:5px;white-space:pre-wrap}
+.bub.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--rule);
+ border-left:2px solid var(--c-rdy);border-bottom-left-radius:5px}
+.bub.ai .note{margin:0;white-space:pre-wrap}
+.composer{display:flex;gap:9px;align-items:flex-end;
+ border-top:1px solid var(--rule);padding-top:12px}
+.composer .in{margin:0;flex:1;resize:none;overflow-y:auto;max-height:160px;padding:10px 0}
+@media(max-width:640px){.bub{max-width:92%}.chatwrap{max-height:52vh}}
+
 /* map pins carry a name chip, so they must not be clipped to a square icon box */
 .jobpin{background:none;border:0;width:auto!important;height:auto!important}
 .leaflet-popup-content-wrapper{background:var(--panel);color:var(--ink);
@@ -602,7 +615,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-73b · claude provider";
+const BUILD="C-73c · streaming chat";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2349,7 +2362,7 @@ function renderSide(){
    <div class="xs dim" style="letter-spacing:.28em;margin-top:-2px">EST. CO.</div></div>
   ${items.map(([v,ic,lab,b])=>`<button class="sitem ${(V===v||(V==="job"&&v==="jobs")||(V==="invoice"&&v==="money")||(V==="sub"&&v==="subs"))?"on":""}"
     onclick="go('${v}')"><span class="ic3">${ic}</span>${lab}${b?`<span class="sbadge">${b}</span>`:""}</button>`).join("")}
-  <button class="sitem" onclick="aiSheet()"><span class="ic3">✦</span>AI assistant</button>
+  <button class="sitem ${V==="ai"?"on":""}" onclick="go('ai')"><span class="ic3">✦</span>AI assistant</button>
   <button class="sitem" onclick="settings()"><span class="ic3">⚙</span>Settings</button>
   <div class="sfoot">
    <div class="lab" style="padding:0 8px 8px">Apps</div>
@@ -4354,6 +4367,142 @@ function renderActions(){
 function applyAll(){_aiActions.forEach((a,i)=>{if(actionOK(a)&&!_aiDone[i])applyAction(i);});}
 
 let _aiJob=null;
+/* ================= AI — a real conversation =================
+   The old modal answered one question then threw it away, and showed nothing
+   at all until the whole reply had arrived. Several seconds of dead screen is
+   what read as "about to crash". This keeps the thread and streams the answer
+   in as it is written. */
+const CHAT=()=>D.chat||(D.chat=[]);
+let _chatBusy=false;
+function chatPush(role,text){
+ CHAT().push({role,text,at:Date.now()});
+ if(CHAT().length>60)D.chat=CHAT().slice(-60);
+ save();
+}
+R.ai=()=>{
+ const msgs=CHAT();
+ const presets=[
+  ["Plan my day","Look at my jobs and today's list, tell me what to work on first and why."],
+  ["Who owes me?","Summarize what's owed and who I should chase first."],
+  ["What's blocking billing?","Which jobs can't be billed yet and why?"],
+  ["What's falling behind?","Which jobs are overdue or at risk?"]];
+ return `<div class="topbar"><div class="grow"><h1>Chairman AI</h1>
+   <div class="sub2">${aiReady()?esc(AIPROV[AICFG().provider].label)+" · answers stream in as they're written":"Nothing connected yet"}</div></div>
+  ${msgs.length?`<button class="btn sec s" style="margin:0" onclick="clearChat()">Clear</button>`:""}</div>
+ ${!aiReady()?`<div class="pan" style="border-color:var(--c-out)">
+   <div class="lab v-out">◉ No AI connected</div>
+   <p class="sm" style="margin:10px 0 0">Connect one in Settings — takes about two minutes.</p>
+   <button class="btn" onclick="settings()">Set up AI</button></div>`:`
+  <div class="chatwrap" id="chatwrap">
+   ${msgs.length?msgs.map(chatBubble).join("")
+     :`<div class="empty" style="padding:40px 20px"><div class="g dim">✦</div>
+       <div class="ser" style="font-size:20px">Ask it anything</div>
+       <p class="sm dim" style="margin-top:8px">It can see your board, your clock and your notes.</p></div>`}
+   <div id="chatlive"></div>
+  </div>
+  <div class="upbar" style="margin:14px 0 10px">
+   ${presets.map(([l,p])=>`<button onclick="sendChat(${JSON.stringify(p).replace(/"/g,"&quot;")})">${esc(l)}</button>`).join("")}</div>
+  <div class="composer">
+   <textarea class="in" id="chatq" rows="1" placeholder="Type it, or hit the mic…"
+    oninput="growBox(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+   <button class="ico" onclick="micToggle('chatq')" id="micBtn" title="Talk instead">🎙</button>
+   <button class="btn s" style="margin:0" id="chatsend" onclick="sendChat()">Send</button>
+  </div>`}`;
+};
+function chatBubble(m){
+ return m.role==="me"
+  ? `<div class="bub me">${esc(m.text)}</div>`
+  : `<div class="bub ai"><div class="note bd">${esc(m.text)}</div></div>`;
+}
+function growBox(el){el.style.height="auto";el.style.height=Math.min(160,el.scrollHeight)+"px";}
+function clearChat(){ask("Clear the conversation","The thread goes, nothing else does.","Clear it",()=>{D.chat=[];save();close_();render();});}
+function chatScroll(){const w=document.getElementById("chatwrap");if(w)w.scrollTop=w.scrollHeight;}
+async function sendChat(preset){
+ if(_chatBusy)return;
+ const box=$("#chatq");
+ const q=(preset||(box?box.value:"")||"").trim();
+ if(!q)return toast("Type something first");
+ if(box){box.value="";growBox(box);}
+ chatPush("me",q);
+ render();chatScroll();
+ _chatBusy=true;
+ const live=document.getElementById("chatlive");
+ if(live)live.innerHTML=`<div class="bub ai"><div class="note bd" id="chatstream"><span class="dim">thinking…</span></div></div>`;
+ chatScroll();
+ const ctx=aiContext();
+ let acc="";
+ try{
+  await streamAI(SYS(),`Here is the current data:\n\n${ctx}\n\n---\n\n${q}`,t=>{
+   acc+=t;
+   const el=document.getElementById("chatstream");
+   if(el){el.textContent=acc;chatScroll();}
+  });
+  if(!acc)throw new Error("Empty reply");
+  chatPush("ai",acc);
+ }catch(e){
+  chatPush("ai","Couldn't reach the model — "+(e.message||"unknown error"));
+ }
+ _chatBusy=false;
+ render();chatScroll();
+}
+/* Streams where the provider supports it, falls back to a single reply where
+   it doesn't. onToken fires with each fragment as it arrives. */
+async function streamAI(system,user,onToken){
+ const c=AICFG();
+ if(c.provider==="claude"){
+  const r=await fetch("https://api.anthropic.com/v1/messages",
+   {method:"POST",headers:{"content-type":"application/json",
+     "x-api-key":c.key,"anthropic-version":"2023-06-01",
+     "anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:claudeModel(false),max_tokens:1600,stream:true,system,
+     messages:[{role:"user",content:user}]})});
+  if(!r.ok||!r.body){const d=await r.json().catch(()=>({}));
+   throw new Error((d.error&&d.error.message)||("HTTP "+r.status));}
+  await readSSE(r,line=>{
+   try{const j=JSON.parse(line);
+    if(j.type==="content_block_delta"&&j.delta&&j.delta.text)onToken(j.delta.text);
+    if(j.type==="error"&&j.error)throw new Error(j.error.message);
+   }catch(e){}
+  });
+  return;
+ }
+ if(c.provider==="gemini"){
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel()}:streamGenerateContent?alt=sse&key=${encodeURIComponent(c.key)}`;
+  const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},
+   body:JSON.stringify({system_instruction:{parts:[{text:system}]},
+    contents:[{role:"user",parts:[{text:user}]}]})});
+  if(!r.ok||!r.body){const d=await r.json().catch(()=>({}));
+   throw new Error((d.error&&d.error.message)||("HTTP "+r.status));}
+  await readSSE(r,line=>{
+   try{const j=JSON.parse(line);
+    const t=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+    if(t)onToken(t);
+   }catch(e){}
+  });
+  return;
+ }
+ /* no streaming on this provider — deliver it in one go */
+ const t=await callAI(system,user);
+ onToken(t);
+}
+async function readSSE(res,onLine){
+ const rd=res.body.getReader(),dec=new TextDecoder();
+ let buf="";
+ for(;;){
+  const {done,value}=await rd.read();
+  if(done)break;
+  buf+=dec.decode(value,{stream:true});
+  const parts=buf.split("\n");
+  buf=parts.pop();
+  parts.forEach(p=>{
+   const s=p.trim();
+   if(!s.startsWith("data:"))return;
+   const payload=s.slice(5).trim();
+   if(!payload||payload==="[DONE]")return;
+   onLine(payload);
+  });
+ }
+}
 function aiSheet(jobId){
  _aiJob=jobId||null;
  const j=jobId?job(jobId):null;
