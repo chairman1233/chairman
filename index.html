@@ -531,7 +531,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-61 · sync + clock fixed";
+const BUILD="C-62 · job map";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -972,42 +972,156 @@ async function geocodeJob(id){
   else toast("Couldn't find that address");
  }catch(e){toast("Needs internet");}
 }
+/* ---- home base: measure everything from where he starts the day ---- */
+function homeBase(){const m=D.me||{};return (m.homeLat&&m.homeLon)?{lat:+m.homeLat,lon:+m.homeLon,addr:m.addr||""}:null;}
+/* straight-line miles. Honest name, because Houston roads are not straight. */
+function directMiles(aLat,aLon,bLat,bLon){
+ const R=3958.8,rad=x=>x*Math.PI/180;
+ const dLat=rad(bLat-aLat),dLon=rad(bLon-aLon);
+ const s=Math.sin(dLat/2)**2+Math.cos(rad(aLat))*Math.cos(rad(bLat))*Math.sin(dLon/2)**2;
+ return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+}
+const milesFromHome=j=>{const h=homeBase();
+ return (h&&j.lat&&j.lon)?directMiles(h.lat,h.lon,j.lat,j.lon):null;};
+/* Real drive time and mileage without paying anyone: hand it to Google Maps on tap. */
+function directionsURL(j){
+ const h=homeBase(),to=encodeURIComponent(j.address||(j.lat+","+j.lon));
+ const from=h?encodeURIComponent(h.addr||(h.lat+","+h.lon)):"";
+ return "https://www.google.com/maps/dir/?api=1"+(from?"&origin="+from:"")+"&destination="+to;
+}
+/* take whatever is typed in the settings box right now, don't make him save first */
+async function homeBaseFromField(){
+ const el=document.getElementById("sad");
+ if(el&&el.value.trim()){D.me.addr=el.value.trim();save();}
+ await setHomeBase();
+}
+async function setHomeBase(){
+ const m=D.me||{};
+ if(!m.addr){toast("Add your business address first");return;}
+ toast("Locating…");
+ try{
+  const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q="
+   +encodeURIComponent(m.addr.replace(/\n/g,", ")));
+  const h=(await r.json())[0];
+  if(!h){toast("Couldn't find that address");return;}
+  m.homeLat=+h.lat;m.homeLon=+h.lon;save();render();toast("Home base set");
+ }catch(e){toast("Needs internet");}
+}
+/* Nominatim asks for max 1 lookup a second. Respect it or get blocked. */
+async function pinAll(){
+ const todo=D.jobs.filter(j=>j.address&&!j.lat&&j.status!=="Lost");
+ if(!todo.length)return;
+ toast("Pinning "+todo.length+"…");
+ let done=0;
+ for(const j of todo){
+  try{
+   const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q="
+    +encodeURIComponent(j.address));
+   const h=(await r.json())[0];
+   if(h){j.lat=+h.lat;j.lon=+h.lon;done++;}
+  }catch(e){}
+  await new Promise(r=>setTimeout(r,1100));
+ }
+ save();render();
+ toast(done?"Pinned "+done+" of "+todo.length:"None of those could be found");
+}
+function mapJobs(){
+ const showDone=!!D.mapDone;
+ return D.jobs.filter(j=>j.lat&&j.lon&&j.status!=="Lost"&&(showDone||j.status!=="Paid"));
+}
+function toggleMapDone(){D.mapDone=!D.mapDone;save();render();}
+
 function R_map(){
- const pins=D.jobs.filter(j=>j.lat&&j.lon&&!["Paid","Lost"].includes(j.status));
- const missing=D.jobs.filter(j=>j.address&&!j.lat&&!["Paid","Lost"].includes(j.status));
+ const pins=mapJobs();
+ const missing=D.jobs.filter(j=>j.address&&!j.lat&&j.status!=="Lost");
+ const h=homeBase();
+ const withMiles=pins.map(j=>({j,mi:milesFromHome(j)})).sort((a,b)=>(a.mi??1e9)-(b.mi??1e9));
  return `<div class="topbar"><div class="grow"><h1>Map</h1>
-   <div class="sub2">${plural(pins.length,"job")} pinned${missing.length?" · "+missing.length+" not located yet":""}</div></div></div>
+   <div class="sub2">${plural(pins.length,"job")} on the map${missing.length?" · "+missing.length+" without a pin":""}${h?"":" · no home base set"}</div></div>
+   <div style="display:flex;gap:8px">
+    ${missing.length?`<button class="opt2" onclick="pinAll()">Pin all ${missing.length}</button>`:""}
+    <button class="opt2 ${D.mapDone?"on":""}" onclick="toggleMapDone()">${D.mapDone?"Hiding nothing":"Show paid too"}</button>
+   </div></div>
  <div class="dashgrid"><div>
   <div id="mapbox" style="height:62vh;min-height:380px;border:1px solid var(--rule);border-radius:14px;overflow:hidden;background:var(--panel)"></div>
+  ${h?"":`<div class="pan" style="margin-top:12px;border-left:2px solid var(--c-rdy)">
+    <b>Set your home base</b>
+    <p class="sm dim" style="margin:6px 0 12px">Everything measures from there — how far each job is, and directions from your door.
+     It uses the business address in Settings.</p>
+    <button class="btn sec" style="margin:0" onclick="setHomeBase()">Use my business address</button></div>`}
  </div><aside class="rail">
-  ${pins.length?`<div class="pan" style="margin-top:0"><div class="lab" style="margin-bottom:6px">Pinned</div>
-   ${pins.map(j=>`<div class="ins" style="cursor:pointer" onclick="go('job',{id:'${j.id}'})">
+  ${withMiles.length?`<div class="pan" style="margin-top:0"><div class="lab" style="margin-bottom:6px">Nearest first</div>
+   ${withMiles.map(({j,mi})=>`<div class="ins" style="cursor:pointer" onclick="go('job',{id:'${j.id}'})">
     <div class="ii" style="background:var(--panel2);color:var(--c-${ck(j.status)})">◎</div>
-    <div class="grow"><b>${esc(jobName(j))}</b><div class="in3">${esc(j.address||"")}</div></div></div>`).join("")}</div>`:""}
-  ${missing.length?`<div class="pan"><div class="lab" style="margin-bottom:6px">Not located</div>
+    <div class="grow"><b>${esc(jobName(j))}</b><div class="in3">${esc(j.address||"")}</div></div>
+    ${mi!=null?`<div class="iv">${mi.toFixed(1)}<span class="in3" style="font-size:10px"> mi</span></div>`:""}
+   </div>`).join("")}
+   ${h?`<p class="xs dim" style="margin:10px 0 0">Straight-line distance. Tap a pin for real driving directions.</p>`:""}</div>`:""}
+  ${missing.length?`<div class="pan"><div class="lab" style="margin-bottom:6px">No pin yet</div>
    ${missing.map(j=>`<div class="ins"><div class="grow"><b>${esc(jobName(j))}</b>
     <div class="in3">${esc(j.address)}</div></div>
     <button class="opt2" style="padding:6px 10px" onclick="geocodeJob('${j.id}')">Pin it</button></div>`).join("")}</div>`:""}
  </aside></div>`;
 };
 let _leaflet=false;
+/* everything the popup needs to be useful standing in a driveway */
+function pinCard(j){
+ const f=fee(j),mi=milesFromHome(j),b=billParty(j);
+ const line=(k,v)=>v?`<div style="display:flex;gap:10px;margin-top:3px"><span style="opacity:.6;min-width:62px">${k}</span><span>${v}</span></div>`:"";
+ const phone=j.phone||j.contractorPhone||"";
+ return `<div style="font:13px/1.45 -apple-system,Segoe UI,sans-serif;min-width:216px">
+  <div style="font:600 15px Georgia,serif;margin-bottom:2px">${esc(jobName(j))}</div>
+  <div style="opacity:.7">${esc(j.address||"")}</div>
+  <div style="margin:7px 0;padding:3px 8px;display:inline-block;border-radius:20px;
+   background:rgba(0,0,0,.06)">${esc(LBL[j.status]||j.status)}</div>
+  ${line("Work", esc(j.workType||"Estimate")+(j.loss?" · "+esc(j.loss):""))}
+  ${line("Bill to", esc(b.name))}
+  ${line("Carrier", j.insurer?esc(j.insurer)+(j.claim?" · "+esc(j.claim):""):"")}
+  ${line("Estimate", j.total?money0(j.total):"")}
+  ${line("My fee", f.due?money0(f.due):"")}
+  ${line("Distance", mi!=null?mi.toFixed(1)+" mi direct":"")}
+  ${phone?`<div style="margin-top:8px"><a href="tel:${esc(phone.replace(/[^0-9+]/g,""))}">${esc(phone)}</a></div>`:""}
+  <div style="display:flex;gap:8px;margin-top:10px">
+   <a href="${directionsURL(j)}" target="_blank" rel="noopener"
+      style="flex:1;text-align:center;padding:6px 8px;border-radius:7px;background:#2A3138;color:#E9E3D5;text-decoration:none">Directions</a>
+   <a href="#" onclick="event.preventDefault();go('job',{id:'${j.id}'})"
+      style="flex:1;text-align:center;padding:6px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.25);text-decoration:none;color:inherit">Open job</a>
+  </div></div>`;
+}
+function statusDot(j){
+ const c=getComputedStyle(document.body).getPropertyValue("--c-"+ck(j.status)).trim()||"#829BAB";
+ const done=j.status==="Paid";
+ return L.divIcon({className:"",iconSize:[20,20],iconAnchor:[10,10],
+  html:`<div style="width:18px;height:18px;border-radius:50%;background:${c};
+   border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);opacity:${done?.45:1}"></div>`});
+}
 function drawMap(){
  const box=document.getElementById("mapbox");if(!box)return;
- const pins=D.jobs.filter(j=>j.lat&&j.lon&&!["Paid","Lost"].includes(j.status));
- if(!pins.length){box.innerHTML=`<div class="empty" style="padding:60px 20px"><div class="g dim">◎</div>
+ const pins=mapJobs(),h=homeBase();
+ if(!pins.length&&!h){box.innerHTML=`<div class="empty" style="padding:60px 20px"><div class="g dim">◎</div>
    <div class="ser" style="font-size:19px">Nothing pinned yet</div>
    <p class="sm dim" style="margin-top:8px">Add an address to a job and pick it from the lookup, or hit "Pin it".</p></div>`;return;}
  const start=()=>{
   try{
    box.innerHTML="";
-   const map=L.map(box).setView([pins[0].lat,pins[0].lon],11);
+   const first=pins[0]||h;
+   const map=L.map(box).setView([first.lat,first.lon],11);
    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     {maxZoom:18,attribution:"© OpenStreetMap"}).addTo(map);
    const g=[];
-   pins.forEach(j=>{const mk=L.marker([j.lat,j.lon]).addTo(map)
-     .bindPopup(`<b>${esc(jobName(j))}</b><br>${esc(j.address||"")}<br>${esc(LBL[j.status]||j.status)}`);
+   if(h){
+    L.marker([h.lat,h.lon],{icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],
+      html:`<div style="width:24px;height:24px;border-radius:7px;background:#E9E3D5;color:#22272B;
+        border:2px solid #22272B;display:grid;place-items:center;
+        font:bold 12px Georgia,serif;box-shadow:0 1px 5px rgba(0,0,0,.5)">C</div>`})})
+     .addTo(map).bindPopup("<b>Home base</b><br>"+esc(h.addr||"").replace(/\n/g,"<br>"));
+    g.push([h.lat,h.lon]);
+   }
+   pins.forEach(j=>{
+    L.marker([j.lat,j.lon],{icon:statusDot(j)}).addTo(map)
+     .bindPopup(pinCard(j),{maxWidth:280});
     g.push([j.lat,j.lon]);});
-   if(g.length>1)map.fitBounds(g,{padding:[30,30]});
+   if(g.length>1)map.fitBounds(g,{padding:[36,36]});
   }catch(e){box.innerHTML=`<div class="in3" style="padding:20px">Map needs internet.</div>`;}
  };
  if(window.L)return start();
@@ -4062,8 +4176,12 @@ function settings(){const m=D.me;
   <label><span class="t">Your email</span><input class="in" id="se" value="${esc(m.email||"")}"></label>
   <label><span class="t">Your rate % <em>used on every invoice</em></span>
    <input class="in" id="sr" type="number" step="0.1" value="${m.rate||2}"></label>
-  <label><span class="t">Business address <em>prints on the invoice</em></span>
+  <label><span class="t">Business address <em>prints on the invoice, and anchors the map</em></span>
    <textarea class="in" id="sad" rows="2" style="resize:vertical" placeholder="1234 Example St&#10;Houston, TX 77001">${esc(m.addr||"")}</textarea></label>
+  <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 16px">
+   <button class="opt2" onclick="homeBaseFromField()">${(m.homeLat?"Re-locate":"Set")} home base</button>
+   <span class="xs dim">${m.homeLat?"Map measures from here":"Map needs this to show distances"}</span>
+  </div>
   <label><span class="t">Zelle <em>phone or email — prints big on the invoice</em></span>
    <input class="in" id="szelle" value="${esc(m.zelle||"")}" placeholder="713-555-0100"></label>
   <label><span class="t">Yelp page <em>for the review request</em></span>
