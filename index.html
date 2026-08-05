@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#22272B">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Chairman">
 <title>Chairman</title>
@@ -14,11 +14,12 @@
 <style>
 /* ============ BORING-STYLE EDITORIAL SYSTEM ============ */
 :root{
- --paper:#22272B; --panel:#2A3138; --panel2:#333B43; --rule:#39424A; --rule2:#4B5760;
- --ink:#E9E3D5; --ink2:#A8B1B8; --ink3:#79848C;
- --inv:#22272B; --sig:#E9E3D5;
- /* muted, flat stage colours — active work reads in colour, finished work goes quiet */
- --c-est:#829BAB; --c-rdy:#CBBA95; --c-out:#C4877A; --c-paid:#8FA898; --c-lost:#6E7A82;
+ /* true black night mode — panels lift off the black instead of floating in grey */
+ --paper:#000000; --panel:#0D0F11; --panel2:#171A1D; --rule:#22262A; --rule2:#333940;
+ --ink:#F2ECDE; --ink2:#A8B1B8; --ink3:#6F7A82;
+ --inv:#000000; --sig:#F2ECDE;
+ /* on black the stage colours can carry more light without shouting */
+ --c-est:#8FB0C4; --c-rdy:#DCC698; --c-out:#CF8043; --c-paid:#93B8A0; --c-lost:#5D6870;
  --serif:'Playfair Display','Bodoni MT',Didot,'Didot LT STD','Times New Roman',Times,serif;
  --sans:'Helvetica Neue',Helvetica,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
 }
@@ -363,6 +364,36 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 .ins .in3{font:400 11.5px var(--sans);color:var(--ink3)}
 .ins .iv{margin-left:auto;font:600 15px var(--sans);font-variant-numeric:tabular-nums}
 
+/* ---- the name, said properly ---- */
+.cmdname{margin:0;line-height:.92;letter-spacing:-.015em;
+ font:400 clamp(30px,6.2vw,52px) var(--serif);text-transform:uppercase;
+ background:linear-gradient(180deg,var(--ink) 0%,var(--ink) 55%,var(--ink2) 100%);
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+.cmdname span{display:block;margin-top:6px;color:var(--ink3);
+ font:500 clamp(9px,1.5vw,11.5px) var(--sans);letter-spacing:.42em;
+ -webkit-text-fill-color:var(--ink3)}
+body:not(.paper) .cmdname{text-shadow:0 0 34px rgba(242,236,222,.14)}
+
+/* ---- alive: a faint pulse wherever live numbers land ---- */
+@keyframes bump{0%{transform:translateY(3px);opacity:.35}100%{transform:none;opacity:1}}
+@keyframes sheen{0%{background-position:-180% 0}100%{background-position:280% 0}}
+.daysum>div{animation:bump .5s cubic-bezier(.2,.8,.3,1) both}
+.daysum>div:nth-child(2){animation-delay:.05s}
+.daysum>div:nth-child(3){animation-delay:.1s}
+.daysum>div:nth-child(4){animation-delay:.15s}
+.daysum>div:nth-child(5){animation-delay:.2s}
+.daysum>div:nth-child(6){animation-delay:.25s}
+/* a slow band of light crossing the live panels, only on black */
+body:not(.paper) .tape::after{content:"";position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(100deg,transparent 38%,rgba(242,236,222,.06) 50%,transparent 62%);
+ background-size:220% 100%;animation:sheen 9s linear infinite}
+body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+@media (prefers-reduced-motion:reduce){
+ .daysum>div{animation:none}
+ body:not(.paper) .tape::after{animation:none}
+ .tape .in2{animation:none!important}
+}
+
 /* ---- live board ---- */
 @keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .tape{overflow:hidden;border:1px solid var(--rule);border-left:2px solid var(--c-rdy);
@@ -531,7 +562,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-62 · job map";
+const BUILD="C-63 · black + command center";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -755,7 +786,7 @@ const kb=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024)
 /* ================= THEME ================= */
 function applyTheme(){document.body.classList.toggle("paper",D.theme==="paper");
  const m=$("#thBtn");if(m)m.textContent=D.theme==="paper"?"◑":"◐";
- const t=document.querySelector('meta[name=theme-color]');if(t)t.content=D.theme==="paper"?"#EDF4FA":"#22272B";
+ const t=document.querySelector('meta[name=theme-color]');if(t)t.content=D.theme==="paper"?"#EDF4FA":"#000000";
  applyZoom();}
 /* Manual size control — everything scales together */
 const ZOOMS=[["Small",.9],["Normal",1],["Large",1.15],["Huge",1.3]];
@@ -1804,6 +1835,12 @@ function todayUpdates(){
 const relTime=iso=>{if(!iso)return"";const m=Math.round((Date.now()-new Date(iso))/60000);
  if(m<1)return"now";if(m<60)return m+"m ago";const h=Math.round(m/60);
  return h<24?h+"h ago":Math.round(h/24)+"d ago";};
+/* "tomorrow" / "in 4 days" / "Mon 12" — for dates ahead of today */
+const relDay=iso=>{if(!iso)return"";
+ const d=Math.round((new Date(iso+"T00:00:00")-new Date(today()+"T00:00:00"))/86400000);
+ if(d===0)return"today";if(d===1)return"tomorrow";
+ if(d>1&&d<7)return"in "+d+" days";
+ return new Date(iso+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",day:"numeric"});};
 function tickerHTML(){
  const t=today(),cs=clockState(),p=dayPlan();
  const inv=byStage("Invoiced"),ready=billable();
@@ -1822,6 +1859,29 @@ function tickerHTML(){
  if(p.gap!=null&&p.gap>0)items.push(["out",dur(p.gap),"behind today's plan"]);
  const lastLog=(D.log||[])[0];
  if(lastLog)items.push(["lost",lastLog.who||"logged",relTime(lastLog.created)+(lastLog.amount?" · "+money0(lastLog.amount):"")]);
+
+ /* everything below is his own data — the more he feeds it, the more runs past */
+ const live=D.jobs.filter(j=>!["Paid","Lost"].includes(j.status));
+ if(live.length)items.push(["est",live.length+"",plural(live.length,"job")+" on the board"]);
+ const pipeline=sum(live,j=>+j.total||0);
+ if(pipeline)items.push(["est",money0(pipeline),"of estimates in play"]);
+ const myFees=sum(live,j=>fee(j).due);
+ if(myFees)items.push(["rdy",money0(myFees),"my fees, not yet collected"]);
+ const paidYTD=sum(D.jobs.filter(j=>j.status==="Paid"),j=>fee(j).gross);
+ if(paidYTD)items.push(["paid",money0(paidYTD),"collected all time"]);
+ const w=weekStats();
+ if(w&&w.worked)items.push(["est",dur(w.worked),"on the clock this week"]);
+ if(w&&w.lateDays)items.push(["out",w.lateDays+"",plural(w.lateDays,"late start")+" this week"]);
+ const wait=byStage("Waiting");
+ if(wait.length)items.push(["lost",wait.length+"",plural(wait.length,"job")+" waiting on someone else"]);
+ const soon=D.jobs.filter(j=>j.startDate&&j.startDate>t).sort((a,b)=>a.startDate.localeCompare(b.startDate))[0];
+ if(soon)items.push(["est",jobName(soon),"starts "+relDay(soon.startDate)]);
+ const far=D.jobs.filter(j=>j.lat&&!["Paid","Lost"].includes(j.status))
+   .map(j=>({j,mi:milesFromHome(j)})).filter(x=>x.mi!=null).sort((a,b)=>b.mi-a.mi)[0];
+ if(far)items.push(["lost",far.mi.toFixed(0)+" mi",jobName(far.j)+" — furthest out"]);
+ if((D.subs||[]).length)items.push(["lost",D.subs.length+"",plural(D.subs.length,"sub")+" on file"]);
+ if((D.notes||[]).length)items.push(["lost",D.notes.length+"",plural(D.notes.length,"note")+" in the daybook"]);
+
  if(items.length<3)items.push(["lost","Chairman","command center"]);
  const half=items.map(([c,b,l])=>`<span class="it"><span class="dot2 v-${c}">●</span><b class="v-${c}">${esc(b)}</b>${esc(l)}</span>`).join("");
  /* Always lay down two copies; wireTape decides whether it needs to move.
@@ -1931,7 +1991,7 @@ R.today=()=>{
  return `
  ${aiMsgsHTML()}
  <div class="topbar">
-  <div class="grow"><h1>Dashboard</h1>
+  <div class="grow"><h1 class="cmdname">Chairman<span>Command Center</span></h1>
    <div class="sub2">${new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div>
   <button class="btn sec s" style="margin:0${!cs.in&&!cs.off?";border-color:var(--c-out);color:var(--c-out)":cs.in&&!cs.out?";border-color:var(--c-paid);color:var(--c-paid)":""}"
    onclick="${cs.in&&!cs.out?"clockOut()":"clockIn()"}"
