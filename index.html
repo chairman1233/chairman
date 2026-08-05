@@ -602,7 +602,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-72 · layout back in frame";
+const BUILD="C-73 · layout back in frame";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2361,8 +2361,10 @@ function renderSide(){
    <button class="btn" style="margin:0" onclick="newJob()">+ New Job</button></div>`;
 }
 /* Content always lands inside #vz, the element that carries the zoom, so
-   #view keeps the margin that clears the sidebar. */
-function setView(html){
+   #view keeps the margin that clears the sidebar.
+   Named paintView, not setView — setView already exists further down for the
+   board/list toggle, and a collision here recursed until the stack blew. */
+function paintView(html){
  const pane=document.getElementById("view");
  if(!pane)return;
  pane.style.zoom="";
@@ -2370,11 +2372,11 @@ function setView(html){
 }
 function render(){
  if(cloudCfg()&&!signedIn()&&!D.cloudSkip){
-  setView(loginHTML());
+  paintView(loginHTML());
   const sd=document.getElementById("side");if(sd)sd.innerHTML="";
   applyZoom();return;
  }
- setView((R[V]||R.today)(P));renderSide();applyZoom();
+ paintView((R[V]||R.today)(P));renderSide();applyZoom();
  try{wireTape()}catch(e){}
  if(V==="jobs"&&D.view==="board")wireDrag();
  if(V==="cal"&&D.calView!=="agenda")wireMonth();
