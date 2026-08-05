@@ -365,17 +365,18 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 .ins .iv{margin-left:auto;font:600 15px var(--sans);font-variant-numeric:tabular-nums}
 
 /* ---- the name, said properly ---- */
-/* .topbar h1 is declared later at 24px sans — beat it on specificity, not order */
-.topbar h1.cmdname,h1.cmdname{margin:0;line-height:.9;letter-spacing:-.02em;
- font:400 clamp(38px,7.4vw,68px)/0.9 var(--serif);text-transform:uppercase;
- background:linear-gradient(176deg,var(--ink) 0%,var(--ink) 52%,var(--ink2) 100%);
+/* .topbar h1 is declared later at 24px sans — beat it on specificity, not order.
+   Both lines are the same size; the width is driven off the longer one so
+   COMMAND CENTER never has to wrap or spill. */
+.topbar h1.cmdname,h1.cmdname{margin:0;line-height:.94;letter-spacing:-.018em;
+ font:400 clamp(26px,5.4vw,58px)/0.94 var(--serif);text-transform:uppercase;
+ background:linear-gradient(178deg,var(--ink) 0%,var(--ink) 46%,var(--ink2) 100%);
  -webkit-background-clip:text;background-clip:text;
- -webkit-text-fill-color:transparent;color:transparent}
-.topbar h1.cmdname span,h1.cmdname span{display:block;margin-top:9px;
- font:500 clamp(10px,1.6vw,13px) var(--sans);letter-spacing:.46em;
- -webkit-text-fill-color:var(--ink3);color:var(--ink3)}
-body:not(.paper) h1.cmdname{filter:drop-shadow(0 0 26px rgba(242,236,222,.16))}
-@media (max-width:640px){.topbar h1.cmdname span,h1.cmdname span{letter-spacing:.3em}}
+ -webkit-text-fill-color:transparent;color:transparent;
+ white-space:nowrap}
+.topbar h1.cmdname span,h1.cmdname span{display:block;margin-top:2px;
+ font-size:1em;font-weight:inherit;font-family:inherit;letter-spacing:.012em}
+body:not(.paper) h1.cmdname{filter:drop-shadow(0 0 30px rgba(242,236,222,.15))}
 
 /* ---- alive: a faint pulse wherever live numbers land ---- */
 @keyframes bump{0%{transform:translateY(3px);opacity:.35}100%{transform:none;opacity:1}}
@@ -565,7 +566,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-63 · black + command center";
+const BUILD="C-64 · notes on the banner";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1883,7 +1884,20 @@ function tickerHTML(){
    .map(j=>({j,mi:milesFromHome(j)})).filter(x=>x.mi!=null).sort((a,b)=>b.mi-a.mi)[0];
  if(far)items.push(["lost",far.mi.toFixed(0)+" mi",jobName(far.j)+" — furthest out"]);
  if((D.subs||[]).length)items.push(["lost",D.subs.length+"",plural(D.subs.length,"sub")+" on file"]);
- if((D.notes||[]).length)items.push(["lost",D.notes.length+"",plural(D.notes.length,"note")+" in the daybook"]);
+
+ /* the notes themselves, not just a count — newest first, trimmed to fit the bar */
+ const recentNotes=[...(D.notes||[])]
+  .sort((a,b)=>String(b.created||"").localeCompare(String(a.created||"")))
+  .slice(0,4);
+ recentNotes.forEach(n=>{
+  const txt=(n.text||"").replace(/\s+/g," ").trim();
+  if(!txt)return;
+  const j=n.jobId?job(n.jobId):null;
+  const head=j?jobName(j):(n.who||"Note");
+  items.push(["lost",head,txt.length>78?txt.slice(0,78)+"…":txt]);
+ });
+ const more=(D.notes||[]).length-recentNotes.length;
+ if(more>0)items.push(["lost",more+"",plural(more,"more note")+" in the daybook"]);
 
  if(items.length<3)items.push(["lost","Chairman","command center"]);
  const half=items.map(([c,b,l])=>`<span class="it"><span class="dot2 v-${c}">●</span><b class="v-${c}">${esc(b)}</b>${esc(l)}</span>`).join("");
