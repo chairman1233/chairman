@@ -619,7 +619,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-76 · hourly + focus on the job";
+const BUILD="C-77 · picked company counts as named";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2958,8 +2958,9 @@ function newJob(id){const j=id?job(id):{};
        .map(a=>`<option value="${a.id}" ${(_acctPrefill||j.accountId)===a.id?"selected":""}>${esc(a.name)}</option>`).join("")}
      <option value="__new">＋ New company…</option>
     </select></label>
-   <label><span class="t">Company name <em>if it isn't on the list yet</em></span>
-    <input class="in" id="jcn" value="${esc(j.contractor||"")}" placeholder="e.g. ABC Restoration"
+   <label><span class="t">Company name <em>fills in from the list — or type a new one</em></span>
+    <input class="in" id="jcn" placeholder="e.g. ABC Restoration"
+     value="${esc(j.contractor||(()=>{const a=ACCOUNTS().find(x=>x.id===(_acctPrefill||j.accountId));return a?a.name:"";})())}"
      autocomplete="off" autocorrect="off" spellcheck="false"></label>
   </div>
   <label><span class="t">Property owner <em>${forContractor(j)?"their client":"your client"}</em></span>
@@ -3083,6 +3084,19 @@ function pickAcctOnJob(id){
  }
  toast("Filled in from "+a.name);
 }
+/* The readable company name. A picked company counts as naming it — the
+   dropdown was never consulted before, so choosing one and leaving the text
+   box empty blocked the save. Typed text still wins if he overrode it. */
+function contractorName(id){
+ const typed=($("#jcn")&&$("#jcn").value.trim())||"";
+ if(typed)return typed;
+ const picked=$("#jacct")?$("#jacct").value:"";
+ if(picked&&picked!=="__new"){
+  const a=ACCOUNTS().find(x=>x.id===picked);
+  if(a)return a.name;
+ }
+ return id?(job(id).contractor||""):"";
+}
 /* Which company a job belongs to: whatever is picked, or a new record from a
    typed name that doesn't match anything yet. */
 function accountIdForJob(id){
@@ -3164,10 +3178,11 @@ function validateJob(forWho){
  clearErrs();
  const problems=[];
  const owner=($("#jc")&&$("#jc").value.trim())||"";
- const contractor=($("#jcn")&&$("#jcn").value.trim())||"";
+ /* a company chosen from the dropdown counts as naming the contractor */
+ const contractor=contractorName("");
  if(forWho==="Contractor"){
-  if(!contractor&&!owner){
-   fieldErr("#jcn","Who is this for? Put the contractor or the owner in.");
+  if(!contractor){
+   fieldErr("#jcn","Pick a company above, or type the name here.");
    problems.push("name");}
  }else if(!owner){
   fieldErr("#jc","Needs a name so you can find it again.");
@@ -3193,7 +3208,7 @@ function saveJob(id){
  const link=$("#jml").value.trim();
  const o={owner:$("#jc").value.trim(),ownerEmail:$("#je").value.trim(),address:$("#ja").value.trim(),
   jobFor:forWho,billTo:forWho==="Contractor"?_bill:"Owner",
-  contractor:$("#jcn")?$("#jcn").value.trim():"",
+  contractor:contractorName(id),
   contractorContact:$("#jcp")?$("#jcp").value.trim():"",
   contractorEmail:$("#jce")?$("#jce").value.trim():"",
   phone:$("#jph")?$("#jph").value.trim():(id?job(id).phone:""),
@@ -3211,8 +3226,6 @@ function saveJob(id){
   estHours:$("#jeh")?(+$("#jeh").value||0):0,
   loss:_loss,mport:(link&&_mp==="Not needed")?"Done":_mp,mportLink:link,who:$("#jw").value.trim(),
   insurer:$("#ji").value.trim(),claim:$("#jn").value.trim(),total:+$("#jt").value||0,advance:+$("#jv").value||0};
- if(!o.owner&&!o.contractor)return toast("Add a property owner or contractor");
- if(o.jobFor==="Contractor"&&!o.contractor)return toast("Add the contractor's name");
  o.client=o.owner;   // keep the legacy field in step
  /* If the address changed, the old pin is now a lie. Drop it and look the new
     one up — otherwise editing an address keeps the previous coordinates and
