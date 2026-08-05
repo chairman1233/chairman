@@ -619,7 +619,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-75 · gold gone";
+const BUILD="C-76 · hourly + focus on the job";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -786,19 +786,25 @@ const extraList=j=>(j.extras||[]);
 const extrasTotal=j=>extraList(j).reduce((s,x)=>s+(+x.amount||0),0);
 /* the percentage this job pays — defaults to your standard rate */
 const jobPct=j=>(j.feePct===0||j.feePct)?+j.feePct:(+D.me.rate||2);
-const FEEMODES=[["pct","% of estimate"],["aftersubs","% after subs"],["flat","Flat fee"],["retainer","Retainer"]];
-const FEELABEL={pct:"% of estimate",aftersubs:"% after subs are paid",flat:"Flat fee"};
+const FEEMODES=[["pct","% of estimate"],["aftersubs","% after subs"],["flat","Flat fee"],["hourly","Hourly"],["retainer","Retainer"]];
+const FEELABEL={pct:"% of estimate",aftersubs:"% after subs are paid",flat:"Flat fee",hourly:"Hourly"};
+/* Hourly: the rate this job pays, falling back to the standard rate in Settings.
+   Exact minutes, no rounding up — the real number is already known. */
+const jobRate=j=>(j&&(j.hourRate===0||j.hourRate))?+j.hourRate:(+((D.me||{}).hourRate)||0);
+const hourlyAmount=j=>Math.round(((jobMin(j)||0)/60)*jobRate(j)*100)/100;
 function fee(j){
  const total=+j.total||0, adv=+j.advance||0, p=jobPct(j);
  const pct=total*(p/100);
  let feeOnly=0, kind=j.feeMode||"pct", base=total;
  if(kind==="flat"){ feeOnly=+j.flat||0; }
  else if(kind==="aftersubs"){ base=Math.max(0,total-subTotal(j)); feeOnly=base*(p/100); }
+ else if(kind==="hourly"){ base=jobMin(j)||0; feeOnly=hourlyAmount(j); }
  else if(kind==="retainer"){ feeOnly=0; }          /* covered — nothing to invoice */
  else { kind="pct"; feeOnly=pct; }
  const extras=extrasTotal(j);
  const gross=feeOnly+extras;              /* everything they owe before any advance */
  return {pct,rate:p,feeOnly,extras,gross,adv,kind,base,subs:subTotal(j),
+  hourRate:jobRate(j),mins:jobMin(j)||0,
   wouldBe:kind==="retainer"?pct:0,
   due:Math.max(0,gross-adv), over:adv>gross?adv-gross:0};
 }
@@ -1736,22 +1742,40 @@ function drawMap(){
 
 /* ================= POMODORO ================= */
 let _pom=null;
-const POM=()=>{if(!D.pom)D.pom={work:25,rest:5,done:0,day:today()};
+const POM=()=>{if(!D.pom)D.pom={work:25,rest:5,done:0,day:today(),jobId:null,on:false};
  if(D.pom.day!==today()){D.pom.day=today();D.pom.done=0;}return D.pom;};
 function pomStart(mode){
  const P=POM();const mins2=mode==="rest"?P.rest:P.work;
- _pom={mode,end:Date.now()+mins2*60000,jobId:D.jobs.find(j=>j.timerAt)?.id||D.last||null};
- save();render();toast(mode==="rest"?"Break — "+P.rest+" min":"Focus — "+P.work+" min");
+ _pom={mode,end:Date.now()+mins2*60000,jobId:P.jobId||D.jobs.find(j=>j.timerAt)?.id||D.last||null};
+ P.on=true;save();render();toast(mode==="rest"?"Break — "+P.rest+" min":"Focus — "+P.work+" min");
 }
-function pomStop(){_pom=null;render();}
+function pomStop(){
+ const P=POM();P.on=false;
+ /* stopping the focus block stops the job clock with it */
+ if(_pom&&_pom.mode==="work"&&_pom.jobId){const j=job(_pom.jobId);if(j&&j.timerAt)toggleTimer(j.id);}
+ _pom=null;save();render();
+}
 function pomTick(){
  if(!_pom)return;
  if(Date.now()>=_pom.end){
   const wasWork=_pom.mode==="work";
-  if(wasWork){POM().done++;save();
+  if(wasWork){
+   const P=POM();P.done++;
+   /* credit the session to the job it was worked on */
+   const pj=_pom.jobId?job(_pom.jobId):null;
+   if(pj)pj.pomDone=(+pj.pomDone||0)+1;
+   save();
+   /* the break is not billable, so the job clock stops for it */
    D.jobs.forEach(j=>{if(j.timerAt){j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));j.timerAt=null;}});
    takeBreakQuiet();notify("Pomodoro done","Take "+POM().rest+" minutes.");_pom=null;pomStart("rest");}
-  else{notify("Break's over","Back at it.");_pom=null;render();}
+  else{
+   notify("Break's over","Back at it.");
+   const P=POM(),back=P.jobId?job(P.jobId):null;
+   _pom=null;
+   /* straight back into the next block on the same job */
+   if(back){if(!back.timerAt)toggleTimer(back.id);pomStart("work");}
+   else{P.on=false;save();render();}
+  }
   return;
  }
  const el=document.getElementById("pomClock");
@@ -2970,7 +2994,13 @@ function newJob(id){const j=id?job(id):{};
   <label><span class="t">Fee basis</span>
    <div class="segwrap" id="jfmode">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${(j.feeMode||"pct")===k?"on":""}"
     onclick="pickFeeMode(this,'${k}')">${lab}</button>`).join("")}</div></label>
-  <div id="pctblock" style="display:${["flat","retainer"].includes(j.feeMode||"pct")?"none":"block"}">
+  <div id="hourblock" style="display:${(j.feeMode||"pct")==="hourly"?"block":"none"}">
+   <label><span class="t">Hourly rate${(D.me||{}).hourRate?` <em>your standard is ${money0(D.me.hourRate)}/hr</em>`:` <em>set a standard in Settings to skip this</em>`}</span>
+    <input class="in" id="jhr" type="number" step="5" inputmode="decimal"
+     value="${(j.hourRate===0||j.hourRate)?j.hourRate:""}" placeholder="${(D.me||{}).hourRate||85}"></label>
+   <p class="xs dim" style="margin:-10px 0 20px">Billed on exact time logged — no rounding up.
+    ${id?`So far: <b class="money">${dur(jobMin(j))} · ${money(hourlyAmount(j))}</b>`:"The timer and any time you enter by hand both count."}</p></div>
+  <div id="pctblock" style="display:${["flat","retainer","hourly"].includes(j.feeMode||"pct")?"none":"block"}">
    <label><span class="t">Percentage <em>your standard is ${D.me.rate}%</em></span>
     <input class="in" id="jfpct" type="number" step="0.1" inputmode="decimal"
      value="${(j.feePct===0||j.feePct)?j.feePct:""}" placeholder="${D.me.rate}"></label>
@@ -3089,12 +3119,14 @@ function startToday(){const s=$("#jsd"),d=$("#jdd");if(!s||!d)return;
  s.value=today();d.value=addDays(today(),LEADDAYS);toast("Due "+fmt(d.value));}
 let _fmode="pct";
 function pickFeeMode(el,k){_fmode=k;[...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));
- const pb=$("#pctblock"),fb=$("#flatblock"),hint=$("#feehint");
- if(pb)pb.style.display=["flat","retainer"].includes(k)?"none":"block";
+ const pb=$("#pctblock"),fb=$("#flatblock"),hb=$("#hourblock"),hint=$("#feehint");
+ if(pb)pb.style.display=["flat","retainer","hourly"].includes(k)?"none":"block";
  if(fb)fb.style.display=k==="flat"?"block":"none";
+ if(hb)hb.style.display=k==="hourly"?"block":"none";
  if(hint)hint.textContent=k==="aftersubs"
   ?"Your percentage of what's left after the subs are paid. Enter each sub's amount under Crew on the job."
   :k==="flat"?"A fixed amount, whatever the estimate comes to."
+  :k==="hourly"?"Time logged times your rate. The timer, focus sessions and hand-entered time all count. Extras still bill on top."
   :k==="retainer"?"Covered by the contractor's retainer — nothing gets invoiced for this estimate. Extras still bill on top."
   :"Your percentage of the estimate total.";}
 function setPct(n){const el=$("#jfpct");if(el)el.value=n;}
@@ -3170,6 +3202,7 @@ function saveJob(id){
   feeMode:_fmode,
   feePct:($("#jfpct")&&$("#jfpct").value!=="")?+$("#jfpct").value:undefined,
   flat:$("#jflat")?(+$("#jflat").value||0):0,
+  hourRate:($("#jhr")&&$("#jhr").value!=="")?+$("#jhr").value:undefined,
   workType:_wt,waitingOn:$("#jwait")?$("#jwait").value.trim():j2_wait(id),
   lat:_geoPick?_geoPick.lat:(id?job(id).lat:undefined),
   lon:_geoPick?_geoPick.lon:(id?job(id).lon:undefined),
@@ -3270,7 +3303,9 @@ R.job=({id})=>{
   ${(j.startDate||j.dueDate)?`<div class="ln2"><span class="k">Scheduled</span>
    <b class="${j.dueDate&&j.dueDate<today()?"v-out":""}">${j.startDate?fmt(j.startDate):"—"}${j.startTime?" "+h12(j.startTime):""}${j.dueDate?" → "+fmt(j.dueDate):""}</b></div>`:""}
   ${j.advance?`<div class="ln2"><span class="k">Paid in advance</span><b class="money v-paid">${money(j.advance)}</b></div>`:""}
-  <div class="ln2"><span class="k">${f.kind==="flat"?"Your fee · flat":"Your fee · "+f.rate+"%"+(f.kind==="aftersubs"?" after subs":"")}</span>
+  <div class="ln2"><span class="k">${f.kind==="flat"?"Your fee · flat"
+    :f.kind==="hourly"?"Your fee · "+dur(f.mins)+" at "+money0(f.hourRate)+"/hr"
+    :"Your fee · "+f.rate+"%"+(f.kind==="aftersubs"?" after subs":"")}</span>
    <b class="money ser v-${C}" style="font-size:18px">${money(f.feeOnly)}</b></div>
   ${f.extras?`<div class="ln2"><span class="k">Extra charges</span>
    <b class="money v-rdy">+ ${money(f.extras)}</b></div>`:""}
@@ -3471,15 +3506,36 @@ function saveTime(id){const j=job(id);
 function resetTime(id){const j=job(id);j.timeMin=0;j.timerAt=null;save();close_();render();toast("Reset");}
 function jobTimeHTML(j){
  const m=jobMin(j),f=fee(j),run=!!j.timerAt;
- const rate=m>0?f.gross/(m/60):null;
+ const hourly=(j.feeMode==="hourly");
+ /* Percentage work asks "what did I actually earn per hour". Hourly runs the
+    other way — hours times rate is the number he's charging. */
+ const rate=(!hourly&&m>0)?f.gross/(m/60):null;
+ const P=POM(),pomOn=!!(P.on&&P.jobId===j.id);
  return `<div class="pan" style="border-color:var(--c-${run?"rdy":"lost"});border-left-width:2px">
   <div class="row between" style="align-items:flex-start">
    <div class="grow"><div class="lab ${run?"v-rdy":""}">${run?`<span class="live amber"></span>`:"◷ "}Time on this estimate${run?" —— running":""}</div>
-    <div class="ser ${run?"v-rdy":""}" style="font-size:26px;margin-top:7px">${dur(m)}</div>
-    ${rate?`<div class="xs dim" style="margin-top:5px">Works out to <b class="v-${rate>=75?"paid":rate>=40?"rdy":"out"}">${money0(rate)}/hr</b> at your ${money(f.gross)} fee</div>`
+    <div class="ser ${run?"v-rdy":""}" style="font-size:26px;margin-top:7px">${dur(m)}${
+      hourly?` <span class="money" style="font-size:20px;opacity:.85">· ${money(hourlyAmount(j))}</span>`:""}</div>
+    ${hourly
+     ? `<div class="xs dim" style="margin-top:5px">At <b>${money0(jobRate(j))}/hr</b> — this is what you're charging${jobRate(j)?"":". Set a rate in Edit details or Settings."}</div>`
+     : rate?`<div class="xs dim" style="margin-top:5px">Works out to <b class="v-${rate>=75?"paid":rate>=40?"rdy":"out"}">${money0(rate)}/hr</b> at your ${money(f.gross)} fee</div>`
      :`<div class="xs dim" style="margin-top:5px">Start the timer to see your effective hourly rate</div>`}</div>
    <button class="ico" onclick="addTime('${j.id}')" title="Edit time">✎</button></div>
-  <button class="btn ${run?"sec":""}" onclick="toggleTimer('${j.id}')">${run?"◼ Stop timer":"▶ Start timer"}</button></div>`;
+  <button class="btn ${run?"sec":""}" onclick="toggleTimer('${j.id}')">${run?"◼ Stop timer":"▶ Start timer"}</button>
+  <div class="row between" style="align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--rule)">
+   <div class="grow"><div class="lab" style="margin-bottom:2px">${pomOn?`<span class="live amber"></span> Focus running`:"◔ Focus block"}</div>
+    <div class="sm dim">${P.work} min on · ${P.rest} off · ${plural(+j.pomDone||0,"session")} here</div></div>
+   <div class="upbar" style="margin:0">
+    <button class="opt2" onclick="${pomOn?"pomStop()":`pomForJob('${j.id}')`}">${pomOn?"◼ Stop":"▶ Focus"}</button>
+    <button class="opt2" onclick="pomSetup()">✎</button></div></div></div>`;
+}
+/* Starting a focus block starts the job's timer too — one button, one meaning.
+   Focus time counts toward the job; the break does not. */
+function pomForJob(id){
+ const j=job(id);if(!j)return;
+ POM().jobId=id;save();
+ if(!j.timerAt)toggleTimer(id);
+ pomStart("work");
 }
 
 /* ---------- client notes ---------- */
@@ -3637,7 +3693,17 @@ R.invoice=({id})=>{
  <div class="lab" style="margin:24px 0 10px">＄ Fee basis</div>
  <div class="segwrap">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${f.kind===k?"on":""}"
   onclick="setMode('${j.id}','${k}')">${lab}</button>`).join("")}</div>
- ${f.kind==="flat"?`
+ ${f.kind==="hourly"?`
+  <div class="opt on" style="margin-top:14px"><div class="t">Hourly — ${dur(f.mins)} logged</div>
+   <div class="row" style="gap:4px;align-items:baseline"><span class="v">$</span>
+    <input class="in" id="hourIn" type="number" step="5" inputmode="decimal" value="${jobRate(j)||""}"
+     placeholder="${(D.me||{}).hourRate||85}"
+     style="width:130px;font:400 34px var(--serif);padding:2px 0"
+     onchange="setHourRate('${j.id}',this.value)">
+    <span class="v">/hr</span><span class="grow"></span>
+    <span class="v money" style="font-size:22px">${money(f.feeOnly)}</span></div>
+   <p class="xs dim" style="margin:8px 0 0">Exact time, no rounding. Focus blocks and hand-entered time both count.</p></div>`
+ :f.kind==="flat"?`
   <div class="opt on" style="margin-top:14px"><div class="t">Flat fee</div>
    <div class="row" style="gap:4px;align-items:baseline"><span class="v">$</span>
     <input class="in" id="flatIn" type="number" inputmode="decimal" value="${j.flat||500}"
@@ -3678,10 +3744,24 @@ R.invoice=({id})=>{
  ${f.due===0&&f.adv?`<button class="btn sec" onclick="moveJob('${j.id}','Paid');go('job',{id:'${j.id}'})">● Already square — mark paid</button>`:""}
  <div style="height:20px"></div>`;
 };
-function setMode(id,m){const j=job(id);j.feeMode=m;
+function setMode(id,m){const j=job(id);
+ /* switching an already-invoiced job would silently restate what was billed */
+ if(j.invNo&&j.feeMode!==m){
+  ask("This job is already invoiced",
+   "Invoice "+j.invNo+" went out on the "+(FEELABEL[j.feeMode]||j.feeMode).toLowerCase()+
+   " basis. Changing it now changes what the invoice says it owes.",
+   "Change it anyway",()=>{applyMode(id,m);close_();});
+  return;
+ }
+ applyMode(id,m);
+}
+function applyMode(id,m){const j=job(id);j.feeMode=m;
  if(m==="flat"&&!j.flat)j.flat=+($("#flatIn")?.value)||500;
+ if(m==="hourly"&&j.hourRate==null&&!(D.me||{}).hourRate)j.hourRate=85;
  save();render();}
 function setFlat(id,v){const j=job(id);j.flat=+v||0;j.feeMode="flat";save();render();}
+function setHourRate(id,v){const j=job(id);j.hourRate=+v||0;j.feeMode="hourly";save();render();
+ toast(money0(j.hourRate)+"/hr — "+money(hourlyAmount(j))+" so far");}
 function setPctFor(id,v){const j=job(id);j.feePct=+v||0;
  if(j.feeMode==="flat")j.feeMode="pct";save();render();toast(j.feePct+"%");}
 
@@ -3704,6 +3784,7 @@ function invText(j){
  L.push(`Estimate total: ${money(j.total)}`);
  L.push("");
  L.push(f.kind==="flat"?`Flat fee ....................... ${money(f.feeOnly)}`
+  :f.kind==="hourly"?`${dur(f.mins)} at ${money0(f.hourRate)}/hr ......... ${money(f.feeOnly)}`
   :f.kind==="aftersubs"?`Fee at ${f.rate}% after subs ......... ${money(f.feeOnly)}`
   :`Fee at ${f.rate}% of estimate ......... ${money(f.feeOnly)}`);
  if(f.kind==="aftersubs"&&f.subs)L.push(`  (subs paid ${money(f.subs)} · ${money(f.base)} remaining)`);
@@ -3735,6 +3816,7 @@ function invoiceHTML(j){
  const no=j.invNo||("INV-"+D.invNo);
  const dateStr=new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
  const desc=f.kind==="flat"?`Insurance estimate preparation & claim scope — flat fee`
+  :f.kind==="hourly"?`Insurance estimate preparation & claim scope — ${dur(f.mins)} at ${money0(f.hourRate)}/hr`
   :f.kind==="aftersubs"?`Estimating & project management — ${f.rate}% of balance after subcontractors`
   :`Insurance estimate preparation & claim scope — ${f.rate}% of estimate total`;
  const rows=[];
@@ -5528,6 +5610,8 @@ function settings(){const m=D.me;
   <label><span class="t">Your email</span><input class="in" id="se" value="${esc(m.email||"")}"></label>
   <label><span class="t">Your rate % <em>used on every invoice</em></span>
    <input class="in" id="sr" type="number" step="0.1" value="${m.rate||2}"></label>
+  <label><span class="t">Your hourly rate <em>for jobs billed by the hour — any job can override it</em></span>
+   <input class="in" id="shr" type="number" step="5" inputmode="decimal" value="${m.hourRate||""}" placeholder="85"></label>
   <label><span class="t">Business address <em>prints on the invoice, and anchors the map</em></span>
    <textarea class="in" id="sad" rows="2" style="resize:vertical" placeholder="1234 Example St&#10;Houston, TX 77001">${esc(m.addr||"")}</textarea></label>
   <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 16px">
@@ -5631,6 +5715,7 @@ function settings(){const m=D.me;
   }</p>`);}
 function saveMe(){D.me=Object.assign({},D.me,{name:$("#sn").value.trim()||"Benny",biz:$("#sb").value.trim(),
  phone:$("#sp").value.trim(),email:$("#se").value.trim(),rate:+$("#sr").value||2,
+ hourRate:$("#shr")?(+$("#shr").value||0):D.me.hourRate,
  addr:$("#sad")?$("#sad").value.trim():D.me.addr,
  payInfo:$("#spay")?$("#spay").value.trim():D.me.payInfo,
  terms:$("#strm")?$("#strm").value.trim():D.me.terms,
