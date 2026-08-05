@@ -602,7 +602,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-71 · QA pass";
+const BUILD="C-72 · layout back in frame";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -941,25 +941,41 @@ function applyTheme(){document.body.classList.toggle("paper",D.theme==="paper");
 /* Manual size control — everything scales together */
 const ZOOMS=[["Small",.9],["Normal",1],["Large",1.15],["Huge",1.3]];
 const FIT_MIN=0.80;              /* never shrink below this — smaller strains the eyes */
-/* Zoom is scoped to the content pane, never the whole document. Scaling the
-   document moved the sidebar between screens (0.8 on Dashboard, 1.0 on
-   Foreman), so nav items shifted under the cursor and clicks landed on the
-   wrong row. The chrome now stays put at every zoom level. */
+/* Zoom is scoped to the content, never the whole document and never #view
+   itself. Zooming the document moved the sidebar between screens, so clicks
+   landed on the wrong nav row. Zooming #view was worse: it carries
+   margin-left:225px to clear the fixed sidebar, and zoom scales that margin
+   too, sliding the page left underneath the sidebar. So we scale an inner
+   wrapper, leaving both the chrome and the pane's offset alone. */
+function zoomTarget(){
+ const pane=document.getElementById("view");
+ if(!pane)return null;
+ let inner=document.getElementById("vz");
+ if(!inner||inner.parentElement!==pane){
+  inner=document.createElement("div");
+  inner.id="vz";
+  while(pane.firstChild)inner.appendChild(pane.firstChild);
+  pane.appendChild(inner);
+ }
+ return inner;
+}
 function applyZoom(){
  const base=D.zoom||1;
- const pane=document.getElementById("view");
  document.documentElement.style.zoom="";          /* undo any earlier global zoom */
- if(!pane)return;
- pane.style.zoom=base===1?"":String(base);
+ const pane=document.getElementById("view");
+ if(pane)pane.style.zoom="";                      /* and any earlier pane zoom */
+ const inner=zoomTarget();
+ if(!inner)return;
+ inner.style.zoom=base===1?"":String(base);
  if(D.fitAll===false)return;
  requestAnimationFrame(()=>{
-  const cur=parseFloat(pane.style.zoom)||base;
-  const need=pane.scrollHeight||0;
-  const have=window.innerHeight||0;
-  if(!need||!have)return;
+  const cur=parseFloat(inner.style.zoom)||base;
+  const need=inner.scrollHeight||0;
+  const have=(window.innerHeight||0)-(inner.getBoundingClientRect().top||0)-8;
+  if(!need||have<=0)return;
   if(need*cur<=have+2)return;                     /* already fits at this size */
   const z=Math.max(FIT_MIN*base,Math.min(base,have/need));
-  pane.style.zoom=String(z);
+  inner.style.zoom=String(z);
  });
 }
 function setZoom(z){D.zoom=z;save();applyZoom();
@@ -2344,13 +2360,21 @@ function renderSide(){
    </div>
    <button class="btn" style="margin:0" onclick="newJob()">+ New Job</button></div>`;
 }
+/* Content always lands inside #vz, the element that carries the zoom, so
+   #view keeps the margin that clears the sidebar. */
+function setView(html){
+ const pane=document.getElementById("view");
+ if(!pane)return;
+ pane.style.zoom="";
+ pane.innerHTML=`<div id="vz">${html}</div>`;
+}
 function render(){
  if(cloudCfg()&&!signedIn()&&!D.cloudSkip){
-  $("#view").innerHTML=loginHTML();
+  setView(loginHTML());
   const sd=document.getElementById("side");if(sd)sd.innerHTML="";
   applyZoom();return;
  }
- $("#view").innerHTML=(R[V]||R.today)(P);renderSide();applyZoom();
+ setView((R[V]||R.today)(P));renderSide();applyZoom();
  try{wireTape()}catch(e){}
  if(V==="jobs"&&D.view==="board")wireDrag();
  if(V==="cal"&&D.calView!=="agenda")wireMonth();
