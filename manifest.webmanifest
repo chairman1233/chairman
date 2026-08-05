@@ -1,0 +1,16 @@
+{
+  "name": "Chairman — Estimating Co.",
+  "short_name": "Chairman",
+  "description": "Job pipeline, invoicing and scheduling for an insurance estimator and general contractor.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#22272B",
+  "theme_color": "#22272B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
