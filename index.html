@@ -384,6 +384,14 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  font-size:1em;font-weight:inherit;font-family:inherit;letter-spacing:.005em;
  color:var(--ink);-webkit-text-fill-color:var(--ink)}
 
+/* address suggestions float instead of pushing the form around */
+.addrpop:not(:empty){position:absolute;left:0;right:0;top:0;z-index:40;
+ background:var(--panel2);border:1px solid var(--rule2);border-radius:11px;
+ padding:4px 10px;box-shadow:0 14px 34px rgba(0,0,0,.6);max-height:250px;overflow:auto}
+/* a required field he left blank */
+.in.bad{border-color:var(--c-out)!important;box-shadow:0 0 0 2px rgba(207,128,67,.18)}
+.fielderr{color:var(--c-out);font:500 12px var(--sans);margin:-12px 0 14px}
+
 /* map pins carry a name chip, so they must not be clipped to a square icon box */
 .jobpin{background:none;border:0;width:auto!important;height:auto!important}
 .leaflet-popup-content-wrapper{background:var(--panel);color:var(--ink);
@@ -584,7 +592,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-67 · phones + readable pins";
+const BUILD="C-69 · form holds still";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -883,6 +891,10 @@ async function flushCloud(){
 }
 async function cloudPull(){
  if(!cloudCfg()||!signedIn())return;
+ /* Never swap the whole board out from under an open form. The job being
+    edited would be replaced mid-edit and the save would write onto a stale
+    record. Whatever is on the server will still be there in 25 seconds. */
+ if(document.getElementById("ov"))return;
  try{
   const r=await cloudFetch("/rest/v1/boards?select=data,updated_at&user_id=eq."+SESS.user.id);
   if(!r.ok)return;
@@ -1023,10 +1035,14 @@ async function geocodeJob(id){
   const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q="
    +encodeURIComponent(j.address));
   const h=(await r.json())[0];
-  if(h){j.lat=+h.lat;j.lon=+h.lon;save();render();toast("Pinned");}
-  else toast("Couldn't find that address");
+  if(h){j.lat=+h.lat;j.lon=+h.lon;j.geoFail=false;save();render();toast("Pinned");}
+  else {j.geoFail=true;save();render();
+   toast("Couldn't find \""+j.address+"\" — check the street spelling");}
  }catch(e){toast("Needs internet");}
 }
+/* An address the app silently failed to locate is worse than no address —
+   it looks fine on the job and then there is no pin and no directions. */
+const geoUnresolved=j=>!!(j.address&&!j.lat&&j.status!=="Lost");
 /* ---- home base: measure everything from where he starts the day ---- */
 function homeBase(){const m=D.me||{};return (m.homeLat&&m.homeLon)?{lat:+m.homeLat,lon:+m.homeLon,addr:m.addr||""}:null;}
 /* straight-line miles. Honest name, because Houston roads are not straight. */
@@ -1112,7 +1128,10 @@ function R_map(){
     ${mi!=null?`<div class="iv">${mi.toFixed(1)}<span class="in3" style="font-size:10px"> mi</span></div>`:""}
    </div>`).join("")}
    ${h?`<p class="xs dim" style="margin:10px 0 0">Straight-line distance. Tap a pin for real driving directions.</p>`:""}</div>`:""}
-  ${missing.length?`<div class="pan"><div class="lab" style="margin-bottom:6px">No pin yet</div>
+  ${missing.length?`<div class="pan" style="border-left:2px solid var(--c-out)">
+   <div class="lab v-out" style="margin-bottom:6px">⚠ No pin yet — check these addresses</div>
+   <p class="xs dim" style="margin:0 0 10px">These didn't resolve to a real location, usually a misspelt street.
+    They will not show on the map and you will not get directions to them.</p>
    ${missing.map(j=>`<div class="ins"><div class="grow"><b>${esc(jobName(j))}</b>
     <div class="in3">${esc(j.address)}</div></div>
     <button class="opt2" style="padding:6px 10px" onclick="geocodeJob('${j.id}')">Pin it</button></div>`).join("")}</div>`:""}
@@ -2256,17 +2275,22 @@ function newJob(id){const j=id?job(id):{};
    </div></label>
   <div id="cblock" style="display:${forContractor(j)?"block":"none"}">
    <label><span class="t">Contractor / company</span>
-    <input class="in" id="jcn" value="${esc(j.contractor||"")}" placeholder="ABC Restoration" list="conlist"></label>
+    <input class="in" id="jcn" value="${esc(j.contractor||"")}" placeholder="e.g. ABC Restoration"
+     list="conlist" autocomplete="off" autocorrect="off" spellcheck="false"></label>
    <datalist id="conlist">${[...new Set(D.jobs.map(x=>x.contractor).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
   </div>
   <label><span class="t">Property owner <em>${forContractor(j)?"their client":"your client"}</em></span>
-   <input class="in" id="jc" value="${esc(j.owner||j.client||"")}" placeholder="Marcus Whitfield"></label>
+   <input class="in" id="jc" value="${esc(j.owner||j.client||"")}" placeholder="e.g. Marcus Whitfield"
+    autocomplete="off" autocorrect="off" spellcheck="false"></label>
   <label><span class="t">Phone <em>tap to call from the job or the map</em></span>
-   <input class="in" id="jph" type="tel" inputmode="tel" value="${esc(j.phone||"")}" placeholder="713-555-0142"></label>
+   <input class="in" id="jph" type="tel" inputmode="tel" value="${esc(j.phone||"")}"
+    placeholder="713-555-0142" autocomplete="off"></label>
   <label><span class="t">Property address <em>type a few words and pick it</em></span>
-   <input class="in" id="ja" value="${esc(j.address||"")}" placeholder="4821 Oak Hollow"
-    oninput="addrSuggest(this.value,'ja','${id||""}')" autocomplete="off"></label>
-  <div id="addrHits" style="margin:-10px 0 16px"></div>
+   <input class="in" id="ja" value="${esc(j.address||"")}" placeholder="e.g. 4821 Oak Hollow"
+    oninput="addrSuggest(this.value,'ja','${id||""}')" autocomplete="off" autocorrect="off" spellcheck="false"></label>
+  <!-- suggestions float over the form; they used to push every field below
+       them down while he was still typing -->
+  <div style="position:relative;margin:-14px 0 14px"><div id="addrHits" class="addrpop"></div></div>
   ${(!id||["Waiting","Estimating"].includes(j.status||"Estimating"))?`
   <label><span class="t">Where does it stand?</span>
    <div class="segwrap" id="jstat">
@@ -2386,10 +2410,59 @@ function togMoreJob(){const m=$("#moreblk"),t=$("#moreTog");if(!m)return;
  if(t)t.textContent=open?"More details — insurance, dates, Matterport… ▾":"Fewer details ▴";}
 function setStartTime(t){const el=$("#jst");if(el)el.value=t;}
 const j2_wait=id=>{const x=id?job(id):null;return x?x.waitingOn||"":"";};
+/* Read the toggle from the buttons themselves. The module-level _for could
+   drift out of step with what he could actually see on screen. */
+function forFromDOM(){
+ const box=$("#jfor");if(!box)return _for;
+ const on=[...box.children].findIndex(c=>c.classList.contains("on"));
+ return on===1?"Contractor":on===0?"Homeowner":_for;
+}
+function fieldErr(sel,msg){
+ const el=$(sel);if(!el)return;
+ el.classList.add("bad");
+ if(el.parentNode&&!el.parentNode.querySelector(".fielderr")){
+  const d=document.createElement("div");d.className="fielderr";d.textContent=msg;
+  el.parentNode.insertAdjacentElement("afterend",d);
+ }
+}
+function clearErrs(){
+ document.querySelectorAll(".in.bad").forEach(e=>e.classList.remove("bad"));
+ document.querySelectorAll(".fielderr").forEach(e=>e.remove());
+}
+/* Saying "saved" over an empty job is worse than refusing. */
+function validateJob(forWho){
+ clearErrs();
+ const problems=[];
+ const owner=($("#jc")&&$("#jc").value.trim())||"";
+ const contractor=($("#jcn")&&$("#jcn").value.trim())||"";
+ if(forWho==="Contractor"){
+  if(!contractor&&!owner){
+   fieldErr("#jcn","Who is this for? Put the contractor or the owner in.");
+   problems.push("name");}
+ }else if(!owner){
+  fieldErr("#jc","Needs a name so you can find it again.");
+  problems.push("name");
+ }
+ const total=$("#jt")?+$("#jt").value:0;
+ if(total<0){fieldErr("#jt","That can't be negative.");problems.push("total");}
+ const adv=$("#jv")?+$("#jv").value:0;
+ if(adv<0){fieldErr("#jv","That can't be negative.");problems.push("advance");}
+ const sd=$("#jsd")&&$("#jsd").value, dd=$("#jdd")&&$("#jdd").value;
+ if(sd&&dd&&dd<sd){fieldErr("#jdd","Due before it starts.");problems.push("dates");}
+ return problems;
+}
 function saveJob(id){
+ const forWho=forFromDOM();
+ const bad=validateJob(forWho);
+ if(bad.length){
+  const first=document.querySelector(".in.bad");
+  if(first){first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();}
+  toast(bad.includes("name")?"Give it a name first":"Check the highlighted fields");
+  return;
+ }
  const link=$("#jml").value.trim();
  const o={owner:$("#jc").value.trim(),ownerEmail:$("#je").value.trim(),address:$("#ja").value.trim(),
-  jobFor:_for,billTo:_for==="Contractor"?_bill:"Owner",
+  jobFor:forWho,billTo:forWho==="Contractor"?_bill:"Owner",
   contractor:$("#jcn")?$("#jcn").value.trim():"",
   contractorContact:$("#jcp")?$("#jcp").value.trim():"",
   contractorEmail:$("#jce")?$("#jce").value.trim():"",
@@ -4172,7 +4245,10 @@ function jobSummaryHTML(j){
  return `<div class="pan" style="margin-top:0"><div class="lab" style="margin-bottom:8px">▤ Estimate summary</div>
   <div class="ln2"><span class="k">For</span><b>${esc(forContractor(j)?j.contractor||"—":j.owner||"—")}</b></div>
   ${forContractor(j)?`<div class="ln2"><span class="k">Property owner</span><b>${esc(j.owner||"—")}</b></div>`:""}
-  <div class="ln2"><span class="k">Address</span><b>${esc(j.address||"—")}</b></div>
+  <div class="ln2"><span class="k">Address</span><b>${esc(j.address||"—")}${
+   geoUnresolved(j)?` <span class="v-out" style="font-size:11.5px;font-weight:600">⚠ not on the map</span>`:""}</b></div>
+  ${geoUnresolved(j)?`<div class="ln2"><span class="k"></span><b><button class="opt2" style="padding:5px 10px"
+    onclick="geocodeJob('${j.id}')">Find this address</button></b></div>`:""}
   <div class="ln2"><span class="k">Job type</span><b>${esc(j.loss||"—")}</b></div>
   ${j.insurer?`<div class="ln2"><span class="k">Carrier / claim</span><b>${esc(j.insurer)}${j.claim?" · "+esc(j.claim):""}</b></div>`:""}
   <div class="ln2"><span class="k">Estimate total</span><b class="money ser" style="font-size:19px">${money(j.total)}</b></div>
@@ -4387,7 +4463,11 @@ function settings(){const m=D.me;
    <div><span class="k">Paid</span><span class="v v-paid">●</span></div></div>
   <p class="xs dim" style="margin-top:10px">You should see four different colours above: dusty blue, ochre, clay, sage.
    All grey means you're on a cached old copy — hard-refresh (Ctrl+Shift+R).</p>
-  <p class="xs dim" style="margin-top:14px">Saves on this device only. Back it up now and then.</p>`);}
+  <p class="xs dim" style="margin-top:14px">${
+   (cloudCfg()&&signedIn())
+    ? "Signed in as <b>"+esc(SESS.user.email||"you")+"</b>. Every change saves here and to your cloud within about two seconds, so your phone and desktop stay in step. A backup file is still worth keeping now and then."
+    : "<b>Not signed in — this device only.</b> Nothing is syncing anywhere. Back up your data, or sign in so it follows you between phone and desktop."
+  }</p>`);}
 function saveMe(){D.me=Object.assign({},D.me,{name:$("#sn").value.trim()||"Benny",biz:$("#sb").value.trim(),
  phone:$("#sp").value.trim(),email:$("#se").value.trim(),rate:+$("#sr").value||2,
  addr:$("#sad")?$("#sad").value.trim():D.me.addr,
@@ -4420,7 +4500,17 @@ function wipe(){ask("Erase everything","Every job, invoice and schedule item on 
 function clearTest(){ask("Clear test data","Deletes every job, note, file and schedule item but keeps your subs, name, rate and settings.","Clear it",async()=>{
  for(const x of D.files)await idbDel(x.fileId);
  D.jobs=[];D.plans=[];D.notes=[];D.files=[];D.log=[];D.last=null;save();close_();go("today");toast("Cleared");});}
+/* Example data must never sit one careless tap away from real work. */
 function demo(){
+ if(!boardIsEmpty(D)){
+  ask("Your board isn't empty",
+      "You have "+plural(D.jobs.length,"real job")+" on the board. Example jobs get mixed in with them and every one is tagged 'EXAMPLE' so you can tell them apart. Clear test data afterwards to remove them.",
+      "Add examples anyway",()=>demoGo());
+  return;
+ }
+ demoGo();
+}
+function demoGo(){
  const d=n=>{const x=new Date();x.setDate(x.getDate()-n);return isoDay(x)};
  D.jobs.unshift({id:uid(),status:"Estimating",client:"Marcus Whitfield",email:"mwhitfield@email.com",
   address:"4821 Oak Hollow Dr, Houston",insurer:"State Farm",claim:"SF-2026-88213",total:38500,advance:0,feeMode:"pct",flat:0,created2:d(4)});
