@@ -602,7 +602,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-73 · layout back in frame";
+const BUILD="C-73b · claude provider";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3953,12 +3953,17 @@ function delSub(id){const s=D.subs.find(x=>x.id===id);
 /* ================= AI ================= */
 const AICFG=()=>{if(!D.ai)D.ai={provider:"gemini",key:"",ollamaUrl:"http://localhost:11434",ollamaModel:"llama3.1"};return D.ai;};
 const AIPROV={
+ claude:{label:"Claude",note:"Sonnet day to day · Opus for the weekly read. Pay as you go.",
+  model:"claude-sonnet-5",deep:"claude-opus-5",
+  keyUrl:"https://console.anthropic.com/settings/keys"},
  gemini:{label:"Google Gemini",note:"Free tier · no card needed",model:"gemini-3.6-flash",
   keyUrl:"https://aistudio.google.com/apikey"},
  groq:{label:"Groq",note:"Free tier · very fast",model:"llama-3.3-70b-versatile",
   keyUrl:"https://console.groq.com/keys"},
  ollama:{label:"Ollama (on your PC)",note:"Free forever · fully private · no key",model:"local"}
 };
+/* Sonnet carries the daily load; Opus only where deep analysis earns its cost. */
+const claudeModel=deep=>deep?(AICFG().deepModel||AIPROV.claude.deep):(AICFG().model||AIPROV.claude.model);
 /* Google retires model names periodically — ask the API what's actually live
    instead of hard-coding one that goes stale. */
 const geminiModel=()=>AICFG().model||AIPROV.gemini.model;
@@ -3983,7 +3988,8 @@ async function detectGeminiModel(){
 }
 const aiReady=()=>{const c=AICFG();return c.provider==="ollama"?!!c.ollamaUrl:!!c.key;};
 
-async function callAI(system,user){
+/* deep=true routes to the heavier model — used only by the weekly read */
+async function callAI(system,user,deep){
  const c=AICFG();
  if(c.provider==="gemini"){
   const ask=async model=>{
@@ -4004,6 +4010,21 @@ async function callAI(system,user){
   const t=d?.candidates?.[0]?.content?.parts?.map(p=>p.text).join("")||"";
   if(!t)throw new Error("Empty reply from Gemini");
   return t;
+ }
+ if(c.provider==="claude"){
+  /* Anthropic blocks browser calls unless this header is set. It is set
+     deliberately: the key lives on this device and is called from it, which
+     is fine while he is the only one who signs in. The day a client can open
+     this app, the key has to move behind Supabase instead. */
+  const r=await fetch("https://api.anthropic.com/v1/messages",
+   {method:"POST",headers:{"content-type":"application/json",
+     "x-api-key":c.key,"anthropic-version":"2023-06-01",
+     "anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:claudeModel(deep),max_tokens:1600,system,
+     messages:[{role:"user",content:user}]})});
+  const d=await r.json();
+  if(d.error)throw new Error(d.error.message||"Claude error");
+  return (d.content||[]).map(p=>p.text||"").join("")||"";
  }
  if(c.provider==="groq"){
   const r=await fetch("https://api.groq.com/openai/v1/chat/completions",
@@ -4492,7 +4513,11 @@ function keyProblem(provider,k){
   if(k.length<39)return "That key is "+k.length+" characters; Google keys are 39. It looks cut short.";
  }
  if(provider==="openai"&&!/^sk-/.test(k))return "OpenAI keys start with sk-.";
- if(provider==="anthropic"&&!/^sk-ant-/.test(k))return "Anthropic keys start with sk-ant-.";
+ if(provider==="claude"||provider==="anthropic"){
+  if(!/^sk-ant-/.test(k))return "Anthropic keys start with sk-ant-. Check you copied the whole thing.";
+  if(k.length<50)return "That key is "+k.length+" characters — an Anthropic key is much longer. It looks cut short.";
+ }
+ if(provider==="groq"&&!/^gsk_/.test(k))return "Groq keys start with gsk_.";
  if(k.length<20)return "That looks too short to be a full key.";
  return "";
 }
