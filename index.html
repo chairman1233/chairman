@@ -566,7 +566,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-64 · notes on the banner";
+const BUILD="C-65 · notes on the banner";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -872,9 +872,11 @@ async function cloudPull(){
   if(!rows.length){flushCloud();return;}          /* first device seeds the cloud */
   const remote=rows[0],rts=new Date(remote.updated_at).getTime();
   if(!remote.data)return;
-  /* An empty cloud copy must never wipe a board that has real work on it.
-     That is how a whole day of entries disappears. Push ours up instead. */
-  if(boardIsEmpty(remote.data)&&!boardIsEmpty(D)){flushCloud();return;}
+  /* An empty cloud copy must never wipe a board that has real work on it —
+     that is how a whole day of entries disappears. But if the empty copy is
+     NEWER, it was a deliberate delete, and a stale tab must not resurrect
+     what was cleared somewhere else. */
+  if(boardIsEmpty(remote.data)&&!boardIsEmpty(D)&&(D._ts||0)>rts){flushCloud();return;}
   /* Small clock differences between devices should not cause a fight. */
   if(rts<=(D._ts||0)+1500)return;
   const keepSess=SESS;
