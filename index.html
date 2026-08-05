@@ -531,7 +531,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-60 · live, cloud wired";
+const BUILD="C-61 · sync + clock fixed";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -557,9 +557,40 @@ const BLANK={jobs:[],plans:[],subs:[],notes:[],files:[],log:[],invNo:1001,view:"
  me:{name:"Benny",biz:"Chairman Remodeling",email:"",phone:"",rate:2,
   terms:"Due on completion",adjFee:0,siteFee:0},last:null,seeded:false};
 let D=load();
-function load(){try{return Object.assign({},JSON.parse(JSON.stringify(BLANK)),JSON.parse(localStorage.getItem(K)||"{}"))}
- catch(e){return JSON.parse(JSON.stringify(BLANK))}}
-function save(){localStorage.setItem(K,JSON.stringify(D))}
+/* Keys this app has used over its life. If the current one is empty we adopt the
+   newest older one instead of leaving real work orphaned behind a rename. */
+/* declarations, not consts — load() runs before this point in the file */
+function oldKeys(){return ["chairman_cc_v1","chairman_v1","chairman_os_v1"];}
+function boardIsEmpty(d){
+ return !d||(!(d.jobs||[]).length&&!(d.notes||[]).length&&!(d.plans||[]).length);}
+
+function load(){
+ let cur=null;
+ try{cur=JSON.parse(localStorage.getItem(K)||"null")}catch(e){}
+ if(boardIsEmpty(cur)){
+  for(const ok of oldKeys()){
+   let old=null;try{old=JSON.parse(localStorage.getItem(ok)||"null")}catch(e){}
+   if(old&&!boardIsEmpty(old)&&!old.seeded){cur=old;break;}
+  }
+ }
+ /* last-known-good snapshot beats an empty board every time */
+ if(boardIsEmpty(cur)){
+  let bak=null;try{bak=JSON.parse(localStorage.getItem(K+"_bak")||"null")}catch(e){}
+  if(bak&&!boardIsEmpty(bak))cur=bak;
+ }
+ try{return Object.assign({},JSON.parse(JSON.stringify(BLANK)),cur||{})}
+ catch(e){return JSON.parse(JSON.stringify(BLANK))}
+}
+function save(){
+ D._ts=Date.now();
+ try{
+  localStorage.setItem(K,JSON.stringify(D));
+  /* keep a rolling copy of the last board that actually had work in it */
+  if(!boardIsEmpty(D))localStorage.setItem(K+"_bak",JSON.stringify(D));
+ }catch(e){}
+ /* tell the cloud something changed — without this nothing ever syncs */
+ if(typeof cloudDirty==="function"){try{cloudDirty()}catch(e){}}
+}
 const job=id=>D.jobs.find(j=>j.id===id);
 
 const STAGES=["Waiting","Estimating","Complete","Invoiced","Paid"];
@@ -805,12 +836,18 @@ async function cloudPull(){
   const rows=await r.json();
   if(!rows.length){flushCloud();return;}          /* first device seeds the cloud */
   const remote=rows[0],rts=new Date(remote.updated_at).getTime();
-  if(remote.data&&rts>(D._ts||0)){
-   const keepSess=SESS;
-   D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),remote.data);
-   D._ts=rts;localStorage.setItem(K,JSON.stringify(D));
-   saveSess(keepSess);applyTheme();render();
-  }
+  if(!remote.data)return;
+  /* An empty cloud copy must never wipe a board that has real work on it.
+     That is how a whole day of entries disappears. Push ours up instead. */
+  if(boardIsEmpty(remote.data)&&!boardIsEmpty(D)){flushCloud();return;}
+  /* Small clock differences between devices should not cause a fight. */
+  if(rts<=(D._ts||0)+1500)return;
+  const keepSess=SESS;
+  D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),remote.data);
+  D._ts=rts;
+  try{localStorage.setItem(K,JSON.stringify(D));
+   if(!boardIsEmpty(D))localStorage.setItem(K+"_bak",JSON.stringify(D));}catch(e){}
+  saveSess(keepSess);applyTheme();render();
  }catch(e){}
 }
 /* ---- storage: photos & docs follow you ---- */
@@ -1673,8 +1710,22 @@ function tickerHTML(){
  if(lastLog)items.push(["lost",lastLog.who||"logged",relTime(lastLog.created)+(lastLog.amount?" · "+money0(lastLog.amount):"")]);
  if(items.length<3)items.push(["lost","Chairman","command center"]);
  const half=items.map(([c,b,l])=>`<span class="it"><span class="dot2 v-${c}">●</span><b class="v-${c}">${esc(b)}</b>${esc(l)}</span>`).join("");
- const roomy=items.length>=7;      /* only scroll when there's enough to fill the bar */
- return `<div class="tape"><div class="in2" style="${roomy?"":"animation:none"}">${half}${roomy?half:""}</div></div>`;
+ /* Always lay down two copies; wireTape decides whether it needs to move.
+    The old rule (only scroll past 7 items) left the bar dead on a light day. */
+ return `<div class="tape"><div class="in2" id="tapeIn">${half}${half}</div></div>`;
+}
+/* Measure instead of guess: scroll only when the strip is wider than the bar,
+   and pace it by width so a long day is not a blur and a short one is not a crawl. */
+function wireTape(){
+ const el=document.getElementById("tapeIn");if(!el)return;
+ const bar=el.parentElement;
+ const oneLoop=el.scrollWidth/2;
+ if(!oneLoop||oneLoop<=bar.clientWidth+8){
+  el.style.animation="none";
+  el.querySelectorAll(".it").forEach((n,i,all)=>{if(i>=all.length/2)n.remove();});
+  return;
+ }
+ el.style.animation="tape "+Math.max(18,Math.round(oneLoop/38))+"s linear infinite";
 }
 function briefHTML(){
  const b=brief();
@@ -1741,6 +1792,7 @@ function render(){
   applyZoom();return;
  }
  $("#view").innerHTML=(R[V]||R.today)(P);renderSide();applyZoom();
+ try{wireTape()}catch(e){}
  if(V==="jobs"&&D.view==="board")wireDrag();
  if(V==="cal"&&D.calView!=="agenda")wireMonth();
  if(V==="job"||V==="docs")paintThumbs();
