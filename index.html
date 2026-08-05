@@ -19,9 +19,10 @@
  --ink:#F2ECDE; --ink2:#A8B1B8; --ink3:#6F7A82;
  --inv:#000000; --sig:#F2ECDE;
  /* on black the stage colours can carry more light without shouting */
- /* --c-out is Claude orange. The old rust was muted, which is exactly what
-    reads as dusty pink. This one is saturated, so it stays orange. */
- --c-est:#8FB0C4; --c-rdy:#DCC698; --c-out:#D97757; --c-paid:#93B8A0; --c-lost:#5D6870;
+ /* One warm colour: Claude orange. The old gold went brown in light mode and
+    read as rust, so ready-to-bill and overdue now share the same orange —
+    they stay apart by their symbol and label instead of by hue. */
+ --c-est:#8FB0C4; --c-rdy:#D97757; --c-out:#D97757; --c-paid:#93B8A0; --c-lost:#5D6870;
  --serif:'Playfair Display','Bodoni MT',Didot,'Didot LT STD','Times New Roman',Times,serif;
  /* display face for the big wordmark — sturdy strokes, no hairlines to bloom */
  --display:Georgia,Cambria,Constantia,'Book Antiqua',Palatino,'Times New Roman',serif;
@@ -31,8 +32,8 @@
 body.paper{
  --paper:#EDF4FA; --panel:#FFFFFF; --panel2:#DEEAF4; --rule:#CBDCE9; --rule2:#A6C1D6;
  --ink:#0E1F2B; --ink2:#3A5568; --ink3:#7593A8; --inv:#FFFFFF; --sig:#12466B;
- /* the same Claude orange in both themes — one brand colour, no rust anywhere */
- --c-est:#1668A8; --c-rdy:#A9741B; --c-out:#D97757; --c-paid:#1F7358; --c-lost:#7593A8;
+ /* #A9741B was the brown one. Gone — same Claude orange as night mode. */
+ --c-est:#1668A8; --c-rdy:#D97757; --c-out:#D97757; --c-paid:#1F7358; --c-lost:#7593A8;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -618,7 +619,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-74 · accounts, calls, visits, matterport";
+const BUILD="C-75 · gold gone";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -879,7 +880,9 @@ function normAcct(s){
 }
 const acctOf=j=>j&&j.accountId?ACCOUNTS().find(a=>a.id===j.accountId):null;
 const acctJobs=aid=>D.jobs.filter(j=>j.accountId===aid);
-const ACCT_COLORS=["#8FB0C4","#DCC698","#93B8A0","#D97757","#A99BC4","#C9B896","#8FC4BE","#9EB8D4"];
+/* no gold and nothing muted-warm in here either — those are the tones that
+   kept reading as rust */
+const ACCT_COLORS=["#8FB0C4","#79B8AE","#93B8A0","#D97757","#A99BC4","#9EB8D4","#8FC4BE","#C08FA8"];
 function acctColor(a){
  if(!a)return "";
  if(a.color)return a.color;
