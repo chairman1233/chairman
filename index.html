@@ -16,7 +16,7 @@
 :root{
  /* true black night mode — panels lift off the black instead of floating in grey */
  --paper:#000000; --panel:#0D0F11; --panel2:#171A1D; --rule:#22262A; --rule2:#333940;
- --ink:#F2ECDE; --ink2:#A8B1B8; --ink3:#6F7A82;
+ --ink:#F2ECDE; --ink2:#BEC7CD; --ink3:#9AA5AD;
  --inv:#000000; --sig:#F2ECDE;
  /* on black the stage colours can carry more light without shouting */
  /* One warm colour: Claude orange. The old gold went brown in light mode and
@@ -31,7 +31,7 @@
 /* daytime: sky blue. no red, no clay, nothing that can read pink. */
 body.paper{
  --paper:#EDF4FA; --panel:#FFFFFF; --panel2:#DEEAF4; --rule:#CBDCE9; --rule2:#A6C1D6;
- --ink:#0E1F2B; --ink2:#3A5568; --ink3:#7593A8; --inv:#FFFFFF; --sig:#12466B;
+ --ink:#0E1F2B; --ink2:#335063; --ink3:#4C6B80; --inv:#FFFFFF; --sig:#12466B;
  /* #A9741B was the brown one. Gone — same Claude orange as night mode. */
  --c-est:#1668A8; --c-rdy:#D97757; --c-out:#D97757; --c-paid:#1F7358; --c-lost:#7593A8;
 }
@@ -245,7 +245,8 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 .who{font-size:11.5px;color:var(--ink3);letter-spacing:.02em}
 .segwrap{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .opt2{padding:9px 13px;border:1px solid var(--rule2);border-radius:999px;background:transparent;
- font:500 10px var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink3)}
+ font:500 10.5px var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--ink2)}
+.opt2:hover{color:var(--ink);border-color:var(--ink3)}
 .opt2.on{background:var(--sig);color:var(--inv);border-color:var(--sig)}
 .tog{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;
  border-bottom:1px solid var(--rule)}
@@ -624,7 +625,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-79 · readable detail rows";
+const BUILD="C-80 · brighter labels";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
