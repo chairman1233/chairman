@@ -619,7 +619,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-77 · picked company counts as named";
+const BUILD="C-78 · tap to add the owner";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3285,12 +3285,18 @@ R.job=({id})=>{
        style="color:${jobColor(j)};text-decoration:none;border-bottom:1px solid ${jobColor(j)}66">${esc(acctOf(j).name)}</a>`
       :esc(j.contractor||"—")}</b></div>
    ${j.contractorContact?`<div class="ln2"><span class="k">Their contact</span><b>${esc(j.contractorContact)}</b></div>`:""}
-   <div class="ln2"><span class="k">Property owner</span><b>${esc(j.owner||"—")}</b></div>
+   <div class="ln2"><span class="k">Property owner</span>
+    <b style="cursor:pointer" onclick="quickEdit('${j.id}','owner','Property owner')">${esc(j.owner||"— tap to add —")}</b></div>
+   ${j.phone?`<div class="ln2"><span class="k">Owner phone</span><b><a href="tel:${esc(j.phone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.phone)}</a></b></div>`
+    :`<div class="ln2"><span class="k">Owner phone</span><b style="cursor:pointer" onclick="quickEdit('${j.id}','phone','Owner phone')">— tap to add —</b></div>`}
+   ${j.contractorPhone?`<div class="ln2"><span class="k">Contractor</span><b><a href="tel:${esc(j.contractorPhone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.contractorPhone)}</a></b></div>`:""}
    <div class="ln2"><span class="k">Invoice goes to</span>
     <b class="v-rdy">${esc(billParty(j).name)}${billParty(j).email?" · "+esc(billParty(j).email):""}</b></div>`
-  :`<div class="ln2"><span class="k">Client</span><b class="v-${C}">${esc(j.owner||"—")}</b></div>
+  :`<div class="ln2"><span class="k">Client</span>
+     <b class="v-${C}" style="cursor:pointer" onclick="quickEdit('${j.id}','owner','Client name')">${esc(j.owner||"— tap to add —")}</b></div>
     ${j.ownerEmail?`<div class="ln2"><span class="k">Email</span><b>${esc(j.ownerEmail)}</b></div>`:""}
-    ${j.phone?`<div class="ln2"><span class="k">Phone</span><b><a href="tel:${esc(j.phone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.phone)}</a></b></div>`:""}
+    ${j.phone?`<div class="ln2"><span class="k">Phone</span><b><a href="tel:${esc(j.phone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.phone)}</a></b></div>`
+     :`<div class="ln2"><span class="k">Phone</span><b style="cursor:pointer" onclick="quickEdit('${j.id}','phone','Phone')">— tap to add —</b></div>`}
     ${j.contractorPhone?`<div class="ln2"><span class="k">Contractor</span><b><a href="tel:${esc(j.contractorPhone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.contractorPhone)}</a></b></div>`:""}`}
   <div class="ln2"><span class="k">${isProject(j)?"Contract total":"Estimate total"}</span>
    <b class="money ser v-${C}" style="font-size:19px;cursor:pointer" onclick="quickEdit('${j.id}','total','${isProject(j)?"Contract":"Estimate"} total')">${j.total?money0(j.total):"— tap to add —"}</b></div>
