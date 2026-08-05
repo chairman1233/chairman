@@ -531,7 +531,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-59 · sky daytime back";
+const BUILD="C-60 · live, cloud wired";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -753,7 +753,15 @@ function toggleTheme(){D.theme=D.theme==="paper"?"studio":"paper";save();applyTh
 /* ================= CLOUD — login, sync, phone capture =================
    One row per user in a `boards` table; RLS keeps it his alone.
    Whole-board sync, last write wins; photos ride Supabase Storage. */
-const CLOUD=()=>{if(!D.cloud)D.cloud={url:"",key:""};return D.cloud;};
+/* Baked-in project so a new phone needs no setup — this is the *publishable*
+   key, which is designed to sit in a browser. Row-level security is what
+   actually guards the data: without a login it can read and write nothing. */
+const CLOUD_DEFAULT={url:"https://sxfchjywhdvpzcnldrym.supabase.co",
+ key:"sb_publishable_mH4-N3aJ21twFJqpuBhrnw_gfdMMnee"};
+const CLOUD=()=>{if(!D.cloud)D.cloud={url:"",key:""};
+ if(!D.cloud.url)D.cloud.url=CLOUD_DEFAULT.url;
+ if(!D.cloud.key)D.cloud.key=CLOUD_DEFAULT.key;
+ return D.cloud;};
 const cloudCfg=()=>!!(CLOUD().url&&CLOUD().key);
 let SESS=null;try{SESS=JSON.parse(localStorage.getItem("chairman_sess")||"null")}catch(e){}
 const signedIn=()=>!!(SESS&&SESS.access_token);
@@ -4156,6 +4164,8 @@ function close_(){document.getElementById("ov")?.remove()}
 
 /* ================= PWA ================= */
 /* real manifest */
+/* Network-first service worker: always fetch the freshest file, fall back to cache only when offline.
+   (A cache-first worker was serving a stale copy of this app after updates.) */
 if("serviceWorker"in navigator&&location.protocol.startsWith("http")){
  navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
