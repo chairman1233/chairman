@@ -434,7 +434,9 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .tape{overflow:hidden;border:1px solid var(--rule);border-left:2px solid var(--c-rdy);
  background:var(--panel);margin-bottom:16px;position:relative}
 .tape .in2{display:inline-flex;white-space:nowrap;animation:tape 40s linear infinite;padding:10px 0;will-change:transform}
-.tape:hover .in2{animation-play-state:paused}
+/* pausing on plain hover made a resting cursor look like a frozen app;
+   only pause while he is actually holding on it */
+.tape:active .in2{animation-play-state:paused}
 .tape .it{display:inline-flex;align-items:baseline;gap:7px;padding:0 26px;
  font:500 13.5px var(--sans);letter-spacing:.06em;color:var(--ink2)}
 .tape .it b{font:500 16px var(--serif);letter-spacing:0}
@@ -543,7 +545,10 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  .strip .v{font-size:26px} .strip .k{font-size:10px}
  .quote{font-size:16px;padding:22px 24px}
  /* board becomes a full-width grid — no more sideways scrolling on desktop */
- .bwrap{margin:16px 0 0;padding:0;overflow:visible;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+ /* five stages, so five columns — a 4-wide grid wrapped Paid onto its own
+    row with a dead block beside it */
+ .bwrap{margin:16px 0 0;padding:0;overflow:visible;display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(0,1fr));grid-auto-flow:column;
   border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
  .col{width:auto;min-height:300px;padding:18px 16px}
  .col .ch .n{font-size:12px} .col .ch .c{font-size:13.5px}
@@ -597,7 +602,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-70 · sync cannot eat work";
+const BUILD="C-71 · QA pass";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -612,7 +617,17 @@ const isoDay=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+S
 const today=()=>isoDay(new Date());
 const fmt=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}):"";
 const ago=d=>d?Math.round((new Date(today())-new Date(d))/864e5):0;
-const plural=(n,w)=>n+" "+w+(n===1?"":"s");
+/* "0 entrys" was showing on the Daybook. Handle the shapes English actually uses. */
+const PLURALS={entry:"entries",company:"companies",property:"properties",
+ policy:"policies",person:"people",inch:"inches",box:"boxes",class:"classes",
+ "more note":"more notes"};
+function pluralise(w){
+ if(PLURALS[w])return PLURALS[w];
+ if(/(s|x|z|ch|sh)$/i.test(w))return w+"es";
+ if(/[^aeiou]y$/i.test(w))return w.slice(0,-1)+"ies";
+ return w+"s";
+}
+const plural=(n,w)=>n+" "+(n===1?w:pluralise(w));
 function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;
  document.body.appendChild(t);setTimeout(()=>t.remove(),1900);}
 
@@ -693,15 +708,40 @@ function historySheet(){
    :`<p class="sm dim">No versions saved yet. They start building as you work.</p>`);
 }
 
+const isQuota=e=>!!e&&(e.name==="QuotaExceededError"||e.name==="NS_ERROR_DOM_QUOTA_REACHED"||e.code===22||e.code===1014);
+let _quotaWarned=false;
+/* Storage full used to be swallowed silently — saving stopped and nothing said
+   so. Shed history first, then the spare copy, and only then admit defeat. */
 function save(){
  D._ts=Date.now();
- try{
-  localStorage.setItem(K,JSON.stringify(D));
-  /* keep a rolling copy of the last board that had REAL work in it —
-     example rows must never become the thing we fall back to */
-  if(realJobs(D).length||(D.notes||[]).length)localStorage.setItem(K+"_bak",JSON.stringify(D));
-  snapshot();
- }catch(e){}
+ const body=JSON.stringify(D);
+ let wrote=false;
+ for(let attempt=0;attempt<3&&!wrote;attempt++){
+  try{localStorage.setItem(K,body);wrote=true;}
+  catch(e){
+   if(!isQuota(e))break;
+   if(attempt===0){                       /* drop the oldest half of history */
+    try{const h=readHist();localStorage.setItem(HKEY,JSON.stringify(h.slice(0,Math.max(2,Math.floor(h.length/2)))));}catch(x){}
+   }else if(attempt===1){                 /* then history and the spare entirely */
+    try{localStorage.removeItem(HKEY);localStorage.removeItem(K+"_bak");}catch(x){}
+   }
+  }
+ }
+ if(!wrote){
+  if(!_quotaWarned){
+   _quotaWarned=true;
+   try{toast("This device is out of storage — changes are NOT being saved");}catch(e){}
+   try{ask("Out of storage on this device",
+     "Your last change could not be written. Anything you type now may be lost when you close the app. Your cloud copy is unaffected — signing in on another device is safe. Clearing uploaded photos usually frees the most space.",
+     "I understand",()=>{});}catch(e){}
+  }
+ }else{
+  _quotaWarned=false;
+  try{
+   if(realJobs(D).length||(D.notes||[]).length)localStorage.setItem(K+"_bak",body);
+   snapshot();
+  }catch(e){ if(isQuota(e)){try{localStorage.removeItem(HKEY)}catch(x){}} }
+ }
  /* tell the cloud something changed — without this nothing ever syncs */
  if(typeof cloudDirty==="function"){try{cloudDirty()}catch(e){}}
 }
@@ -782,10 +822,35 @@ function migrate(){
    delete j.partner;delete j.deal;ch=true;}
   if(j.email&&!j.ownerEmail){j.ownerEmail=j.email;ch=true;}
  });
+ /* Notes pointing at a job that no longer exists were unreachable from every
+    screen — invisible but still scrolling past on the banner. Detach rather
+    than delete: the content is his, and some of it is phone numbers. */
+ (D.notes||[]).forEach(n=>{
+  if(n.jobId&&!(D.jobs||[]).some(j=>j.id===n.jobId)){
+   n.orphanOf=n.orphanOf||n.jobId;n.jobId=null;ch=true;}
+ });
  if(ch)save();
+}
+/* Everything that belongs in the Daybook, from both arrays it got split across.
+   D.log and D.notes were separate, and only D.log was ever rendered. */
+function daybookEntries(){
+ const logs=(D.log||[]).map(x=>Object.assign({_kind:"log"},x));
+ const notes=(D.notes||[]).map(x=>Object.assign({_kind:"note"},x,{
+  who:x.who||(x.jobId&&job(x.jobId)?jobName(job(x.jobId)):(x.orphanOf?"Unattached note":"Note"))}));
+ return [...logs,...notes].sort((a,b)=>String(b.created||"").localeCompare(String(a.created||"")));
+}
+/* A banner is always on screen, often with someone else in the room.
+   Never scroll a customer's phone number across it. */
+function maskDigits(s){
+ return String(s||"")
+  .replace(/(\+?\d[\d\-().\s]{8,}\d)/g,m=>{
+   const d=m.replace(/\D/g,"");
+   return d.length>=10?"••• ••• "+d.slice(-4):m;});
 }
 const coll=(n,jid)=>(D[n]||[]).filter(x=>x.jobId===jid);
 const ACTIVE=["Estimating","Complete","Invoiced"];
+/* work that is finished or dead can never be "overdue" */
+const DONE_ST=["Paid","Lost"];
 
 /* ---------- file storage: blobs live in IndexedDB, metadata in D.files ---------- */
 let idb=null;
@@ -876,20 +941,25 @@ function applyTheme(){document.body.classList.toggle("paper",D.theme==="paper");
 /* Manual size control — everything scales together */
 const ZOOMS=[["Small",.9],["Normal",1],["Large",1.15],["Huge",1.3]];
 const FIT_MIN=0.80;              /* never shrink below this — smaller strains the eyes */
+/* Zoom is scoped to the content pane, never the whole document. Scaling the
+   document moved the sidebar between screens (0.8 on Dashboard, 1.0 on
+   Foreman), so nav items shifted under the cursor and clicks landed on the
+   wrong row. The chrome now stays put at every zoom level. */
 function applyZoom(){
  const base=D.zoom||1;
- document.documentElement.style.zoom=base===1?"":String(base);
+ const pane=document.getElementById("view");
+ document.documentElement.style.zoom="";          /* undo any earlier global zoom */
+ if(!pane)return;
+ pane.style.zoom=base===1?"":String(base);
  if(D.fitAll===false)return;
- /* scrollHeight reports document coordinates, which don't change with zoom —
-    so the fit factor is a single division, clamped to the readability floor */
  requestAnimationFrame(()=>{
-  const cur=parseFloat(document.documentElement.style.zoom)||base;
-  const need=document.documentElement.scrollHeight||document.body.scrollHeight||0;
+  const cur=parseFloat(pane.style.zoom)||base;
+  const need=pane.scrollHeight||0;
   const have=window.innerHeight||0;
   if(!need||!have)return;
   if(need*cur<=have+2)return;                     /* already fits at this size */
   const z=Math.max(FIT_MIN*base,Math.min(base,have/need));
-  document.documentElement.style.zoom=String(z);
+  pane.style.zoom=String(z);
  });
 }
 function setZoom(z){D.zoom=z;save();applyZoom();
@@ -1138,6 +1208,17 @@ async function addrSuggest(val,targetId,jobId){
   }catch(e){box.innerHTML=`<div class="in3" style="padding:8px 0">Address lookup needs internet.</div>`;}
  },450);
 }
+function closeAddrHits(){const b=document.getElementById("addrHits");if(b)b.innerHTML="";}
+/* the suggestions used to sit over the next field until the sheet closed */
+document.addEventListener("pointerdown",e=>{
+ const box=document.getElementById("addrHits");
+ if(!box||!box.innerHTML)return;
+ if(box.contains(e.target))return;
+ if(e.target&&e.target.id==="ja")return;
+ closeAddrHits();
+},true);
+document.addEventListener("scroll",()=>closeAddrHits(),true);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAddrHits();});
 function pickAddr(disp,lat,lon,targetId){
  const el=document.getElementById(targetId);
  if(el){
@@ -1147,15 +1228,79 @@ function pickAddr(disp,lat,lon,targetId){
  _geoPick={lat:+lat,lon:+lon};
  const box=$("#addrHits");if(box)box.innerHTML=`<div class="in3 v-paid" style="padding:6px 0">✓ Pinned on the map</div>`;
 }
+/* ---------- geocoding ----------
+   A single free-text query fails whenever the postal city differs from the
+   municipality — "18617 Egret Bay Blvd, Houston 77058" is really in Webster,
+   so Nominatim returns nothing. Structured search with the city dropped out
+   resolves it. We try narrowest-to-widest and stop at the first hit. */
+const STATE_WORDS={alabama:"AL",alaska:"AK",arizona:"AZ",arkansas:"AR",california:"CA",
+ colorado:"CO",connecticut:"CT",delaware:"DE",florida:"FL",georgia:"GA",hawaii:"HI",idaho:"ID",
+ illinois:"IL",indiana:"IN",iowa:"IA",kansas:"KS",kentucky:"KY",louisiana:"LA",maine:"ME",
+ maryland:"MD",massachusetts:"MA",michigan:"MI",minnesota:"MN",mississippi:"MS",missouri:"MO",
+ montana:"MT",nebraska:"NE",nevada:"NV",ohio:"OH",oklahoma:"OK",oregon:"OR",pennsylvania:"PA",
+ tennessee:"TN",texas:"TX",utah:"UT",vermont:"VT",virginia:"VA",washington:"WA",wisconsin:"WI",
+ wyoming:"WY"};
+function parseUSAddress(raw){
+ let s=String(raw||"").replace(/\n/g,", ").replace(/\s+/g," ").trim();
+ /* Spelled-out states are common in pasted addresses; normalise first so the
+    abbreviation matcher below can see them. */
+ Object.keys(STATE_WORDS).forEach(word=>{
+  s=s.replace(new RegExp("\\b"+word+"\\b","i"),STATE_WORDS[word]);
+ });
+ /* Take the LAST five-digit run, never the first — "18617 Egret Bay" starts
+    with a five-digit house number that was being read as the postcode. */
+ const zips=s.match(/\b\d{5}(?:-\d{4})?\b/g)||[];
+ const zip=zips.length?zips[zips.length-1].slice(0,5):"";
+ const st=(s.match(/\b(A[LKZR]|C[AOT]|D[EC]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]|N[CDEHJMVY]|O[HKR]|P[A]|RI|S[CD]|T[NX]|UT|V[AT]|W[AIVY])\b(?=[\s,]*(?:\d{5}|$))/i)||[])[1]||"";
+ let rest=zip?s.slice(0,s.lastIndexOf(zips[zips.length-1])):s;
+ rest=rest.replace(/[,\s]+$/,"");
+ if(st)rest=rest.replace(new RegExp("\\b"+st+"\\b\\s*,?\\s*$","i"),"").replace(/[,\s]+$/,"");
+ const parts=rest.split(",").map(x=>x.trim()).filter(Boolean);
+ const street=parts[0]||"";
+ const city=parts.length>1?parts[parts.length-1]:"";
+ return {street,city,state:st.toUpperCase(),postalcode:zip,free:s};
+}
+let _geoLast=0;
+async function nomiFetch(params){
+ /* Nominatim asks for no more than one request a second. Honour it. */
+ const wait=Math.max(0,1100-(Date.now()-_geoLast));
+ if(wait)await new Promise(r=>setTimeout(r,wait));
+ _geoLast=Date.now();
+ const qs=new URLSearchParams(Object.assign({format:"jsonv2",limit:"1",countrycodes:"us"},params));
+ const r=await fetch("https://nominatim.openstreetmap.org/search?"+qs.toString());
+ if(!r.ok)return null;
+ const j=await r.json();
+ return j&&j[0]?{lat:+j[0].lat,lon:+j[0].lon,label:j[0].display_name}:null;
+}
+/* narrowest first, then progressively drop the parts most likely to be wrong */
+async function geocodeAddress(raw){
+ const a=parseUSAddress(raw);
+ const tries=[];
+ if(a.street&&(a.postalcode||a.city))
+  tries.push(Object.assign({street:a.street},a.city?{city:a.city}:{},a.state?{state:a.state}:{},a.postalcode?{postalcode:a.postalcode}:{}));
+ if(a.street&&a.postalcode)                                  /* city is the usual liar */
+  tries.push(Object.assign({street:a.street,postalcode:a.postalcode},a.state?{state:a.state}:{}));
+ if(a.street&&a.state)tries.push({street:a.street,state:a.state});
+ /* No commas means the city is probably stuck on the end of the street —
+    "18617 Egret Bay Boulevard Houston". Try again without that last word. */
+ const trimmed=a.street.replace(/\s+\S+$/,"");
+ if(a.postalcode&&trimmed&&trimmed!==a.street)tries.push({street:trimmed,postalcode:a.postalcode});
+ if(a.postalcode&&a.street)tries.push({q:a.street+" "+a.postalcode});
+ if(a.postalcode&&trimmed)tries.push({q:trimmed+" "+a.postalcode});
+ tries.push({q:a.free});
+ for(const t of tries){
+  try{const hit=await nomiFetch(t);if(hit)return hit;}catch(e){}
+ }
+ return null;
+}
 async function geocodeJob(id){
  const j=job(id);if(!j||!j.address)return;
+ toast("Locating…");
  try{
-  const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q="
-   +encodeURIComponent(j.address));
-  const h=(await r.json())[0];
-  if(h){j.lat=+h.lat;j.lon=+h.lon;j.geoFail=false;save();render();toast("Pinned");}
+  const hit=await geocodeAddress(j.address);
+  if(hit){j.lat=hit.lat;j.lon=hit.lon;j.geoFail=false;save();render();toast("Pinned");}
   else {j.geoFail=true;save();render();
-   toast("Couldn't find \""+j.address+"\" — check the street spelling");}
+   toast("Couldn't find \""+j.address+"\" — check the street and ZIP");}
  }catch(e){toast("Needs internet");}
 }
 /* An address the app silently failed to locate is worse than no address —
@@ -1189,13 +1334,17 @@ async function setHomeBase(){
  if(!m.addr){toast("Add your business address first");return;}
  toast("Locating…");
  try{
-  const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q="
-   +encodeURIComponent(m.addr.replace(/\n/g,", ")));
-  const h=(await r.json())[0];
-  if(!h){toast("Couldn't find that address");return;}
-  m.homeLat=+h.lat;m.homeLon=+h.lon;save();render();toast("Home base set");
+  const hit=await geocodeAddress(m.addr);
+  if(!hit){toast("Couldn't find that address — check the street and ZIP");return;}
+  m.homeLat=hit.lat;m.homeLon=hit.lon;m.homeAddrAt=m.addr;save();render();
+  toast("Home base set — "+hit.label.split(",").slice(0,3).join(",").trim());
  }catch(e){toast("Needs internet");}
 }
+/* Coordinates that were never re-derived after the address changed make every
+   distance on the Map wrong, quietly. Say so. */
+const homeStale=()=>{const m=D.me||{};
+ return !!(m.homeLat&&m.addr&&m.homeAddrAt&&m.homeAddrAt.trim()!==m.addr.trim());};
+const homeUnverified=()=>{const m=D.me||{};return !!(m.homeLat&&m.addr&&!m.homeAddrAt);};
 /* Nominatim asks for max 1 lookup a second. Respect it or get blocked. */
 async function pinAll(){
  const todo=D.jobs.filter(j=>j.address&&!j.lat&&j.status!=="Lost");
@@ -1233,6 +1382,12 @@ function R_map(){
    </div></div>
  <div class="dashgrid"><div>
   <div id="mapbox" style="height:62vh;min-height:380px;border:1px solid var(--rule);border-radius:14px;overflow:hidden;background:var(--panel)"></div>
+  ${h&&(homeStale()||homeUnverified())?`<div class="pan" style="margin-top:12px;border-left:2px solid var(--c-out)">
+    <b class="v-out">⚠ Home base may be in the wrong place</b>
+    <p class="sm dim" style="margin:6px 0 12px">${homeStale()
+      ? "Your business address changed but the pin didn't. Every distance below is measured from the old spot."
+      : "These coordinates were never checked against your address. If the miles look wrong, that's why."}</p>
+    <button class="btn sec" style="margin:0" onclick="setHomeBase()">Re-locate from my address</button></div>`:""}
   ${h?"":`<div class="pan" style="margin-top:12px;border-left:2px solid var(--c-rdy)">
     <b>Set your home base</b>
     <p class="sm dim" style="margin:6px 0 12px">Everything measures from there — how far each job is, and directions from your door.
@@ -1526,7 +1681,12 @@ function weekStats(){
   const s=clockState(k);
   if(!s.off){scheduled++;if(s.planned)plannedMin+=s.planned;}
   if(s.in){ if(s.late>0){lateDays++;lateTotal+=s.late;} else if(!s.off)onTime++; }
-  if(s.in&&s.out)worked+=Math.max(0,mins(s.out)-mins(s.in));
+  /* an open shift used to contribute nothing, so "Total 0.0h" sat next to
+     "ACTIVE NOW 3h 14m" — count elapsed time for the shift still running */
+  if(s.in){
+   const end=s.out?mins(s.out):(k===t?mins(hm(new Date())):null);
+   if(end!=null){let d=end-mins(s.in);if(d<0)d+=1440;worked+=Math.max(0,d);}
+  }
  }
  return {onTime,lateDays,worked,scheduled,lateTotal,plannedMin};
 }
@@ -2070,7 +2230,8 @@ function tickerHTML(){
   if(!txt)return;
   const j=n.jobId?job(n.jobId):null;
   const head=j?jobName(j):(n.who||"Note");
-  items.push(["lost",head,txt.length>78?txt.slice(0,78)+"…":txt]);
+  const safe=maskDigits(txt);
+  items.push(["lost",head,safe.length>78?safe.slice(0,78)+"…":safe]);
  });
  const more=(D.notes||[]).length-recentNotes.length;
  if(more>0)items.push(["lost",more+"",plural(more,"more note")+" in the daybook"]);
@@ -2083,16 +2244,47 @@ function tickerHTML(){
 }
 /* Measure instead of guess: scroll only when the strip is wider than the bar,
    and pace it by width so a long day is not a blur and a short one is not a crawl. */
+/* The old version measured immediately — but applyZoom rescales the document
+   inside a requestAnimationFrame, so this ran at zoom 1 and then everything
+   shrank underneath it. It also deleted the duplicate half when the strip was
+   short, which left the banner permanently frozen on a light day. Now it pads
+   the track instead of deleting, and measures once layout has settled. */
+let _tapeRO=null;
 function wireTape(){
  const el=document.getElementById("tapeIn");if(!el)return;
  const bar=el.parentElement;
- const oneLoop=el.scrollWidth/2;
- if(!oneLoop||oneLoop<=bar.clientWidth+8){
-  el.style.animation="none";
-  el.querySelectorAll(".it").forEach((n,i,all)=>{if(i>=all.length/2)n.remove();});
-  return;
+ const measure=()=>{
+  const live=document.getElementById("tapeIn");
+  if(!live||!live.isConnected)return;
+  const track=live.parentElement;
+  const items=[...live.children];
+  if(!items.length)return;
+  /* rebuild to exactly two copies before measuring */
+  const half=Math.ceil(items.length/2);
+  const barW=track.clientWidth||0;
+  let oneLoop=live.scrollWidth/2;
+  if(!barW)return;
+  /* repeat the content until one loop comfortably exceeds the bar, so there is
+     always something entering as something leaves */
+  let guard=0;
+  while(oneLoop&&oneLoop<barW*1.15&&guard<6){
+   const src=items.slice(0,half).map(n=>n.cloneNode(true));
+   src.forEach(n=>live.appendChild(n));
+   const src2=items.slice(0,half).map(n=>n.cloneNode(true));
+   src2.forEach(n=>live.appendChild(n));
+   oneLoop=live.scrollWidth/2;guard++;
+  }
+  live.style.animation="tape "+Math.max(16,Math.round(oneLoop/38))+"s linear infinite";
+ };
+ /* two frames: one for applyZoom's rAF, one for the resulting reflow */
+ requestAnimationFrame(()=>requestAnimationFrame(measure));
+ if(window.ResizeObserver){
+  try{
+   if(_tapeRO)_tapeRO.disconnect();
+   _tapeRO=new ResizeObserver(()=>measure());
+   _tapeRO.observe(bar);
+  }catch(e){}
  }
- el.style.animation="tape "+Math.max(18,Math.round(oneLoop/38))+"s linear infinite";
 }
 function briefHTML(){
  const b=brief();
@@ -2304,7 +2496,7 @@ function jcard(j){const f=fee(j),C=ck(j.status);
     onclick="event.stopPropagation();moveMenu('${j.id}')">⋮</button></div>
   ${(j.priority&&j.priority!=="Moderate")||j.dueDate?`<div class="tags" style="margin:-4px 0 8px">
     ${j.priority&&j.priority!=="Moderate"?`<span class="chip v-${PCOL2[j.priority]}">${esc(j.priority)}</span>`:""}
-    ${j.dueDate?`<span class="chip v-${j.dueDate<today()?"out":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
+    ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
   <div class="f"><span class="dim money">${j.total?money0(j.total):"—"}</span>
    <b class="money ser v-${C}" style="font-size:15px">${onRetainer(j)&&f.due===0?"retainer":money(j.status==="Paid"?f.gross:f.due)}</b></div>
   ${flowOf(j)?`<div style="margin-top:8px">${flowBtn(j)}</div>`:""}</div>`;
@@ -2600,13 +2792,24 @@ function saveJob(id){
  if(!o.owner&&!o.contractor)return toast("Add a property owner or contractor");
  if(o.jobFor==="Contractor"&&!o.contractor)return toast("Add the contractor's name");
  o.client=o.owner;   // keep the legacy field in step
+ /* If the address changed, the old pin is now a lie. Drop it and look the new
+    one up — otherwise editing an address keeps the previous coordinates and
+    the job still claims to be "on the map". */
+ const prevAddr=id?(job(id).address||""):"";
+ const addrChanged=(o.address||"")!==prevAddr;
+ if(addrChanged&&!_geoPick){o.lat=undefined;o.lon=undefined;o.geoFail=false;}
  if(id)Object.assign(job(id),o);
  else{const j=Object.assign({id:uid(),status:_stat||"Estimating",feeMode:"pct",flat:0,created2:today()},o);
   D.jobs.unshift(j);id=j.id;}
  {const jj=job(id);
   if($("#jstat")&&["Waiting","Estimating"].includes(jj.status)&&_stat&&jj.status!==_stat)jj.status=_stat;
   if(jj.status!=="Waiting")jj.waitingOn="";}
- D.last=id;save();close_();go("job",{id});}
+ D.last=id;save();close_();go("job",{id});
+ /* A typed address never got geocoded at all — only picked suggestions did.
+    Look it up in the background and say so if it misses. */
+ const jj=job(id);
+ if(jj&&jj.address&&!jj.lat)geocodeJob(id);
+}
 function delJob(id){const j=job(id);
  const n=coll("notes",id).length,f=coll("files",id).length;
  const extra=(n||f)?` Its ${[n?plural(n,"note"):"",f?plural(f,"file"):""].filter(Boolean).join(" and ")} will go too.`:"";
@@ -2633,7 +2836,7 @@ R.job=({id})=>{
  <div class="xs v-${C}" style="letter-spacing:.14em;text-transform:uppercase;opacity:.75">${esc(j.address||"—")}</div>
  <div class="tags" style="margin-top:16px">${pill(j.status,j)}
   <span class="chip v-${PCOL2[j.priority||"Moderate"]}">${esc(j.priority||"Moderate")} priority</span>
-  ${j.dueDate?`<span class="chip v-${j.dueDate<today()?"out":"rdy"}">${j.dueDate<today()?"Overdue "+fmt(j.dueDate):"Due "+fmt(j.dueDate)}</span>`:""}
+  ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"rdy"}">${j.dueDate<today()?"Overdue "+fmt(j.dueDate):"Due "+fmt(j.dueDate)}</span>`:""}
   ${forContractor(j)?`<span class="chip v-est">Contractor job</span>`:""}
   ${j.loss?`<span class="chip v-${C}">${esc(j.loss)}</span>`:""}
   ${j.mport&&j.mport!=="Not needed"?`<span class="chip ${j.mport==="Done"?"v-paid":"v-rdy"}">Matterport ${esc(j.mport)}</span>`:""}</div>
@@ -3432,7 +3635,7 @@ function calRow(j,k){
  const s=j.startDate,e=j.dueDate||s;
  const dayN=s?Math.round((new Date(k)-new Date(s))/864e5)+1:1;
  const span=s&&e?Math.round((new Date(e)-new Date(s))/864e5)+1:1;
- const lateJob=e&&e<today();
+ const lateJob=e&&e<today()&&!DONE_ST.includes(j.status);
  return `<div class="frow" style="border-left:2px solid var(--c-${lateJob?"out":c});padding-left:11px">
   <div class="grow" onclick="quickSchedule('${j.id}')"><div class="nm v-${lateJob?"out":c}">${j.startTime?h12(j.startTime)+" — ":""}${esc(jobName(j))}</div>
    <div class="mt">${esc(p)} —— ${span>1?"day "+dayN+" of "+span:"1 day"}${j.loss?" —— "+esc(j.loss):""}${lateJob?" —— OVERDUE":""}</div></div>
@@ -3510,13 +3713,13 @@ let _logQ="";
 const LOGS=()=>D.log||(D.log=[]);
 R.log=()=>{
  const q=_logQ.toLowerCase();
- let entries=[...LOGS()].sort((a,b)=>b.created.localeCompare(a.created));
+ let entries=daybookEntries();
  if(q)entries=entries.filter(x=>((x.who||"")+" "+(x.text||"")+" "+(x.amount||"")).toLowerCase().includes(q));
  const byDay={};
  entries.forEach(x=>{const k=isoDay(new Date(x.created));(byDay[k]=byDay[k]||[]).push(x);});
  return `<div class="lab">✎ Log</div>
  <h1 class="disp" style="margin:12px 0 6px">The<br> Daybook</h1>
- <div class="sm dim">${plural(LOGS().length,"entry")} · conversations, quotes, leads — on the record</div>
+ <div class="sm dim">${plural(daybookEntries().length,"entry")} · conversations, quotes, leads and job notes — on the record</div>
  <div class="row" style="margin-top:18px;gap:10px;max-width:720px">
   <input class="in" style="margin:0" placeholder="Search people, quotes, anything…" value="${esc(_logQ)}"
    oninput="_logQ=this.value;render()">
@@ -3543,10 +3746,20 @@ function logCard(x){
   ${(x.files||[]).length?`<div class="upbar" style="margin-top:10px">
    ${x.files.map(f=>`<button onclick="openFile('${f.fileId}')">${f.type&&f.type.startsWith("image")?"▣":"▤"} ${esc(f.name.length>22?f.name.slice(0,20)+"…":f.name)}</button>`).join("")}</div>`:""}
   <div class="upbar" style="margin-top:10px">
-   <button onclick="logSheet('${x.id}')">Edit</button>
-   <button onclick="attachToLog('${x.id}')">⬆ Attach</button>
-   ${!x.jobId?`<button onclick="logToJob('${x.id}')">→ Make it a job</button>`:""}
-   <button onclick="delLog('${x.id}')">Delete</button></div></div>`;
+   ${x._kind==="note"
+    ? `${x.jobId?`<button onclick="go('job',{id:'${x.jobId}'})">Open job</button>`:""}
+       <button onclick="delNote('${x.id}')">Delete</button>`
+    : `<button onclick="logSheet('${x.id}')">Edit</button>
+       <button onclick="attachToLog('${x.id}')">⬆ Attach</button>
+       ${!x.jobId?`<button onclick="logToJob('${x.id}')">→ Make it a job</button>`:""}
+       <button onclick="delLog('${x.id}')">Delete</button>`}
+  </div></div>`;
+}
+/* Job notes had no delete anywhere in the app once their job was gone. */
+function delNote(id){
+ const n=(D.notes||[]).find(x=>x.id===id);if(!n)return;
+ ask("Delete this note",(n.text||"").slice(0,120)||"This note","Delete it",()=>{
+  D.notes=(D.notes||[]).filter(x=>x.id!==id);save();close_();render();toast("Deleted");});
 }
 function logSheet(id){
  const x=id?LOGS().find(e=>e.id===id):null;
@@ -4243,8 +4456,27 @@ async function testAI(){
 function pickProv(el,p){AICFG().provider=p;save();
  [...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));
  close_();settings();}
+/* "API key not valid" was really a 17-character key in a 39-character slot —
+   a password manager had filled the field. Catch the shape before the API does. */
+function keyProblem(provider,k){
+ if(!k)return "";
+ if(/\s/.test(k))return "That key has a space in it — it may have been cut short when pasted.";
+ if(provider==="gemini"){
+  if(!/^AIza/.test(k))return "Google keys start with AIza. This one doesn't — check you copied the whole thing.";
+  if(k.length<39)return "That key is "+k.length+" characters; Google keys are 39. It looks cut short.";
+ }
+ if(provider==="openai"&&!/^sk-/.test(k))return "OpenAI keys start with sk-.";
+ if(provider==="anthropic"&&!/^sk-ant-/.test(k))return "Anthropic keys start with sk-ant-.";
+ if(k.length<20)return "That looks too short to be a full key.";
+ return "";
+}
 function saveAI(){const c=AICFG();
- if($("#aikey"))c.key=$("#aikey").value.trim();
+ if($("#aikey")){
+  const raw=$("#aikey").value.trim();
+  const problem=keyProblem(c.provider,raw);
+  if(problem){toast(problem);return;}
+  c.key=raw;
+ }
  if($("#aiurl"))c.ollamaUrl=$("#aiurl").value.trim();
  if($("#aimodel"))c.ollamaModel=$("#aimodel").value.trim();
  save();toast("Saved");testAI();}
@@ -4406,9 +4638,13 @@ function exportEstimates(){
 R.summary=()=>{
  const rows=summaryRows();
  const tot=rows.reduce((n,j)=>n+(+j.total||0),0);
- const fees=rows.reduce((n,j)=>{const f=fee(j);return n+(f.kind==="retainer"?f.wouldBe:f.gross);},0);
+ /* The header used to add the notional retainer percentage into "in fees",
+    which then disagreed with the $0.00 invoice. Bill what is billable and
+    show retainer value as the separate thing it is. */
+ const fees=rows.reduce((n,j)=>n+fee(j).gross,0);
+ const held=rows.reduce((n,j)=>{const f=fee(j);return n+(f.kind==="retainer"?f.wouldBe:0);},0);
  return `<div class="topbar"><div class="grow"><h1>Estimates</h1>
-   <div class="sub2">${plural(rows.length,"estimate")} · ${money0(tot)} written · ${money0(fees)} in fees</div></div>
+   <div class="sub2">${plural(rows.length,"estimate")} · ${money0(tot)} written · ${money0(fees)} in fees${held?` · ${money0(held)} covered by retainer`:""}</div></div>
   <button class="btn s" style="margin:0" onclick="exportEstimates()">⬇ Export CSV</button></div>
  ${rows.length?`<div class="pan" style="margin-top:0">
   ${rows.map(j=>{const f=fee(j);return `<div class="frow" style="align-items:flex-start">
@@ -4534,7 +4770,9 @@ function settings(){const m=D.me;
    <label><span class="t">Model</span><input class="in" id="aimodel" value="${esc(AICFG().ollamaModel||"")}" placeholder="llama3.1"></label>
    <p class="xs dim">Runs on your own PC — nothing leaves the building, no key, no limits. Ollama must be running, started with OLLAMA_ORIGINS=* so this page can reach it.</p>`
   :`<label><span class="t">API key</span>
-    <input class="in" id="aikey" type="password" value="${esc(AICFG().key||"")}" placeholder="paste your key"></label>
+    <input class="in" id="aikey" type="password" value="${esc(AICFG().key||"")}" placeholder="paste your key"
+     autocomplete="new-password" data-lpignore="true" data-1p-ignore spellcheck="false"></label>
+   <p class="xs dim" style="margin:-8px 0 14px">Stored in this browser only and called straight from this device — it is never sent to us, and it is left out of backups. Treat it like a password.</p>
    <p class="xs dim">Get a free key at <b>${esc(AIPROV[AICFG().provider].keyUrl)}</b> — no credit card. Stored only on this device, and left out of backups.</p>`}
   <div class="tog"><div><div class="t" style="margin:0">Let it speak first</div>
     <div class="xs dim">Morning rundown, behind-schedule calls, chase-that-invoice nudges — without being asked</div></div>
@@ -4689,7 +4927,7 @@ if("serviceWorker"in navigator&&location.protocol.startsWith("http")){
 const BUILD_NOTE="C-08";
 R.map=R_map;
 applyTheme();
-window.addEventListener("resize",()=>applyZoom());
+window.addEventListener("resize",()=>{applyZoom();try{wireTape()}catch(e){}});
 migrate();
 openIDB().then(()=>{go("today")});
 </script>
