@@ -19,7 +19,9 @@
  --ink:#F2ECDE; --ink2:#A8B1B8; --ink3:#6F7A82;
  --inv:#000000; --sig:#F2ECDE;
  /* on black the stage colours can carry more light without shouting */
- --c-est:#8FB0C4; --c-rdy:#DCC698; --c-out:#CF8043; --c-paid:#93B8A0; --c-lost:#5D6870;
+ /* --c-out is Claude orange. The old rust was muted, which is exactly what
+    reads as dusty pink. This one is saturated, so it stays orange. */
+ --c-est:#8FB0C4; --c-rdy:#DCC698; --c-out:#D97757; --c-paid:#93B8A0; --c-lost:#5D6870;
  --serif:'Playfair Display','Bodoni MT',Didot,'Didot LT STD','Times New Roman',Times,serif;
  /* display face for the big wordmark — sturdy strokes, no hairlines to bloom */
  --display:Georgia,Cambria,Constantia,'Book Antiqua',Palatino,'Times New Roman',serif;
@@ -29,7 +31,8 @@
 body.paper{
  --paper:#EDF4FA; --panel:#FFFFFF; --panel2:#DEEAF4; --rule:#CBDCE9; --rule2:#A6C1D6;
  --ink:#0E1F2B; --ink2:#3A5568; --ink3:#7593A8; --inv:#FFFFFF; --sig:#12466B;
- --c-est:#1668A8; --c-rdy:#A9741B; --c-out:#C06014; --c-paid:#1F7358; --c-lost:#7593A8;
+ /* the same Claude orange in both themes — one brand colour, no rust anywhere */
+ --c-est:#1668A8; --c-rdy:#A9741B; --c-out:#D97757; --c-paid:#1F7358; --c-lost:#7593A8;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -615,7 +618,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-73c · streaming chat";
+const BUILD="C-74 · accounts, calls, visits, matterport";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -641,12 +644,16 @@ function pluralise(w){
  return w+"s";
 }
 const plural=(n,w)=>n+" "+(n===1?w:pluralise(w));
+/* the word on its own, correctly pluralised — for places that already show
+   the number separately and would otherwise print it twice */
+const countWord=(n,w)=>n===1?w:pluralise(w);
 function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;
  document.body.appendChild(t);setTimeout(()=>t.remove(),1900);}
 
 /* ================= DATA ================= */
 const K="chairman_v2";
-const BLANK={jobs:[],plans:[],subs:[],notes:[],files:[],log:[],invNo:1001,view:"board",calView:"month",theme:"studio",zoom:1,
+const BLANK={jobs:[],plans:[],subs:[],notes:[],files:[],log:[],accounts:[],calls:[],
+ invNo:1001,view:"board",calView:"month",theme:"studio",zoom:1,
  clock:{sched:{0:"",1:"07:00",2:"07:00",3:"07:00",4:"07:00",5:"07:00",6:""},days:{}},
  me:{name:"Benny",biz:"Chairman Remodeling",email:"",phone:"",rate:2,
   terms:"Due on completion",adjFee:0,siteFee:0},last:null,seeded:false};
@@ -860,6 +867,201 @@ function maskDigits(s){
    const d=m.replace(/\D/g,"");
    return d.length>=10?"••• ••• "+d.slice(-4):m;});
 }
+/* ================= ACCOUNTS — the companies that hire him =================
+   Crew is who he hires; Accounts is who hires him. A job keeps its free-text
+   contractor name as a fallback so nothing breaks if an account is deleted. */
+const ACCOUNTS=()=>D.accounts||(D.accounts=[]);
+function normAcct(s){
+ return String(s||"").toLowerCase().replace(/\s+/g," ").trim()
+  .replace(/[.,]/g,"")
+  .replace(/\b(inc|llc|l\.l\.c|ltd|co|corp|company|group|services|service|construction|restoration)\b/g,"")
+  .replace(/\s+/g," ").trim();
+}
+const acctOf=j=>j&&j.accountId?ACCOUNTS().find(a=>a.id===j.accountId):null;
+const acctJobs=aid=>D.jobs.filter(j=>j.accountId===aid);
+const ACCT_COLORS=["#8FB0C4","#DCC698","#93B8A0","#D97757","#A99BC4","#C9B896","#8FC4BE","#9EB8D4"];
+function acctColor(a){
+ if(!a)return "";
+ if(a.color)return a.color;
+ const i=ACCOUNTS().findIndex(x=>x.id===a.id);
+ return ACCT_COLORS[(i<0?0:i)%ACCT_COLORS.length];
+}
+const jobColor=j=>{const a=acctOf(j);return a?acctColor(a):"";};
+function acctStats(aid){
+ const js=acctJobs(aid);
+ const open=js.filter(j=>ACTIVE.includes(j.status)||j.status==="Waiting");
+ const won=js.filter(j=>!["Lost"].includes(j.status));
+ const volume=sum(js,j=>+j.total||0);
+ const earned=sum(js.filter(j=>j.status==="Paid"),j=>fee(j).gross);
+ const outstanding=sum(js.filter(j=>["Complete","Invoiced"].includes(j.status)),j=>fee(j).due);
+ const paid=js.filter(j=>j.status==="Paid"&&j.invDate&&j.paidDate);
+ const days=paid.length?Math.round(paid.reduce((n,j)=>
+   n+Math.max(0,(new Date(j.paidDate)-new Date(j.invDate))/86400000),0)/paid.length):null;
+ return {jobs:js,open:open.length,total:js.length,volume,earned,outstanding,
+  days,winRate:js.length?Math.round(won.length/js.length*100):null};
+}
+function backfillAccounts(){
+ if(D.acctBackfill)return 0;
+ const made={};let n=0;
+ (D.jobs||[]).forEach(j=>{
+  const raw=(j.contractor||"").trim();
+  if(!raw||j.accountId)return;
+  const key=normAcct(raw);
+  if(!key)return;
+  let a=ACCOUNTS().find(x=>normAcct(x.name)===key)||made[key];
+  if(!a){
+   a={id:uid(),name:raw,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+      active:true,contacts:[],notes:"",fromBackfill:true};
+   ACCOUNTS().push(a);made[key]=a;n++;
+   if(j.contractorContact)a.contact=j.contractorContact;
+   if(j.contractorEmail)a.email=j.contractorEmail;
+   if(j.contractorPhone)a.phone=j.contractorPhone;
+   if(j.feeMode)a.feeMode=j.feeMode;
+   if(j.feePct!=null)a.feePct=j.feePct;
+  }
+  j.accountId=a.id;
+ });
+ D.acctBackfill=new Date().toISOString();
+ if(n||Object.keys(made).length)save();
+ return n;
+}
+function acctDupes(){
+ const by={};
+ ACCOUNTS().forEach(a=>{const k=normAcct(a.name);(by[k]=by[k]||[]).push(a);});
+ return Object.values(by).filter(g=>g.length>1);
+}
+
+/* ================= CAPTURE =================
+   Recording what actually happens. No coaching runs off these until there is
+   real history — a confident number built on nothing is worse than silence. */
+const CALLS=()=>D.calls||(D.calls=[]);
+const liveCall=()=>CALLS().find(c=>!c.end)||null;
+function callTargets(){
+ const out=[];
+ ACCOUNTS().forEach(a=>out.push({id:"a:"+a.id,name:a.name,kind:"company"}));
+ (D.subs||[]).forEach(s=>out.push({id:"s:"+s.id,name:s.name,kind:"sub"}));
+ D.jobs.filter(j=>!["Paid","Lost"].includes(j.status)).forEach(j=>{
+  const who=j.owner||j.client;
+  if(who)out.push({id:"j:"+j.id,name:who,kind:"client",jobId:j.id});
+ });
+ const seen=new Set();
+ return out.filter(x=>{const k=x.kind+"|"+x.name.toLowerCase();
+  if(seen.has(k))return false;seen.add(k);return true;});
+}
+function startCall(target){
+ if(liveCall()){toast("A call is already running");return;}
+ const t=target?callTargets().find(x=>x.id===target):null;
+ CALLS().unshift({id:uid(),start:new Date().toISOString(),end:null,
+  who:t?t.name:"",kind:t?t.kind:"",jobId:t&&t.jobId||null,
+  accountId:t&&t.kind==="company"?t.id.slice(2):null,note:""});
+ save();close_();render();
+ toast(t?"On with "+t.name:"Call started");
+}
+function endCall(note){
+ const c=liveCall();if(!c)return;
+ c.end=new Date().toISOString();
+ c.mins=Math.max(1,Math.round((new Date(c.end)-new Date(c.start))/60000));
+ if(note!=null)c.note=note;
+ save();close_();render();toast("Logged — "+dur(c.mins));
+}
+const callMins=c=>c.end?c.mins:Math.max(0,Math.round((Date.now()-new Date(c.start))/60000));
+function callsOn(iso){return CALLS().filter(c=>isoDay(new Date(c.start))===iso);}
+
+const VISIT=["none","scheduled","onsite"];
+const VISIT_LABEL={none:"No visit",scheduled:"Visit scheduled",onsite:"On site now"};
+const visitOf=j=>(j&&j.visit&&VISIT.includes(j.visit.state))?j.visit:{state:"none"};
+function setVisit(id,state,when){
+ const j=job(id);if(!j)return;
+ j.visit={state,at:when||(j.visit&&j.visit.at)||"",since:state==="onsite"?new Date().toISOString():""};
+ save();render();
+ toast(state==="onsite"?"On site — clock is watching":VISIT_LABEL[state]);
+}
+const onSiteNow=()=>D.jobs.filter(j=>visitOf(j).state==="onsite");
+
+/* Priced by how long the scan takes, which tracks storeys. Starting numbers —
+   they live in Settings so he can set them to what he really charges. */
+const MPORT_STORIES=[["s1","1 story"],["s2","2 stories"],["s3","3+ / large"]];
+const MPORT_DEFAULT_FEES={s1:125,s2:175,s3:225};
+function mportFees(){
+ const m=D.me||{};
+ if(!m.mportFees)m.mportFees=Object.assign({},MPORT_DEFAULT_FEES);
+ return m.mportFees;
+}
+const mportStories=j=>j.mportStories||"s1";
+function mportSuggested(j){return +mportFees()[mportStories(j)]||MPORT_DEFAULT_FEES.s1;}
+function chargeMatterport(id,amount){
+ const j=job(id);if(!j)return;
+ const amt=+amount||mportSuggested(j);
+ j.extras=(j.extras||[]).filter(x=>x.kind!=="matterport");
+ j.extras.push({id:uid(),kind:"matterport",
+  label:"Matterport scan — "+((MPORT_STORIES.find(s=>s[0]===mportStories(j))||[])[1]||""),amount:amt});
+ j.mportBill="charged";j.mportAmt=amt;
+ save();close_();render();toast("Matterport charged — "+money0(amt));
+}
+function chargeMportSheet(id){
+ const j=job(id);if(!j)return;
+ sheet("Charge the Matterport",
+  `<label><span class="t">How big is it?</span>
+    <div class="segwrap" id="mpst">${MPORT_STORIES.map(([k,lab])=>`
+     <button type="button" class="opt2 ${mportStories(j)===k?"on":""}"
+      onclick="pickMportSize(this,'${j.id}','${k}')">${lab}</button>`).join("")}</div></label>
+   <label><span class="t">Amount <em>suggested — change it if you like</em></span>
+    <input class="in" id="mpamt" type="number" inputmode="decimal" value="${mportSuggested(j)}"></label>
+   <p class="xs dim" style="margin:-6px 0 16px">Goes on as a line item, so it flows into the fee and onto the invoice.</p>
+   <button class="btn" onclick="chargeMatterport('${j.id}',+$('#mpamt').value)">Charge it</button>
+   <button class="btn sec" onclick="waiveMatterport('${j.id}')">Waive it instead</button>`);
+}
+function pickMportSize(el,id,k){
+ const j=job(id);if(!j)return;
+ j.mportStories=k;save();
+ [...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));
+ const box=$("#mpamt");if(box)box.value=mportSuggested(j);
+}
+function waiveMatterport(id){
+ const j=job(id);if(!j)return;
+ ask("Waive the Matterport fee","It's a paid add-on by default. Waiving is recorded, so you can see how often it happens and what it costs you.","Waive it",()=>{
+  j.extras=(j.extras||[]).filter(x=>x.kind!=="matterport");
+  j.mportBill="waived";j.mportAmt=0;save();close_();render();toast("Waived — recorded");});
+}
+function mportCapture(){
+ const rel=D.jobs.filter(j=>j.mport&&j.mport!=="Not needed");
+ const charged=rel.filter(j=>j.mportBill==="charged").length;
+ const waived=rel.filter(j=>j.mportBill==="waived").length;
+ return {total:rel.length,charged,waived,undecided:rel.length-charged-waived,
+  rate:(charged+waived)?Math.round(charged/(charged+waived)*100):null};
+}
+function mportWaivedValue(){
+ return sum(D.jobs.filter(j=>j.mportBill==="waived"),j=>mportSuggested(j));
+}
+
+/* Late clock-in asks why, but never blocks the day. */
+function lateGate(){
+ const s=clockState();
+ if(!s.in||!(s.late>0))return;
+ const k=today();
+ if((CK_().days[k]||{}).lateReason!==undefined)return;
+ sheet("You're "+dur(s.late)+" late",
+  `<p class="sm mut" style="margin:0 0 18px">In at ${h12(s.in)}, start is ${h12(s.target)}.
+    One line is enough — it's here so the pattern shows up later, not to make you feel bad.</p>
+   <label><span class="t">What happened?</span>
+    <input class="in" id="lateWhy" placeholder="e.g. adjuster called at 7:40" autocomplete="off"></label>
+   <button class="btn" onclick="saveLate($('#lateWhy').value.trim())">Log it</button>
+   <button class="btn sec" onclick="saveLate('')">No reason</button>`,true);
+ setTimeout(()=>$("#lateWhy")?.focus(),90);
+}
+function saveLate(reason){
+ const k=today(),c=CK_();
+ c.days[k]=Object.assign({},c.days[k],{lateReason:reason||"",lateMin:clockState().late||0});
+ save();close_();render();
+ toast(reason?"Logged":"Logged — no reason given");
+}
+function lateHistory(){
+ const c=CK_();
+ return Object.keys(c.days||{}).filter(k=>(c.days[k].lateMin||0)>0)
+  .sort().reverse()
+  .map(k=>({day:k,mins:c.days[k].lateMin,reason:c.days[k].lateReason||""}));
+}
+
 const coll=(n,jid)=>(D[n]||[]).filter(x=>x.jobId===jid);
 const ACTIVE=["Estimating","Complete","Invoiced"];
 /* work that is finished or dead can never be "overdue" */
@@ -1092,7 +1294,7 @@ function onlyHere(local,remote){
 /* union by id — this device wins ties, because he is looking at it */
 function mergeBoards(mine,theirs){
  const out=Object.assign({},JSON.parse(JSON.stringify(BLANK)),theirs);
- ["jobs","notes","subs","plans","log","files"].forEach(k=>{
+ ["jobs","notes","subs","plans","log","files","accounts","calls"].forEach(k=>{
   const seen=new Map();
   ((theirs&&theirs[k])||[]).forEach(x=>seen.set(x.id,x));
   ((mine&&mine[k])||[]).forEach(x=>seen.set(x.id,x));
@@ -1580,12 +1782,14 @@ function pomSetup(){const P=POM();
   <button class="btn" onclick="POM().work=+document.getElementById('pw').value||25;POM().rest=+document.getElementById('pr').value||5;save();close_();render();toast('Saved')">Save</button>`);}
 
 /* ================= APP LAUNCHER ================= */
+/* Current-generation marks, redrawn to sit on a 24px tile with even optical
+   weight. Each carries its own light tile so it reads on black or on white. */
 const BRAND={
- mport:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="5" fill="#1E1E1E"/><path d="M5 17V8.4c0-1 1.2-1.5 1.9-.8L9.6 10c.3.3.8.3 1.1 0l2.7-2.4c.7-.7 1.9-.2 1.9.8V17h-2.2v-5.6l-1.7 1.5c-.4.4-1 .4-1.4 0L7.2 11.4V17H5zm12.8 0V7.6H20V17h-2.2z" fill="#fff"/></svg>`,
- gmail:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="5" fill="#fff"/><path d="M3.6 18.6h2.7v-6.5L3 9.6v7.6c0 .8.3 1.4.6 1.4z" fill="#4285F4"/><path d="M17.7 18.6h2.7c.4 0 .6-.6.6-1.4V9.6l-3.3 2.5v6.5z" fill="#34A853"/><path d="M17.7 6.6v5.5L21 9.6V7.2c0-2-2.3-3.2-3.9-2l-.4.3.9 1.1z" fill="#FBBC04"/><path d="M6.3 12.1V6.6l5.7 4.3 5.7-4.3v5.5L12 16.4l-5.7-4.3z" fill="#EA4335"/><path d="M3 7.2v2.4l3.3 2.5V6.6l-.4-.3C4.3 4 3 5.2 3 7.2z" fill="#C5221F"/></svg>`,
- outlook:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="5" fill="#fff"/><path d="M13 6.4h7.2c.5 0 .8.4.8.8v9.6c0 .4-.3.8-.8.8H13V6.4z" fill="#0F6CBD"/><path d="M13 11.2h8v2.4h-8z" fill="#0A5A9E" opacity=".35"/><path d="M2.6 5.2l10-1.7v17l-10-1.7V5.2z" fill="#0F6CBD"/><ellipse cx="7.6" cy="12" rx="2.6" ry="3.3" fill="none" stroke="#fff" stroke-width="1.6"/></svg>`,
- maps:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="5" fill="#fff"/><path d="M12 3c-3 0-5.4 2.4-5.4 5.4 0 4 5.4 12.6 5.4 12.6s5.4-8.6 5.4-12.6C17.4 5.4 15 3 12 3z" fill="#EA4335"/><circle cx="12" cy="8.4" r="2.2" fill="#fff"/></svg>`,
- gen:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="5" fill="currentColor" opacity=".18"/><path d="M8 12h8M13 8l4 4-4 4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+ mport:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="6" fill="#181818"/><path d="M5.4 17.2V8.9c0-1.15 1.4-1.72 2.2-.9l2.6 2.62c.44.44 1.16.44 1.6 0l2.6-2.62c.8-.82 2.2-.25 2.2.9v8.3h-2.35v-5.5l-1.62 1.62c-.66.66-1.74.66-2.4 0L8.6 11.7v5.5H5.4z" fill="#fff"/><rect x="18.6" y="7.8" width="2.35" height="9.4" rx=".5" fill="#fff"/></svg>`,
+ gmail:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="6" fill="#fff"/><path d="M4.4 18.4h3.1v-7.1L3.2 8.05v9.05c0 .74.54 1.3 1.2 1.3z" fill="#4285F4"/><path d="M16.5 18.4h3.1c.66 0 1.2-.56 1.2-1.3V8.05l-4.3 3.25v7.1z" fill="#34A853"/><path d="M16.5 6.6v4.7l4.3-3.25V6.9c0-2.1-2.4-3.3-4.06-2.03l-.24.18v1.55z" fill="#FBBC04"/><path d="M7.5 11.3V6.6L12 10l4.5-3.4v4.7L12 14.7 7.5 11.3z" fill="#EA4335"/><path d="M3.2 6.9v1.15l4.3 3.25V6.6l-.24-.18C5.6 3.6 3.2 4.8 3.2 6.9z" fill="#C5221F"/></svg>`,
+ outlook:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="6" fill="#fff"/><path d="M12.6 7.1h7.5c.5 0 .9.4.9.9v8c0 .5-.4.9-.9.9h-7.5V7.1z" fill="#1B6FC4"/><path d="M12.6 11.4h8.4v1.3l-4.2 2.6-4.2-2.6v-1.3z" fill="#0E4E93"/><rect x="2.6" y="4.5" width="10.4" height="15" rx="1.6" fill="#0F62B0"/><ellipse cx="7.8" cy="12" rx="2.5" ry="3.2" fill="none" stroke="#fff" stroke-width="1.7"/></svg>`,
+ maps:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="6" fill="#fff"/><path d="M3 15.4l4.6-4.6 3.1 3.1L6.1 18.4H4.2c-.66 0-1.2-.54-1.2-1.2v-1.8z" fill="#34A853"/><path d="M21 8.6v8.6c0 .66-.54 1.2-1.2 1.2h-6.2l4.3-6.1L21 8.6z" fill="#4285F4"/><path d="M7.6 10.8L12.2 6.2l3.1 3.1-4.6 4.6-3.1-3.1z" fill="#FBBC04"/><path d="M12 3.4c-2.7 0-4.9 2.2-4.9 4.9 0 3.6 4.9 10.3 4.9 10.3s4.9-6.7 4.9-10.3c0-2.7-2.2-4.9-4.9-4.9z" fill="#EA4335"/><circle cx="12" cy="8.3" r="1.95" fill="#fff"/></svg>`,
+ gen:`<svg viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="6" fill="currentColor" opacity=".16"/><path d="M8.2 12h7.6M12.4 8.2 16.2 12l-3.8 3.8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
 const APP_DEFAULTS=[
  {id:"mport",name:"Matterport",url:"https://my.matterport.com/models",brand:"mport"},
@@ -1679,7 +1883,9 @@ function clockState(iso){
 function clockIn(){const c=CK_(),k=today();const now=hm(new Date());
  c.days[k]=Object.assign({},c.days[k],{in:now});save();render();
  const s=clockState();
- toast(s.late>0?"Clocked in — "+dur(s.late)+" late":"Clocked in — on time");}
+ toast(s.late>0?"Clocked in — "+dur(s.late)+" late":"Clocked in — on time");
+ /* asks why, records either way, never blocks the day */
+ if(s.late>0)setTimeout(lateGate,420);}
 function clockOut(){const c=CK_(),k=today();c.days[k]=Object.assign({},c.days[k],{out:hm(new Date())});
  let stopped=0;
  D.jobs.forEach(j=>{if(j.timerAt){
@@ -2174,6 +2380,93 @@ function daySummary(){
  const moved=D.jobs.filter(j=>j.readyDate===t).length;
  return {worked:cs.worked||0,done,open,billed,paid,notes,logs,moved,inTime:cs.in,outTime:cs.out};
 }
+/* Site-visit state, always visible on the job and one tap to change. */
+function visitStripHTML(j){
+ const v=visitOf(j),st=v.state;
+ const btn=(s,lab)=>`<button class="opt2 ${st===s?"on":""}" onclick="setVisit('${j.id}','${s}')">${lab}</button>`;
+ return `<div class="pan" style="margin-top:16px;border-left:3px solid var(--c-${st==="onsite"?"out":st==="scheduled"?"est":"lost"})">
+  <div class="row between" style="align-items:center;gap:12px;flex-wrap:wrap">
+   <div class="grow">
+    <div class="lab" style="margin-bottom:3px">◎ Site visit</div>
+    <div class="ser" style="font-size:17px">${st==="onsite"
+      ? "On site since "+(v.since?new Date(v.since).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"now")
+      : st==="scheduled" ? (v.at?"Scheduled "+fmt(v.at):"Scheduled") : "No visit planned"}</div></div>
+   <div class="segwrap" style="margin:0">${btn("none","None")}${btn("scheduled","Scheduled")}${btn("onsite","On site")}</div>
+  </div>
+  ${st==="scheduled"?`<div class="row" style="gap:10px;margin-top:12px;align-items:center">
+    <input class="in" type="date" style="margin:0;max-width:200px" value="${v.at||""}"
+     onchange="setVisit('${j.id}','scheduled',this.value)"></div>`:""}
+ </div>`;
+}
+/* Matterport bills by default. Waiving is deliberate and recorded. */
+function mportBillHTML(j){
+ if(!j.mport||j.mport==="Not needed")return "";
+ const s=j.mportBill||"unset";
+ const size=(MPORT_STORIES.find(x=>x[0]===mportStories(j))||[])[1]||"";
+ if(s==="charged")return `<div class="ln2"><span class="k">Matterport fee</span>
+   <b class="v-paid">${money0(j.mportAmt||mportSuggested(j))} charged · ${esc(size)}</b></div>
+  <div class="upbar" style="margin-top:2px">
+   <button onclick="chargeMportSheet('${j.id}')">Change it</button>
+   <button onclick="waiveMatterport('${j.id}')">Waive it instead</button></div>`;
+ if(s==="waived")return `<div class="ln2"><span class="k">Matterport fee</span>
+   <b class="v-lost">Waived — worth ${money0(mportSuggested(j))}</b></div>
+  <div class="upbar" style="margin-top:2px"><button onclick="chargeMportSheet('${j.id}')">Charge it after all</button></div>`;
+ return `<div class="pan" style="margin-top:12px;border-left:2px solid var(--c-rdy)">
+   <b class="v-rdy">Matterport not billed yet</b>
+   <p class="sm dim" style="margin:6px 0 10px">It's a paid add-on unless you say otherwise.
+    ${esc(size)} suggests <b class="money">${money0(mportSuggested(j))}</b>.</p>
+   <div class="upbar" style="margin:0">
+    <button onclick="chargeMportSheet('${j.id}')">Charge it</button>
+    <button onclick="waiveMatterport('${j.id}')">Waive it</button></div></div>`;
+}
+/* One tap to start, one to stop. Anything more and he won't use it mid-call. */
+function callBarHTML(){
+ const c=liveCall();
+ const today_=callsOn(today());
+ const mins=today_.filter(x=>x.end).reduce((n,x)=>n+(x.mins||0),0);
+ if(c)return `<div class="pan" style="margin:0 0 14px;border-left:3px solid var(--c-out)">
+   <div class="row between" style="align-items:center;gap:12px">
+    <div class="grow"><div class="lab v-out" style="margin-bottom:3px"><span class="live amber"></span> On a call</div>
+     <div class="ser" style="font-size:19px">${esc(c.who||"Unknown")} · ${dur(callMins(c))}</div></div>
+    <button class="btn s" style="margin:0" onclick="endCallSheet()">End call</button></div></div>`;
+ return `<div class="pan" style="margin:0 0 14px">
+   <div class="row between" style="align-items:center;gap:12px">
+    <div class="grow"><div class="lab" style="margin-bottom:3px">☏ Calls</div>
+     <div class="sm dim">${today_.length?plural(today_.length,"call")+" today · "+dur(mins):"Nothing logged today"}</div></div>
+    <button class="btn sec s" style="margin:0" onclick="startCallSheet()">Start a call</button></div></div>`;
+}
+function startCallSheet(){
+ const t=callTargets();
+ sheet("Who are you talking to?",
+  `<button class="btn" style="margin:0 0 14px" onclick="startCall('')">Start without picking — add it after</button>
+   <input class="in" id="callq" placeholder="Search…" autocomplete="off"
+    oninput="filterCallList(this.value)" style="margin-bottom:10px">
+   <div id="calllist">${t.map(x=>`<div class="ins callrow" data-n="${esc(x.name.toLowerCase())}"
+     style="cursor:pointer" onclick="startCall('${x.id}')">
+     <div class="grow"><b>${esc(x.name)}</b><div class="in3">${esc(x.kind)}</div></div>
+     <span class="in3">→</span></div>`).join("")||`<p class="sm dim">No contacts yet.</p>`}</div>`);
+ setTimeout(()=>$("#callq")?.focus(),90);
+}
+function filterCallList(q){
+ q=(q||"").toLowerCase();
+ document.querySelectorAll(".callrow").forEach(r=>{
+  r.style.display=(!q||(r.dataset.n||"").includes(q))?"":"none";});
+}
+function endCallSheet(){
+ const c=liveCall();if(!c)return;
+ sheet("End call — "+dur(callMins(c)),
+  `<label><span class="t">Who was it?</span>
+    <input class="in" id="callwho" value="${esc(c.who||"")}" placeholder="name" autocomplete="off"></label>
+   <label><span class="t">What was it about? <em>optional</em></span>
+    <input class="in" id="callnote" value="${esc(c.note||"")}" placeholder="e.g. supplement approval" autocomplete="off"></label>
+   <button class="btn" onclick="finishCall()">Log it</button>`);
+ setTimeout(()=>$(c.who?"#callnote":"#callwho")?.focus(),90);
+}
+function finishCall(){
+ const c=liveCall();if(!c)return;
+ const w=$("#callwho");if(w)c.who=w.value.trim();
+ endCall($("#callnote")?$("#callnote").value.trim():"");
+}
 function daySummaryHTML(){
  const d=daySummary();
  const bits=[["Hours",d.worked?dur(d.worked):"—","est"],["Done",d.done+"/"+(d.done+d.open),"paid"],
@@ -2220,7 +2513,9 @@ function tickerHTML(){
   cs.in&&!cs.out?"on the clock":cs.off?"day off":"not clocked in"]);
  if(owed)items.push(["out",money0(owed),"out for collection · "+plural(inv.length,"invoice")]);
  if(tobill)items.push(["rdy",money0(tobill),"finished, not billed"]);
- if(due.length)items.push(["out",due.length+"",plural(due.length,"estimate")+" due"+(due.some(j=>j.dueDate<t)?" or overdue":" today")]);
+ /* The big number IS the count — plural() would print it a second time,
+    which is where "1  1 late start this week" came from. Label only. */
+ if(due.length)items.push(["out",due.length+"",countWord(due.length,"estimate")+" due"+(due.some(j=>j.dueDate<t)?" or overdue":" today")]);
  const nxt=todaysJobs().find(j=>!j.timerAt&&phaseOf(j)!=="Done");
  if(nxt)items.push(["est",jobName(nxt),(nxt.startTime?h12(nxt.startTime)+" · ":"")+"up next"]);
  const run=D.jobs.find(j=>j.timerAt);
@@ -2231,7 +2526,7 @@ function tickerHTML(){
 
  /* everything below is his own data — the more he feeds it, the more runs past */
  const live=D.jobs.filter(j=>!["Paid","Lost"].includes(j.status));
- if(live.length)items.push(["est",live.length+"",plural(live.length,"job")+" on the board"]);
+ if(live.length)items.push(["est",live.length+"",countWord(live.length,"job")+" on the board"]);
  const pipeline=sum(live,j=>+j.total||0);
  if(pipeline)items.push(["est",money0(pipeline),"of estimates in play"]);
  const myFees=sum(live,j=>fee(j).due);
@@ -2240,15 +2535,15 @@ function tickerHTML(){
  if(paidYTD)items.push(["paid",money0(paidYTD),"collected all time"]);
  const w=weekStats();
  if(w&&w.worked)items.push(["est",dur(w.worked),"on the clock this week"]);
- if(w&&w.lateDays)items.push(["out",w.lateDays+"",plural(w.lateDays,"late start")+" this week"]);
+ if(w&&w.lateDays)items.push(["out",w.lateDays+"",countWord(w.lateDays,"late start")+" this week"]);
  const wait=byStage("Waiting");
- if(wait.length)items.push(["lost",wait.length+"",plural(wait.length,"job")+" waiting on someone else"]);
+ if(wait.length)items.push(["lost",wait.length+"",countWord(wait.length,"job")+" waiting on someone else"]);
  const soon=D.jobs.filter(j=>j.startDate&&j.startDate>t).sort((a,b)=>a.startDate.localeCompare(b.startDate))[0];
  if(soon)items.push(["est",jobName(soon),"starts "+relDay(soon.startDate)]);
  const far=D.jobs.filter(j=>j.lat&&!["Paid","Lost"].includes(j.status))
    .map(j=>({j,mi:milesFromHome(j)})).filter(x=>x.mi!=null).sort((a,b)=>b.mi-a.mi)[0];
  if(far)items.push(["lost",far.mi.toFixed(0)+" mi",jobName(far.j)+" — furthest out"]);
- if((D.subs||[]).length)items.push(["lost",D.subs.length+"",plural(D.subs.length,"sub")+" on file"]);
+ if((D.subs||[]).length)items.push(["lost",D.subs.length+"",countWord(D.subs.length,"sub")+" on file"]);
 
  /* the notes themselves, not just a count — newest first, trimmed to fit the bar */
  const recentNotes=[...(D.notes||[])]
@@ -2263,7 +2558,7 @@ function tickerHTML(){
   items.push(["lost",head,safe.length>78?safe.slice(0,78)+"…":safe]);
  });
  const more=(D.notes||[]).length-recentNotes.length;
- if(more>0)items.push(["lost",more+"",plural(more,"more note")+" in the daybook"]);
+ if(more>0)items.push(["lost",more+"",countWord(more,"more note")+" in the daybook"]);
 
  if(items.length<3)items.push(["lost","Chairman","command center"]);
  const half=items.map(([c,b,l])=>`<span class="it"><span class="dot2 v-${c}">●</span><b class="v-${c}">${esc(b)}</b>${esc(l)}</span>`).join("");
@@ -2353,6 +2648,7 @@ function renderSide(){
   ["docs","▣","Documents",""],
   ["map","◎","Map",""],
   ["subs","◈","Crew",""],
+  ["accounts","▲","Accounts",ACCOUNTS().filter(a=>acctStats(a.id).open).length||""],
   ["summary","▤","Estimates",""],
   ["invoices","⎙","Invoices",(ready+inv)||""],
   ["money","＄","Money",""],
@@ -2360,7 +2656,7 @@ function renderSide(){
  el.innerHTML=`<div class="slogo">
    <div class="sname">CHAIRMAN</div>
    <div class="xs dim" style="letter-spacing:.28em;margin-top:-2px">EST. CO.</div></div>
-  ${items.map(([v,ic,lab,b])=>`<button class="sitem ${(V===v||(V==="job"&&v==="jobs")||(V==="invoice"&&v==="money")||(V==="sub"&&v==="subs"))?"on":""}"
+  ${items.map(([v,ic,lab,b])=>`<button class="sitem ${(V===v||(V==="job"&&v==="jobs")||(V==="invoice"&&v==="money")||(V==="sub"&&v==="subs")||(V==="account"&&v==="accounts"))?"on":""}"
     onclick="go('${v}')"><span class="ic3">${ic}</span>${lab}${b?`<span class="sbadge">${b}</span>`:""}</button>`).join("")}
   <button class="sitem ${V==="ai"?"on":""}" onclick="go('ai')"><span class="ic3">✦</span>AI assistant</button>
   <button class="sitem" onclick="settings()"><span class="ic3">⚙</span>Settings</button>
@@ -2425,6 +2721,7 @@ R.today=()=>{
   <button class="btn s" style="margin:0" onclick="newJob()">+ New Job</button>
  </div>
  ${tickerHTML()}
+ ${callBarHTML()}
  ${daySummaryHTML()}
  ${(()=>{const nx=flowNext();return nx?`<div class="pan" style="margin:0 0 14px;border-left:3px solid var(--c-${nx.fl.c})">
    <div class="row between"><div class="grow" style="cursor:pointer" onclick="go('job',{id:'${nx.j.id}'})">
@@ -2527,9 +2824,13 @@ function boardHTML(){
  <p class="xs dim center" style="margin-top:14px;letter-spacing:.1em">Drag a card sideways — or tap ⋮ on any card</p>`;
 }
 function jcard(j){const f=fee(j),C=ck(j.status);
- return `<div class="jc" data-id="${j.id}" style="border-left:2px solid var(--c-${C})">
+ /* The stripe is the company's colour when it belongs to one, so a glance at
+    the board tells him whose work is where. Stage keeps the text colour. */
+ const ac=jobColor(j), acct=acctOf(j);
+ return `<div class="jc" data-id="${j.id}" style="border-left:3px solid ${ac||"var(--c-"+C+")"}">
   <div class="row between" style="align-items:flex-start;gap:6px">
    <div class="grow"><div class="t trunc v-${C}">${esc(jobName(j))}</div>
+    ${acct?`<div class="xs" style="color:${ac};letter-spacing:.08em;margin:2px 0 3px">${esc(acct.name)}</div>`:""}
     <div class="s">${j.status==="Waiting"&&j.waitingOn?"⏳ "+esc(j.waitingOn):esc(j.loss?j.loss+" · ":"")+esc(jobSub(j)||j.insurer||"—")}</div></div>
    <button class="ico" style="width:22px;height:22px;font-size:12px;border:0;color:var(--ink3)"
     onclick="event.stopPropagation();moveMenu('${j.id}')">⋮</button></div>
@@ -2623,10 +2924,16 @@ function newJob(id){const j=id?job(id):{};
     <button type="button" class="opt2 ${forContractor(j)?"on":""}" onclick="pickFor(this,'Contractor')">Another contractor</button>
    </div></label>
   <div id="cblock" style="display:${forContractor(j)?"block":"none"}">
-   <label><span class="t">Contractor / company</span>
+   <label><span class="t">Contractor / company <em>pick one and their details fill in</em></span>
+    <select class="in" id="jacct" onchange="pickAcctOnJob(this.value)">
+     <option value="">— choose a company —</option>
+     ${ACCOUNTS().slice().sort((x,y)=>(x.name||"").localeCompare(y.name||""))
+       .map(a=>`<option value="${a.id}" ${(_acctPrefill||j.accountId)===a.id?"selected":""}>${esc(a.name)}</option>`).join("")}
+     <option value="__new">＋ New company…</option>
+    </select></label>
+   <label><span class="t">Company name <em>if it isn't on the list yet</em></span>
     <input class="in" id="jcn" value="${esc(j.contractor||"")}" placeholder="e.g. ABC Restoration"
-     list="conlist" autocomplete="off" autocorrect="off" spellcheck="false"></label>
-   <datalist id="conlist">${[...new Set(D.jobs.map(x=>x.contractor).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+     autocomplete="off" autocorrect="off" spellcheck="false"></label>
   </div>
   <label><span class="t">Property owner <em>${forContractor(j)?"their client":"your client"}</em></span>
    <input class="in" id="jc" value="${esc(j.owner||j.client||"")}" placeholder="e.g. Marcus Whitfield"
@@ -2719,6 +3026,45 @@ function newJob(id){const j=id?job(id):{};
   <button class="btn" onclick="saveJob('${id||""}')">Save</button>
   ${id?`<button class="btn warn" onclick="delJob('${id}')">Delete job</button>`:""}`);
  setTimeout(()=>$("#jc")?.focus(),90);}
+/* Choosing a company fills its defaults in — editable per job, and never
+   written back to the company record. */
+function pickAcctOnJob(id){
+ if(id==="__new"){const sel=$("#jacct");if(sel)sel.value="";acctSheet();return;}
+ const a=ACCOUNTS().find(x=>x.id===id);
+ if(!a)return;
+ const set=(sel,val)=>{const el=$(sel);if(el&&val!=null&&val!=="")el.value=val;};
+ set("#jcn",a.name);set("#jcp",a.contact);set("#jce",a.email);set("#jcph",a.phone);
+ if(a.feePct!=null)set("#jfpct",a.feePct);
+ if(a.feeMode){
+  const box=$("#jfmode");
+  if(box){
+   [...box.children].forEach(b=>{
+    const on=(b.getAttribute("onclick")||"").includes("'"+a.feeMode+"'");
+    b.classList.toggle("on",on);
+    if(on)_fmode=a.feeMode;
+   });
+   const pb=$("#pctblock"),fb=$("#flatblock");
+   if(pb)pb.style.display=["flat","retainer"].includes(a.feeMode)?"none":"block";
+   if(fb)fb.style.display=a.feeMode==="flat"?"block":"none";
+  }
+ }
+ toast("Filled in from "+a.name);
+}
+/* Which company a job belongs to: whatever is picked, or a new record from a
+   typed name that doesn't match anything yet. */
+function accountIdForJob(id){
+ const picked=$("#jacct")?$("#jacct").value:"";
+ if(picked&&picked!=="__new")return picked;
+ const typed=($("#jcn")&&$("#jcn").value.trim())||"";
+ if(!typed)return id?(job(id).accountId||null):null;
+ const key=normAcct(typed);
+ const found=ACCOUNTS().find(a=>normAcct(a.name)===key);
+ if(found)return found.id;
+ const a={id:uid(),name:typed,createdAt:new Date().toISOString(),
+  updatedAt:new Date().toISOString(),active:true,contacts:[],notes:""};
+ ACCOUNTS().push(a);
+ return a.id;
+}
 function pickLoss(el,t){_loss=t;[...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));}
 function pickMp(el,t){_mp=t;[...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));}
 let _for="Homeowner",_bill="Owner";
@@ -2817,6 +3163,7 @@ function saveJob(id){
   contractorEmail:$("#jce")?$("#jce").value.trim():"",
   phone:$("#jph")?$("#jph").value.trim():(id?job(id).phone:""),
   contractorPhone:$("#jcph")?$("#jcph").value.trim():(id?job(id).contractorPhone:""),
+  accountId:accountIdForJob(id),
   feeMode:_fmode,
   feePct:($("#jfpct")&&$("#jfpct").value!=="")?+$("#jfpct").value:undefined,
   flat:$("#jflat")?(+$("#jflat").value||0):0,
@@ -2873,7 +3220,10 @@ R.job=({id})=>{
  </div>
  <h1 class="disp sm v-${C}" style="margin:20px 0 8px">${esc(jobName(j))}</h1>
  <div class="xs v-${C}" style="letter-spacing:.14em;text-transform:uppercase;opacity:.75">${esc(j.address||"—")}</div>
+ ${visitStripHTML(j)}
  <div class="tags" style="margin-top:16px">${pill(j.status,j)}
+  ${visitOf(j).state!=="none"?`<span class="chip ${visitOf(j).state==="onsite"?"v-out":"v-est"}">${
+    visitOf(j).state==="onsite"?"◉ On site now":"◷ Visit "+(visitOf(j).at?fmt(visitOf(j).at):"scheduled")}</span>`:""}
   <span class="chip v-${PCOL2[j.priority||"Moderate"]}">${esc(j.priority||"Moderate")} priority</span>
   ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"rdy"}">${j.dueDate<today()?"Overdue "+fmt(j.dueDate):"Due "+fmt(j.dueDate)}</span>`:""}
   ${forContractor(j)?`<span class="chip v-est">Contractor job</span>`:""}
@@ -2881,7 +3231,10 @@ R.job=({id})=>{
   ${j.mport&&j.mport!=="Not needed"?`<span class="chip ${j.mport==="Done"?"v-paid":"v-rdy"}">Matterport ${esc(j.mport)}</span>`:""}</div>
  <div class="pan" style="margin-top:22px;border-color:var(--c-${C})">
   ${forContractor(j)?`
-   <div class="ln2"><span class="k">Estimate for</span><b class="v-${C}">${esc(j.contractor||"—")}</b></div>
+   <div class="ln2"><span class="k">Estimate for</span><b class="v-${C}">${
+     acctOf(j)?`<a href="#" onclick="event.preventDefault();go('account',{id:'${acctOf(j).id}'})"
+       style="color:${jobColor(j)};text-decoration:none;border-bottom:1px solid ${jobColor(j)}66">${esc(acctOf(j).name)}</a>`
+      :esc(j.contractor||"—")}</b></div>
    ${j.contractorContact?`<div class="ln2"><span class="k">Their contact</span><b>${esc(j.contractorContact)}</b></div>`:""}
    <div class="ln2"><span class="k">Property owner</span><b>${esc(j.owner||"—")}</b></div>
    <div class="ln2"><span class="k">Invoice goes to</span>
@@ -2895,6 +3248,7 @@ R.job=({id})=>{
   <div class="ln2"><span class="k">Job type</span><b class="v-${C}">${esc(j.loss||"—")}</b></div>
   <div class="ln2"><span class="k">Matterport</span>
    <b class="${j.mport==="Done"?"v-paid":j.mport&&j.mport!=="Not needed"?"v-rdy":""}">${esc(j.mport||"Not needed")}</b></div>
+  ${mportBillHTML(j)}
   <div class="ln2"><span class="k">Matterport link</span>
    ${j.mportLink?`<a href="${esc(j.mportLink)}" target="_blank" rel="noopener" class="v-rdy" style="font-size:14px">Open scan →</a>`
     :`<button class="lnk" onclick="event.stopPropagation();setMport('${j.id}')">+ Add link</button>`}</div>
@@ -3853,6 +4207,247 @@ function logToJob(id){
  D.jobs.unshift(j);x.jobId=j.id;
  if(x.text)D.notes.unshift({id:uid(),jobId:j.id,text:"[From the daybook] "+x.text,kind:"Note",pin:false,created:new Date().toISOString()});
  save();go("job",{id:j.id});toast("Job created");}
+
+/* ================= ACCOUNTS — screens ================= */
+let _acctQ="",_acctPrefill=null,_acctColor="";
+R.accounts=()=>{
+ backfillAccounts();
+ const q=_acctQ.toLowerCase();
+ let list=[...ACCOUNTS()];
+ if(q)list=list.filter(a=>((a.name||"")+" "+(a.contact||"")+" "+(a.phone||"")).toLowerCase().includes(q));
+ list.sort((a,b)=>acctStats(b.id).open-acctStats(a.id).open
+   ||acctStats(b.id).earned-acctStats(a.id).earned
+   ||(a.name||"").localeCompare(b.name||""));
+ const dupes=acctDupes();
+ return `<div class="lab">▲ Accounts</div>
+ <h1 class="disp" style="margin:12px 0 6px">The<br> Companies</h1>
+ <div class="sm dim">${plural(ACCOUNTS().length,"company")} · the people who hire you</div>
+ <div class="row" style="margin-top:18px;gap:10px;max-width:720px">
+  <input class="in" style="margin:0" placeholder="Search companies…" value="${esc(_acctQ)}"
+   oninput="_acctQ=this.value;render()" autocomplete="off">
+  <button class="btn s" style="margin:0;flex:none" onclick="acctSheet()">+ New company</button></div>
+ ${dupes.length?`<div class="pan" style="margin-top:14px;border-left:2px solid var(--c-rdy)">
+   <div class="lab v-rdy" style="margin-bottom:6px">Possible duplicates</div>
+   ${dupes.map(g=>`<div class="ins"><div class="grow"><b>${g.map(a=>esc(a.name)).join("  ·  ")}</b>
+     <div class="in3">${plural(g.reduce((n,a)=>n+acctJobs(a.id).length,0),"job")} between them</div></div>
+     <button class="opt2" style="padding:6px 10px" onclick="askMergeAccts('${g.map(a=>a.id).join(",")}')">Merge</button></div>`).join("")}</div>`:""}
+ ${list.length?`<div class="cols" style="margin-top:8px">${list.map(a=>{
+   const st=acctStats(a.id),col=acctColor(a);
+   return `<div class="pan" onclick="go('account',{id:'${a.id}'})" style="border-left:3px solid ${col};cursor:pointer">
+    <div class="row between" style="align-items:flex-start">
+     <div class="grow"><div class="ser" style="font-size:20px">${esc(a.name)}</div>
+      <div class="xs dim" style="letter-spacing:.1em;text-transform:uppercase;margin-top:4px">
+       ${esc(a.contact||"no contact yet")}</div></div>
+     <div style="text-align:right">
+      <div class="ser" style="font-size:20px;color:${col}">${st.open}</div>
+      <div class="xs dim">open</div></div></div>
+    <div class="row" style="gap:18px;margin-top:12px">
+     <div><div class="xs dim">Lifetime</div><b class="money">${money0(st.volume)}</b></div>
+     <div><div class="xs dim">Earned</div><b class="money v-paid">${money0(st.earned)}</b></div>
+     ${st.outstanding?`<div><div class="xs dim">Outstanding</div><b class="money v-out">${money0(st.outstanding)}</b></div>`:""}
+    </div></div>`;}).join("")}</div>`
+  :`<div class="empty" style="margin-top:20px"><div class="g dim">▲</div>
+    <div class="ser" style="font-size:21px">${q?"Nothing matches":"No companies yet"}</div>
+    <p class="sm dim" style="margin-top:8px">${q?"Try another search."
+     :"Add the contractors who hire you. Their details fill themselves in on every job after that."}</p></div>`}
+ <div style="height:16px"></div>`;
+};
+R.account=({id})=>{
+ const a=ACCOUNTS().find(x=>x.id===id);
+ if(!a)return `<div class="empty"><div class="ser" style="font-size:22px">Company not found</div></div>`;
+ const st=acctStats(a.id),col=acctColor(a);
+ const byStage={};
+ st.jobs.forEach(j=>{(byStage[j.status]=byStage[j.status]||[]).push(j);});
+ const order=["Waiting","Estimating","Complete","Invoiced","Paid","Lost"];
+ const tel=p=>p?`<a href="tel:${esc(String(p).replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(p)}</a>`:"—";
+ return `<button class="lnk" onclick="go('accounts')">← Accounts</button>
+ <div class="row between" style="align-items:flex-start;margin-top:14px">
+  <div class="grow"><h1 class="disp sm" style="margin:0 0 6px;color:${col}">${esc(a.name)}</h1>
+   <div class="xs dim" style="letter-spacing:.14em;text-transform:uppercase">${esc(a.addr||"no office address")}</div></div>
+  <button class="btn s" style="margin:0" onclick="acctSheet('${a.id}')">Edit</button>
+ </div>
+ <div class="row" style="gap:10px;margin-top:16px;flex-wrap:wrap">
+  <button class="btn s" style="margin:0" onclick="newJobForAcct('${a.id}')">+ New job for them</button>
+  <button class="btn sec s" style="margin:0" onclick="weeklyUpdate('${a.id}')">⎙ Weekly update</button>
+ </div>
+ <div class="pan" style="margin-top:20px;border-color:${col}">
+  <div class="ln2"><span class="k">Main contact</span><b>${esc(a.contact||"—")}</b></div>
+  <div class="ln2"><span class="k">Phone</span><b>${tel(a.phone)}</b></div>
+  <div class="ln2"><span class="k">Email</span><b>${a.email?`<a href="mailto:${esc(a.email)}" style="color:inherit">${esc(a.email)}</a>`:"—"}</b></div>
+  ${a.terms?`<div class="ln2"><span class="k">Terms</span><b>${esc(a.terms)}</b></div>`:""}
+  ${a.feeMode?`<div class="ln2"><span class="k">Default fee</span><b>${esc(FEELABEL[a.feeMode]||a.feeMode)}${a.feePct!=null?" · "+a.feePct+"%":""}</b></div>`:""}
+ </div>
+ <div class="pan" style="margin-top:14px">
+  <div class="lab" style="margin-bottom:10px">The numbers</div>
+  <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+   <div><div class="xs dim">Jobs</div><div class="ser" style="font-size:20px">${st.total}</div></div>
+   <div><div class="xs dim">Open now</div><div class="ser" style="font-size:20px;color:${col}">${st.open}</div></div>
+   <div><div class="xs dim">Lifetime written</div><div class="ser money" style="font-size:20px">${money0(st.volume)}</div></div>
+   <div><div class="xs dim">Fees earned</div><div class="ser money v-paid" style="font-size:20px">${money0(st.earned)}</div></div>
+   <div><div class="xs dim">Outstanding</div><div class="ser money ${st.outstanding?"v-out":""}" style="font-size:20px">${money0(st.outstanding)}</div></div>
+   <div><div class="xs dim">Avg days to pay</div><div class="ser" style="font-size:20px">${st.days==null?"—":st.days}</div></div>
+  </div></div>
+ ${st.jobs.length?order.filter(s=>byStage[s]).map(s=>`
+  <div class="sechead" style="margin-top:20px"><h2>${esc(LBL[s]||s)}</h2><span class="em dim">${byStage[s].length}</span></div>
+  <div class="pan" style="margin-top:0">${byStage[s].map(j=>`<div class="ins" style="cursor:pointer" onclick="go('job',{id:'${j.id}'})">
+    <div class="grow"><b>${esc(jobName(j))}</b><div class="in3">${esc(j.address||"")}</div></div>
+    <div class="iv money">${j.total?money0(j.total):"—"}</div></div>`).join("")}</div>`).join("")
+  :`<div class="empty" style="margin-top:20px"><div class="ser" style="font-size:19px">No jobs yet</div>
+    <p class="sm dim" style="margin-top:8px">Start one and it files itself here.</p></div>`}
+ <div class="pan" style="margin-top:18px">
+  <div class="lab" style="margin-bottom:8px">Notes</div>
+  <textarea class="in" id="acctnote" rows="3" style="resize:vertical"
+   placeholder="Anything worth remembering about working with them…">${esc(a.notes||"")}</textarea>
+  <button class="btn sec" style="margin-top:10px" onclick="saveAcctNote('${a.id}')">Save note</button></div>
+ <div style="height:20px"></div>`;
+};
+function saveAcctNote(id){
+ const a=ACCOUNTS().find(x=>x.id===id);const el=$("#acctnote");
+ if(!a||!el)return;
+ a.notes=el.value;a.updatedAt=new Date().toISOString();save();toast("Saved");
+}
+function newJobForAcct(id){_acctPrefill=id;newJob();}
+function acctSheet(id){
+ const a=id?ACCOUNTS().find(x=>x.id===id):{};
+ sheet(id?"Edit company":"New company",`
+  <label><span class="t">Company name</span>
+   <input class="in" id="an" value="${esc(a.name||"")}" placeholder="e.g. ABC Restoration" autocomplete="off" spellcheck="false"></label>
+  <label><span class="t">Main contact</span>
+   <input class="in" id="ac" value="${esc(a.contact||"")}" placeholder="e.g. Mike, PM" autocomplete="off"></label>
+  <label><span class="t">Phone</span>
+   <input class="in" id="ap" type="tel" inputmode="tel" value="${esc(a.phone||"")}" placeholder="713-555-0142" autocomplete="off"></label>
+  <label><span class="t">Email</span>
+   <input class="in" id="ae" type="email" value="${esc(a.email||"")}" placeholder="mike@abc.com" autocomplete="off"></label>
+  <label><span class="t">Office address <em>optional</em></span>
+   <input class="in" id="aa" value="${esc(a.addr||"")}" placeholder="street, city" autocomplete="off"></label>
+  <label><span class="t">Default fee basis <em>fills in on every job for them</em></span>
+   <select class="in" id="afm">
+    <option value="">— none —</option>
+    ${FEEMODES.map(([v,l])=>`<option value="${v}" ${a.feeMode===v?"selected":""}>${esc(l)}</option>`).join("")}
+   </select></label>
+  <label><span class="t">Default percentage</span>
+   <input class="in" id="afp" type="number" step="0.1" inputmode="decimal" value="${a.feePct!=null?a.feePct:""}" placeholder="${D.me.rate||2}"></label>
+  <label><span class="t">Payment terms</span>
+   <input class="in" id="at" value="${esc(a.terms||"")}" placeholder="Due on completion" autocomplete="off"></label>
+  <label><span class="t">Colour on the board</span>
+   <div class="segwrap" id="acol">
+    ${ACCT_COLORS.map(c=>`<button type="button" class="opt2 ${(a.color||"")===c?"on":""}"
+      style="background:${c}22;border-color:${c}" onclick="pickAcctColor(this,'${c}')">&nbsp;</button>`).join("")}
+   </div></label>
+  <button class="btn" onclick="saveAcct('${id||""}')">Save</button>
+  ${id?`<button class="btn warn" onclick="delAcct('${id}')">Delete company</button>`:""}`);
+ _acctColor=a.color||"";
+ setTimeout(()=>$("#an")?.focus(),90);
+}
+function pickAcctColor(el,c){_acctColor=c;[...el.parentNode.children].forEach(x=>x.classList.toggle("on",x===el));}
+function saveAcct(id){
+ const name=($("#an")&&$("#an").value.trim())||"";
+ if(!name){toast("Give the company a name");$("#an")&&$("#an").focus();return;}
+ const o={name,contact:$("#ac").value.trim(),phone:$("#ap").value.trim(),
+  email:$("#ae").value.trim(),addr:$("#aa").value.trim(),
+  feeMode:$("#afm").value||"",feePct:$("#afp").value===""?null:+$("#afp").value,
+  terms:$("#at").value.trim(),color:_acctColor||"",updatedAt:new Date().toISOString()};
+ if(id){Object.assign(ACCOUNTS().find(x=>x.id===id),o);}
+ else{ACCOUNTS().push(Object.assign({id:uid(),createdAt:new Date().toISOString(),
+   active:true,contacts:[],notes:""},o));}
+ save();close_();render();toast("Saved");
+}
+/* Deleting a company never takes its jobs — the typed name stays as fallback. */
+function delAcct(id){
+ const a=ACCOUNTS().find(x=>x.id===id);if(!a)return;
+ const n=acctJobs(id).length;
+ ask("Delete this company",
+  a.name+" will be removed."+(n?" Its "+plural(n,"job")+" stay exactly where they are, with the company name kept as text.":""),
+  "Delete it",()=>{
+   D.jobs.forEach(j=>{if(j.accountId===id){j.accountId=null;if(!j.contractor)j.contractor=a.name;}});
+   D.accounts=ACCOUNTS().filter(x=>x.id!==id);
+   save();close_();go("accounts");toast("Deleted");});
+}
+function askMergeAccts(ids){
+ const list=ids.split(",").map(i=>ACCOUNTS().find(a=>a.id===i)).filter(Boolean);
+ if(list.length<2)return;
+ const keep=list[0];
+ ask("Merge these into one",
+  list.map(a=>a.name).join("  +  ")+"  →  "+keep.name+
+  ". All "+plural(list.reduce((n,a)=>n+acctJobs(a.id).length,0),"job")+" follow the surviving record. Contacts and notes are combined.",
+  "Merge them",()=>{mergeAccts(list.map(a=>a.id));});
+}
+function mergeAccts(ids){
+ const list=ids.map(i=>ACCOUNTS().find(a=>a.id===i)).filter(Boolean);
+ if(list.length<2)return;
+ snapshot("before merging companies");
+ const keep=list[0],rest=list.slice(1);
+ rest.forEach(a=>{
+  D.jobs.forEach(j=>{if(j.accountId===a.id)j.accountId=keep.id;});
+  keep.contacts=[...(keep.contacts||[]),...(a.contacts||[])];
+  if(a.notes)keep.notes=[keep.notes,a.notes].filter(Boolean).join("\n");
+  ["contact","phone","email","addr","terms"].forEach(k=>{if(!keep[k]&&a[k])keep[k]=a[k];});
+ });
+ keep.updatedAt=new Date().toISOString();
+ D.accounts=ACCOUNTS().filter(a=>!rest.some(r=>r.id===a.id));
+ save();close_();render();toast("Merged into "+keep.name);
+}
+/* A one-page status sheet he can send every week. Prints via the invoice path. */
+function weeklyUpdateHTML(a){
+ const me=D.me,st=acctStats(a.id);
+ const live=st.jobs.filter(j=>j.status!=="Lost");
+ const order=["Waiting","Estimating","Complete","Invoiced","Paid"];
+ const sorted=[...live].sort((x,y)=>order.indexOf(x.status)-order.indexOf(y.status));
+ const wk=new Date();
+ const row=j=>{
+  const where=[j.owner||j.client||"",j.address||""].filter(Boolean).join(" — ");
+  const note=j.status==="Waiting"?(j.waitingOn||"waiting"):
+   j.status==="Estimating"?(j.dueDate?"due "+fmt(j.dueDate):"in progress"):
+   j.status==="Complete"?"ready to send":
+   j.status==="Invoiced"?("invoiced"+(j.invDate?" "+fmt(j.invDate):"")):
+   j.status==="Paid"?("paid"+(j.paidDate?" "+fmt(j.paidDate):"")):"";
+  return `<tr>
+   <td style="padding:7pt 0;border-bottom:1px solid #ddd">${esc(where||jobName(j))}</td>
+   <td style="padding:7pt 0;border-bottom:1px solid #ddd">${esc(LBL[j.status]||j.status)}</td>
+   <td style="padding:7pt 0;border-bottom:1px solid #ddd;color:#555">${esc(note)}</td>
+   <td style="padding:7pt 0;border-bottom:1px solid #ddd;text-align:right">${j.total?money0(j.total):"—"}</td></tr>`;};
+ return `<div class="inv-head">
+   <div style="font:bold 20pt Georgia,serif;letter-spacing:.14em">CHAIRMAN</div>
+   <div style="font-size:9pt;letter-spacing:.2em;text-transform:uppercase;color:#666">Estimating Co.</div></div>
+  <h2 style="font:normal 17pt Georgia,serif;margin:22pt 0 2pt">Weekly update — ${esc(a.name)}</h2>
+  <div style="font-size:9.5pt;color:#666;margin-bottom:18pt">
+   Week ending ${wk.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
+   ${a.contact?" · for "+esc(a.contact):""}</div>
+  ${sorted.length?`<table style="width:100%;border-collapse:collapse;font-size:10pt">
+   <tr style="text-align:left;font-size:8.5pt;letter-spacing:.12em;text-transform:uppercase;color:#888">
+    <th style="padding-bottom:6pt">Property</th><th style="padding-bottom:6pt">Stage</th>
+    <th style="padding-bottom:6pt">Note</th><th style="padding-bottom:6pt;text-align:right">Estimate</th></tr>
+   ${sorted.map(row).join("")}
+   <tr><td colspan="3" style="padding-top:10pt;font-weight:bold">Total written</td>
+    <td style="padding-top:10pt;text-align:right;font-weight:bold">${money0(sum(sorted,j=>+j.total||0))}</td></tr>
+  </table>`:`<p style="font-size:10.5pt">Nothing open this week.</p>`}
+  ${st.outstanding?`<p style="font-size:10pt;margin-top:16pt"><b>Outstanding to me:</b> ${money0(st.outstanding)}</p>`:""}
+  <div class="inv-foot">Questions on any of these, call me.${me.phone?" "+esc(me.phone):""}${me.email?" · "+esc(me.email):""}</div>`;
+}
+function weeklyUpdate(id){
+ const a=ACCOUNTS().find(x=>x.id===id);if(!a)return;
+ sheet("Weekly update — "+a.name,
+  `<div class="inv" style="max-height:56vh;overflow:auto;padding:22px">${weeklyUpdateHTML(a)}</div>
+   <button class="btn" style="margin-top:16px" onclick="printWeekly('${a.id}')">⎙ Print / Save as PDF</button>
+   ${a.email?`<button class="btn sec" onclick="emailWeekly('${a.id}')">✉ Email it to ${esc(a.contact||a.name)}</button>`:""}`);
+}
+function printWeekly(id){
+ const a=ACCOUNTS().find(x=>x.id===id);if(!a)return;
+ document.getElementById("printarea").innerHTML=weeklyUpdateHTML(a);
+ close_();
+ setTimeout(()=>{window.print();render();},80);
+}
+function emailWeekly(id){
+ const a=ACCOUNTS().find(x=>x.id===id);if(!a||!a.email)return;
+ const st=acctStats(a.id);
+ const lines=st.jobs.filter(j=>j.status!=="Lost").map(j=>"· "+[(j.owner||j.client||jobName(j)),j.address].filter(Boolean).join(" — ")
+   +" — "+(LBL[j.status]||j.status)).join("\n");
+ const body="Hi "+(a.contact||a.name)+",\n\nWhere everything stands this week:\n\n"+lines
+  +"\n\nShout if you need anything moved up.\n\n"+(D.me.name||"Benny")+"\n"+(D.me.biz||"");
+ location.href="mailto:"+encodeURIComponent(a.email)
+  +"?subject="+encodeURIComponent("Weekly update — "+(D.me.biz||"Chairman"))
+  +"&body="+encodeURIComponent(body);
+}
 
 /* ================= SUBCONTRACTORS ================= */
 const TRADES=["Roofing","Framing","Drywall","Paint","Flooring","Plumbing","Electrical","HVAC",
@@ -4936,6 +5531,12 @@ function settings(){const m=D.me;
    <button class="opt2" onclick="homeBaseFromField()">${(m.homeLat?"Re-locate":"Set")} home base</button>
    <span class="xs dim">${m.homeLat?"Map measures from here":"Map needs this to show distances"}</span>
   </div>
+  <div class="lab" style="margin:22px 0 10px">Matterport add-on</div>
+  <p class="xs dim" style="margin:-4px 0 12px">Charged by default on any job that needs a scan. These are starting numbers — set them to what you actually charge.</p>
+  <div style="display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))">
+   ${MPORT_STORIES.map(([k,lab])=>`<label style="margin:0"><span class="t">${lab}</span>
+     <input class="in" id="mpf_${k}" type="number" inputmode="decimal" value="${mportFees()[k]}"></label>`).join("")}
+  </div>
   <label><span class="t">Zelle <em>phone or email — prints big on the invoice</em></span>
    <input class="in" id="szelle" value="${esc(m.zelle||"")}" placeholder="713-555-0100"></label>
   <label><span class="t">Yelp page <em>for the review request</em></span>
@@ -5034,7 +5635,9 @@ function saveMe(){D.me=Object.assign({},D.me,{name:$("#sn").value.trim()||"Benny
  yelp:$("#syelp")?$("#syelp").value.trim():D.me.yelp,
  fb:$("#sfb")?$("#sfb").value.trim():D.me.fb,
  adjFee:$("#sadj")?(+$("#sadj").value||0):D.me.adjFee,
- siteFee:$("#ssite")?(+$("#ssite").value||0):D.me.siteFee});
+ siteFee:$("#ssite")?(+$("#ssite").value||0):D.me.siteFee,
+ mportFees:MPORT_STORIES.reduce((o,[k])=>{
+   const el=$("#mpf_"+k);o[k]=el?(+el.value||MPORT_DEFAULT_FEES[k]):mportFees()[k];return o;},{})});
  save();close_();render();toast("Saved");}
 function setTerms(t){const el=$("#strm");if(el)el.value=t;}
 function pickLogo(){const i=document.createElement("input");i.type="file";i.accept="image/*";
