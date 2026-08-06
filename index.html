@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-96 · tabs stop fighting each other";
+const BUILD="C-97 · it speaks";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2057,6 +2057,7 @@ function clockIn(){const c=CK_(),k=today();const now=hm(new Date());
  c.days[k]=Object.assign({},c.days[k],{in:now});save();render();
  const s=clockState();
  toast(s.late>0?"Clocked in — "+dur(s.late)+" late":"Clocked in — on time");
+ say(s.late>0?`Clocked in ${dur(s.late)} late. What happened?`:"Clocked in on time. Let's work.");
  /* asks why, records either way, never blocks the day */
  if(s.late>0)setTimeout(lateGate,420);}
 function clockOut(){const c=CK_(),k=today();c.days[k]=Object.assign({},c.days[k],{out:hm(new Date())});
@@ -2329,6 +2330,51 @@ function notify(title,body){
  if(!canNotify()||!D.notify)return;
  try{new Notification(title,{body,tag:"chairman",icon:"icon-192.png"});}catch(e){}
 }
+
+/* ================= VOICE =================
+   The browser's own speech engine: free, private, no key in the page, works
+   offline. ElevenLabs stays a later upgrade if the sound ever earns the
+   subscription — the plumbing here doesn't change either way. */
+const voiceOn=()=>D.voice!==false;
+let _voice=null;
+function pickVoice(){
+ if(_voice)return _voice;
+ const vs=(window.speechSynthesis?speechSynthesis.getVoices():[])||[];
+ if(!vs.length)return null;
+ if(D.voiceName){const m=vs.find(v=>v.name===D.voiceName);if(m)return _voice=m;}
+ /* natural/neural voices first, then any US English, then anything */
+ return _voice=
+  vs.find(v=>/en[-_]US/i.test(v.lang)&&/natural|neural|online/i.test(v.name))||
+  vs.find(v=>/en[-_]US/i.test(v.lang)&&/david|mark|guy|andrew|eric/i.test(v.name))||
+  vs.find(v=>/en[-_]US/i.test(v.lang))||vs.find(v=>/^en/i.test(v.lang))||vs[0];
+}
+if(window.speechSynthesis)speechSynthesis.onvoiceschanged=()=>{_voice=null;pickVoice();};
+/* strip a message down to how a person would say it */
+function speakable(t){
+ return String(t||"")
+  .replace(/```[\s\S]*?```/g," ")            /* code blocks are not speech */
+  .replace(/[*_#`>|]/g," ")
+  .replace(/\[([^\]]*)\]\([^)]*\)/g,"$1")    /* keep link text, drop URL */
+  .replace(/https?:\/\/\S+/g," a link ")
+  .replace(/\$(\d[\d,]*)(\.\d\d)?/g,(m,n)=>n.replace(/,/g,"")+" dollars")
+  .replace(/\bMIT\b/gi,"mitigation")
+  .replace(/·|—|–/g,", ")
+  .replace(/\s+/g," ").trim();
+}
+function say(text,opts){
+ if(!voiceOn()||!window.speechSynthesis)return;
+ const t=speakable(text);if(!t)return;
+ try{
+  if(!(opts&&opts.queue))speechSynthesis.cancel();   /* newest message wins */
+  const u=new SpeechSynthesisUtterance(t.slice(0,1200));
+  const v=pickVoice();if(v)u.voice=v;
+  u.rate=+D.voiceRate||1.04;u.pitch=1;
+  speechSynthesis.speak(u);
+ }catch(e){}
+}
+function shutUp(){try{speechSynthesis.cancel()}catch(e){}}
+/* Esc always silences it — a voice you can't interrupt is a voice you turn off */
+window.addEventListener("keydown",e=>{if(e.key==="Escape")shutUp();});
 /* a job timer must never outlive the workday */
 function timerGuard(){
  const cs=clockState();let changed=false;
@@ -2402,7 +2448,7 @@ async function runAIRaw(prompt){
    <div class="lab v-rdy">✦ Game plan</div>
    <div class="note bd" style="margin-top:12px">${esc(clean)}</div>
    <div id="aiacts"></div></div>`;
-  renderActions();
+  renderActions();say(clean);
  }catch(err){
   out.innerHTML=`<div class="pan" style="border-color:var(--c-out)"><div class="lab v-out">◉ Couldn't reach the AI</div>
    <p class="sm" style="margin:10px 0 0">${esc(err.message||String(err))}</p></div>`;
@@ -2429,6 +2475,7 @@ async function aiPing(reason){
   AIMSG().unshift({id:uid(),text:clean,actions,reason,created:new Date().toISOString(),read:false});
   D.aimsgs=AIMSG().slice(0,5);save();
   notify("Chairman AI",clean.slice(0,120));
+  say(clean);                       /* the coach talks, not just types */
   if(V==="today"&&!document.getElementById("ov"))render();
  }catch(e){}
 }
@@ -4220,6 +4267,7 @@ function paySave(id){
  if(f.due<=0&&j.status==="Invoiced"){j.status="Paid";j.paidDate=today();}
  save();close_();render();
  toast(f.due<=0?"Paid in full":money(f.due)+" still owed");
+ say(f.due<=0?`${jobName(j)} is paid in full.`:`Payment recorded. ${money(f.due)} still owed on ${jobName(j)}.`);
 }
 function payDel(id,pid){const j=job(id);
  j.payments=payList(j).filter(p=>p.id!==pid);save();render();toast("Removed");}
@@ -5487,7 +5535,7 @@ function readDoc(jobId){
     <div class="lab v-rdy">✦ What I found</div>
     <div class="note bd" style="margin-top:12px">${esc(clean)}</div>
     <div id="aiacts"></div></div>`;
-   renderActions();
+   renderActions();say(clean);
    if(!actions.length)out.innerHTML+=`<p class="xs dim" style="margin-top:10px">Nothing confident enough to fill in. Enter it by hand, or try a clearer photo of the summary page.</p>`;
   }catch(err){
    out.innerHTML=`<div class="pan" style="border-color:var(--c-out)"><div class="lab v-out">◉ Couldn't read it</div>
@@ -5782,10 +5830,15 @@ R.ai=()=>{
    <button class="btn s" style="margin:0" id="chatsend" onclick="sendChat()">Send</button>
   </div>`}`;
 };
+let _chatSpk=0;
+function replayChat(i){const m=CHAT()[i];if(m)say(m.text);}
 function chatBubble(m){
+ const i=CHAT().indexOf(m);
  return m.role==="me"
   ? `<div class="bub me">${esc(m.text)}</div>`
-  : `<div class="bub ai"><div class="note bd">${esc(m.text)}</div></div>`;
+  : `<div class="bub ai"><div class="note bd">${esc(m.text)}</div>
+     ${window.speechSynthesis?`<button class="lnk" style="border:0;font-size:12px;padding:4px 0 0;opacity:.6"
+       onclick="replayChat(${i})" title="Read this out loud">🔊</button>`:""}</div>`;
 }
 function growBox(el){el.style.height="auto";el.style.height=Math.min(160,el.scrollHeight)+"px";}
 function clearChat(){ask("Clear the conversation","The thread goes, nothing else does.","Clear it",()=>{D.chat=[];save();close_();render();});}
@@ -5812,6 +5865,7 @@ async function sendChat(preset){
   });
   if(!acc)throw new Error("Empty reply");
   chatPush("ai",acc);
+  say(acc);                          /* read the answer out */
  }catch(e){
   chatPush("ai","Couldn't reach the model — "+(e.message||"unknown error"));
  }
@@ -6377,6 +6431,24 @@ function settings(){const m=D.me;
   <button class="btn sec" onclick="close_();aiMemSheet()">◉ What it knows about you</button>
   <button class="btn sec" onclick="saveAI()">Save &amp; test connection</button>
   <div id="aitest" style="margin-top:10px">${aiReady()?'<span class="dim sm">Not tested yet</span>':'<span class="dim sm">No key entered</span>'}</div>
+
+  <hr class="rule" style="margin:26px 0">
+  <div class="lab" style="margin-bottom:12px">🔊 Voice</div>
+  <div class="tog"><div><div class="t" style="margin:0">Speak out loud</div>
+    <div class="xs dim">Briefings, chat answers, clock-in, payments — even the small stuff</div></div>
+   <button type="button" class="sw ${voiceOn()?"on":""}"
+    onclick="D.voice=D.voice===false;save();this.classList.toggle('on',voiceOn());if(voiceOn())say('Voice is on.')"></button></div>
+  <label style="margin-top:14px"><span class="t">Voice</span>
+   <select class="in" id="voicepick" onchange="D.voiceName=this.value;_voice=null;save();say('This is how I sound.')">
+    ${(window.speechSynthesis?speechSynthesis.getVoices():[])
+      .filter(v=>/^en/i.test(v.lang))
+      .map(v=>`<option value="${esc(v.name)}" ${(D.voiceName||((pickVoice()||{}).name))===v.name?"selected":""}>${esc(v.name.replace(/Microsoft |Google |Online |\(Natural\)/g,""))}${/natural|online/i.test(v.name)?" ★":""}</option>`).join("")||"<option>No voices installed</option>"}
+   </select></label>
+  <label><span class="t">Speed</span>
+   <div class="segwrap">${[["0.9","Slower"],["1.04","Normal"],["1.2","Faster"]].map(([r,l])=>
+    `<button type="button" class="opt2 ${String(D.voiceRate||"1.04")===r?"on":""}"
+      onclick="D.voiceRate=+'${r}';save();[...this.parentNode.children].forEach(c=>c.classList.toggle('on',c===this));say('Speed set.')">${l}</button>`).join("")}</div></label>
+  <button class="btn sec" onclick="say('Morning. Two site visits today, one estimate due, and the Green Dynasty invoice is nine days out. Start with the Uribe scope.')">▶ Hear a sample briefing</button>
 
   <hr class="rule" style="margin:26px 0">
   <div class="lab" style="margin-bottom:12px">☁ Cloud sync &amp; login</div>
