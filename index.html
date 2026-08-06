@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-93 · deal fires from the form too";
+const BUILD="C-94 · the deal answers to Water";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -864,8 +864,15 @@ function acctRules(j){
 function ruleFor(j){
  if(!j||j.feeLocked)return null;
  const total=+j.total||0,loss=(j.loss||"").toLowerCase();
+ /* a rule's loss can be one type or a list — his mitigation is logged as
+    "Water", so the mit deal has to answer to both names */
+ const lossHit=r=>{
+  if(!r.loss)return true;
+  const set=Array.isArray(r.loss)?r.loss:[r.loss];
+  return set.some(x=>String(x).toLowerCase()===loss);
+ };
  const hits=acctRules(j).filter(r=>{
-  if(r.loss&&r.loss.toLowerCase()!==loss)return false;
+  if(!lossHit(r))return false;
   if(r.minTotal&&total<+r.minTotal)return false;
   return true;
  });
@@ -884,7 +891,15 @@ function applyAcctRule(j){
  /* A total edited back under the threshold must give the rate back, or the job
     keeps charging 10% on a $20k mitigation that never qualified. */
  if(!r){
-  if(j.feeRule){delete j.feeRule;j.feePct=undefined;j.feeMode="pct";return true;}
+  if(j.feeRule){
+   /* fall back to the COMPANY's arrangement, not the global 2% — Green
+      Dynasty's under-threshold work is covered by the retainer */
+   const a=typeof acctOf==="function"?acctOf(j):null;
+   delete j.feeRule;
+   j.feeMode=(a&&a.feeMode)||"pct";
+   j.feePct=(a&&a.feePct!=null&&a.feePct!=="")?+a.feePct:undefined;
+   return true;
+  }
   return false;
  }
  const mode=r.mode||"aftersubs";
@@ -895,7 +910,8 @@ function applyAcctRule(j){
 /* FEELABEL strings start with "%", so strip it when the number already has one */
 const basisWord=m=>(FEELABEL[m]||"").replace(/^%\s*/,"");
 const ruleLabel=r=>!r?"":`${r.pct}% ${basisWord(r.mode||"aftersubs")}`
- +(r.loss?` on ${r.loss}`:"")+(r.minTotal?` over ${money0(r.minTotal)}`:"");
+ +(r.loss?` on ${Array.isArray(r.loss)?r.loss.join(" / "):r.loss}`:"")
+ +(r.minTotal?` over ${money0(r.minTotal)}`:"");
 const FEEMODES=[["pct","% of estimate"],["aftersubs","% after subs"],["flat","Flat fee"],["hourly","Hourly"],["retainer","Retainer"]];
 const FEELABEL={pct:"% of estimate",aftersubs:"% after subs are paid",flat:"Flat fee",hourly:"Hourly"};
 /* Hourly: the rate this job pays, falling back to the standard rate in Settings.
@@ -6503,8 +6519,8 @@ function seedDeals(){
    .find(a=>normAcct(a.name)===normAcct("Green Dynasty Group"));
   if(gd&&!Array.isArray(gd.rules)){
    gd.rules=[
-    {id:uid(),loss:"Mitigation",minTotal:30000,pct:10,mode:"aftersubs"},
-    {id:uid(),loss:"Remodel",minTotal:0,pct:40,mode:"aftersubs"}
+    {id:uid(),loss:["Mitigation","Water","Mold"],minTotal:30000,pct:10,mode:"aftersubs"},
+    {id:uid(),loss:["Remodel","Rebuild"],minTotal:0,pct:40,mode:"aftersubs"}
    ];
   }
   /* apply to jobs that haven't been billed yet — never rewrite a sent invoice */
@@ -6515,6 +6531,22 @@ function seedDeals(){
   });
   D.dealsSeeded=true;save();
   if(n)setTimeout(()=>toast(plural(n,"job")+" set to the Green Dynasty rate"),900);
+ }catch(e){}
+ /* v1 seeded the mit rule against the literal word "Mitigation", but his mit
+    jobs are logged as Water — so the deal never fired on a single real job.
+    Upgrade the rules in place, once. */
+ try{
+  if(!D.dealsSeeded2){
+   const gd=(typeof ACCOUNTS==="function"?ACCOUNTS():[])
+    .find(a=>normAcct(a.name)===normAcct("Green Dynasty Group"));
+   if(gd&&Array.isArray(gd.rules)){
+    gd.rules.forEach(r=>{
+     if(r.loss==="Mitigation")r.loss=["Mitigation","Water","Mold"];
+     if(r.loss==="Remodel")r.loss=["Remodel","Rebuild"];
+    });
+   }
+   D.dealsSeeded2=true;save();
+  }
  }catch(e){}
 }
 migrate();
