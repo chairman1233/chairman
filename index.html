@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-92 · deal fires from the form too";
+const BUILD="C-93 · deal fires from the form too";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -892,7 +892,9 @@ function applyAcctRule(j){
  j.feeMode=mode;j.feePct=+r.pct;j.feeRule=r.id;
  return true;
 }
-const ruleLabel=r=>!r?"":`${r.pct}% ${FEELABEL[r.mode||"aftersubs"]||""}`
+/* FEELABEL strings start with "%", so strip it when the number already has one */
+const basisWord=m=>(FEELABEL[m]||"").replace(/^%\s*/,"");
+const ruleLabel=r=>!r?"":`${r.pct}% ${basisWord(r.mode||"aftersubs")}`
  +(r.loss?` on ${r.loss}`:"")+(r.minTotal?` over ${money0(r.minTotal)}`:"");
 const FEEMODES=[["pct","% of estimate"],["aftersubs","% after subs"],["flat","Flat fee"],["hourly","Hourly"],["retainer","Retainer"]];
 const FEELABEL={pct:"% of estimate",aftersubs:"% after subs are paid",flat:"Flat fee",hourly:"Hourly"};
@@ -3562,7 +3564,7 @@ function saveJob(id){
    jj.feeLocked=true;      /* he typed his own rate over a live deal — respect it */
   }else{
    const moved=applyAcctRule(jj);
-   if(moved)setTimeout(()=>toast("Deal applied — "+jobPct(jj)+"% "+(FEELABEL[jj.feeMode]||"")),600);
+   if(moved)setTimeout(()=>toast("Deal applied — "+jobPct(jj)+"% "+basisWord(jj.feeMode)),600);
   }}
  D.last=id;save();close_();go("job",{id});
  /* A typed address never got geocoded at all — only picked suggestions did.
@@ -4061,7 +4063,7 @@ function setPick(id,field,val){const j=job(id);if(!j)return;
  /* job type is one of the things a company's fee deal keys off */
  const moved=applyAcctRule(j);
  save();close_();render();
- toast(moved?val+" — fee set to "+jobPct(j)+"% "+(FEELABEL[j.feeMode]||""):val);}
+ toast(moved?val+" — fee set to "+jobPct(j)+"% "+basisWord(j.feeMode):val);}
 function quickEdit(id,field,label){
  const j=job(id);
  sheet(label,`<label><span class="t">${esc(label)}</span>
@@ -4202,7 +4204,7 @@ function chargeHintHTML(j){
  const dealLines=[];
  if(r&&p>0){
   const t=Math.round((s.gap/(p/100))+(j.feeMode==="aftersubs"?subTotal(j):0));
-  dealLines.push(`On this job's deal — ${p}% ${FEELABEL[j.feeMode]||""} — the whole gap is a
+  dealLines.push(`On this job's deal — ${p}% ${basisWord(j.feeMode)} — the whole gap is a
    <b class="money v-est">${money0(t)}</b> ${(j.loss||"job").toLowerCase()}.`);
  }
  (acctRules(j)||[]).forEach(rule=>{
