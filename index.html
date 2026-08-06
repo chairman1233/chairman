@@ -165,6 +165,19 @@ header .h{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:12px
  padding:calc(env(safe-area-inset-top) + 15px) 20px 14px}
 .wm{font:700 12px var(--sans);letter-spacing:.18em;text-transform:uppercase}
 .wm i{font-style:normal;color:var(--ink3)}
+/* The name lives up here beside the three round buttons now, not down the page.
+   Solid Georgia, no gradient mask and no filter — both force a rasterised layer
+   and that is what made the old wordmark look soft. */
+.hdmark{display:flex;align-items:baseline;gap:9px;min-width:0;
+ font-family:var(--display);text-transform:uppercase;line-height:1;
+ -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.hdmark b{font-weight:700;font-size:20px;letter-spacing:.02em;color:var(--ink)}
+.hdmark span{font-weight:700;font-size:20px;letter-spacing:.02em;color:var(--ink3);
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:560px){.hdmark b,.hdmark span{font-size:15px}.hdmark{gap:6px}}
+@media(max-width:380px){.hdmark span{display:none}}
+/* on wide screens this is exactly the empty run of header he wanted it in */
+@media(min-width:1000px){.hdmark b,.hdmark span{font-size:23px}}
 
 /* ---- forms ---- */
 label{display:block;margin-bottom:20px}
@@ -340,7 +353,7 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  header{margin-left:225px}
  .wrap{margin-left:225px;max-width:none;padding:20px 26px}
  nav{display:none}
- header .wm{display:none}
+ header .wm{display:none}   /* .hdmark stays — it is the name now */
 }
 #side .slogo{padding:4px 12px 20px}
 #side .smark{width:74px;height:74px;border-radius:0;background:none;display:block;object-fit:contain}
@@ -655,7 +668,7 @@ body .col .ch .n{color:inherit}
 </head>
 <body>
 <header><div class="h">
- <div class="wm">Chairman&nbsp;&nbsp;<i>Est. Co.</i></div>
+ <div class="hdmark"><b>Chairman</b><span>Command Center</span></div>
  <div style="flex:1"></div>
  <button class="ico" onclick="aiSheet()" id="aiBtn" title="Ask AI">✦</button>
  <button class="ico" onclick="toggleTheme()" id="thBtn">◐</button>
@@ -674,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-89 · required monthly revenue";
+const BUILD="C-90 · deals, payments, charge target";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -839,16 +852,54 @@ const subTotal=j=>(j.subs||[]).reduce((s,id)=>s+subCost(j,id),0);
 /* extra charges — adjuster negotiation, site visits, rush work, etc. */
 const extraList=j=>(j.extras||[]);
 const extrasTotal=j=>extraList(j).reduce((s,x)=>s+(+x.amount||0),0);
+/* ---- per-company fee rules ------------------------------------------------
+   Some companies pay by an agreed schedule rather than his standard rate, and
+   the schedule depends on the kind of work and sometimes on the size of it.
+   A rule matches on job type and a minimum total; the most specific match wins,
+   and an explicit fee typed on the job always beats a rule. */
+function acctRules(j){
+ const a=typeof acctOf==="function"?acctOf(j):null;
+ return (a&&Array.isArray(a.rules))?a.rules:[];
+}
+function ruleFor(j){
+ if(!j||j.feeLocked)return null;
+ const total=+j.total||0,loss=(j.loss||"").toLowerCase();
+ const hits=acctRules(j).filter(r=>{
+  if(r.loss&&r.loss.toLowerCase()!==loss)return false;
+  if(r.minTotal&&total<+r.minTotal)return false;
+  return true;
+ });
+ if(!hits.length)return null;
+ /* most specific first: a type+threshold rule beats a bare type rule */
+ hits.sort((a,b)=>((+b.minTotal||0)-(+a.minTotal||0))||((b.loss?1:0)-(a.loss?1:0)));
+ return hits[0];
+}
 /* the percentage this job pays — defaults to your standard rate */
 const jobPct=j=>(j.feePct===0||j.feePct)?+j.feePct:(+D.me.rate||2);
+/* A rule is WRITTEN ONTO the job rather than silently overriding fee() at
+   render time. He can see what it did, and override it — which locks it. */
+function applyAcctRule(j){
+ if(!j||j.feeLocked)return false;
+ const r=ruleFor(j);if(!r)return false;
+ const mode=r.mode||"aftersubs";
+ if(j.feeMode===mode&&+j.feePct===+r.pct){j.feeRule=r.id;return false;}
+ j.feeMode=mode;j.feePct=+r.pct;j.feeRule=r.id;
+ return true;
+}
+const ruleLabel=r=>!r?"":`${r.pct}% ${FEELABEL[r.mode||"aftersubs"]||""}`
+ +(r.loss?` on ${r.loss}`:"")+(r.minTotal?` over ${money0(r.minTotal)}`:"");
 const FEEMODES=[["pct","% of estimate"],["aftersubs","% after subs"],["flat","Flat fee"],["hourly","Hourly"],["retainer","Retainer"]];
 const FEELABEL={pct:"% of estimate",aftersubs:"% after subs are paid",flat:"Flat fee",hourly:"Hourly"};
 /* Hourly: the rate this job pays, falling back to the standard rate in Settings.
    Exact minutes, no rounding up — the real number is already known. */
 const jobRate=j=>(j&&(j.hourRate===0||j.hourRate))?+j.hourRate:(+((D.me||{}).hourRate)||0);
 const hourlyAmount=j=>Math.round(((jobMin(j)||0)/60)*jobRate(j)*100)/100;
+/* Part-payments against a job. Older jobs only had a single "paid in advance"
+   figure, which can't express "they've paid me twice and still owe some". */
+const payList=j=>(j&&Array.isArray(j.payments))?j.payments:[];
+const paidTotal=j=>payList(j).reduce((s,p)=>s+(+p.amount||0),0);
 function fee(j){
- const total=+j.total||0, adv=+j.advance||0, p=jobPct(j);
+ const total=+j.total||0, adv=(+j.advance||0)+paidTotal(j), p=jobPct(j);
  const pct=total*(p/100);
  let feeOnly=0, kind=j.feeMode||"pct", base=total;
  if(kind==="flat"){ feeOnly=+j.flat||0; }
@@ -2997,8 +3048,8 @@ R.today=()=>{
  ${nutMeterHTML()}
  ${aiMsgsHTML()}
  <div class="topbar">
-  <div class="grow"><h1 class="cmdname">Chairman<span>Command Center</span></h1>
-   <div class="sub2">${new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div>
+  <div class="grow"><h1>${new Date().toLocaleDateString("en-US",{weekday:"long"})}</h1>
+   <div class="sub2">${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div></div>
   <button class="btn sec s" style="margin:0${!cs.in&&!cs.off?";border-color:var(--c-out);color:var(--c-out)":cs.in&&!cs.out?";border-color:var(--c-paid);color:var(--c-paid)":""}"
    onclick="${cs.in&&!cs.out?"clockOut()":"clockIn()"}"
    title="${cs.in&&!cs.out?"Tap to clock out":"Tap to clock in"}">
@@ -3191,7 +3242,7 @@ function hi(x,y){clear();const el=document.elementFromPoint(x,y)?.closest("[data
 function clear(){document.querySelectorAll("[data-zone]").forEach(e=>e.classList.remove("hi"));}
 
 /* ================= JOB FORM ================= */
-const LOSS=["Water","Fire","Wind / Hail","Roof","Mold","Rebuild","Remodel","Structural","Contents","Other"];
+const LOSS=["Mitigation","Water","Fire","Wind / Hail","Roof","Mold","Rebuild","Remodel","Structural","Contents","Other"];
 const MPORT=["Not needed","Needed","Scheduled","Done"];
 let _loss="Water",_mp="Not needed";
 function newJob(id){const j=id?job(id):{};
@@ -3580,6 +3631,9 @@ R.job=({id})=>{
     ${j.phone?`<div class="ln2"><span class="k">Phone</span><b><a href="tel:${esc(j.phone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.phone)}</a></b></div>`
      :`<div class="ln2"><span class="k">Phone</span><b style="cursor:pointer" onclick="quickEdit('${j.id}','phone','Phone')">— tap to add —</b></div>`}
     ${j.contractorPhone?`<div class="ln2"><span class="k">Contractor</span><b><a href="tel:${esc(j.contractorPhone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.contractorPhone)}</a></b></div>`:""}`}
+  ${ruleFor(j)?`<div class="ln2"><span class="k">Deal in play</span>
+   <b class="v-paid">${esc((acctOf(j)||{}).name||"")} — ${esc(ruleLabel(ruleFor(j)))}${
+    j.feeLocked?` <span class="v-out">(overridden)</span>`:""}</b></div>`:""}
   <div class="ln2"><span class="k">${isProject(j)?"Contract total":"Estimate total"}</span>
    <b class="money ser v-${C}" style="font-size:19px;cursor:pointer" onclick="quickEdit('${j.id}','total','${isProject(j)?"Contract":"Estimate"} total')">${j.total?money0(j.total):"— tap to add —"}</b></div>
   <div class="ln2"><span class="k">Job type</span>
@@ -3622,6 +3676,8 @@ R.job=({id})=>{
   ${!j.total?`<button class="btn sec" onclick="readDoc('${j.id}')" style="margin-top:12px">✦ Read the estimate &amp; fill this in</button>`:""}
   ${policyBtnHTML(j)}
  </div>
+ ${paymentsHTML(j)}
+ ${chargeHintHTML(j)}
  ${samePropHTML(j)}
  ${splitHTML(j)}
  ${extrasHTML(j)}
@@ -3986,7 +4042,11 @@ function quickPick(id,field,label,opts){
   </div>`);
 }
 function setPick(id,field,val){const j=job(id);if(!j)return;
- j[field]=val;save();close_();render();toast(val);}
+ j[field]=val;
+ /* job type is one of the things a company's fee deal keys off */
+ const moved=applyAcctRule(j);
+ save();close_();render();
+ toast(moved?val+" — fee set to "+jobPct(j)+"% "+(FEELABEL[j.feeMode]||""):val);}
 function quickEdit(id,field,label){
  const j=job(id);
  sheet(label,`<label><span class="t">${esc(label)}</span>
@@ -3996,7 +4056,10 @@ function quickEdit(id,field,label){
 function saveQuick(id,field){const j=job(id);
  const v=$("#qe").value.trim();
  j[field]=(field==="total"||field==="advance")?(+v||0):v;
- save();close_();render();toast("Saved");}
+ /* the $30k threshold means a total change can flip which deal applies */
+ const moved=(field==="total")&&applyAcctRule(j);
+ save();close_();render();
+ toast(moved?"Saved — deal puts you at "+jobPct(j)+"%":"Saved");}
 /* ---------- same property, different company ----------------------------
    Mitigation for one outfit, the remodel for another, one house. The property
    facts are shared; the money never is. Address is the natural key here — it is
@@ -4061,6 +4124,81 @@ function dupJobTo(id,acctId){
  if(a&&a.feeMode){copy.feeMode=a.feeMode;if(a.feePct!=null)copy.feePct=a.feePct;}
  D.jobs.unshift(copy);save();close_();go("job",{id:copy.id});
  toast("Copied to "+name+" — now add the scope");
+}
+/* ---------- what's been paid, what's still owed -------------------------- */
+function paymentsHTML(j){
+ const f=fee(j),ps=payList(j).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+ if(!ps.length&&!j.total&&!f.gross)return "";
+ return `<div class="pan" style="margin-top:14px;border-color:var(--c-${f.due>0?"out":"paid"})">
+  <div class="row between" style="align-items:baseline">
+   <div class="lab">▤ Payments</div>
+   <button class="lnk" onclick="payAdd('${j.id}')">+ Record one</button></div>
+  ${ps.length?ps.map(p=>`<div class="frow">
+    <span class="ftile" style="--tint:var(--c-paid)">$</span>
+    <div class="grow"><div class="nm money">${money(p.amount)}</div>
+     <div class="mt">${esc(p.date||"")}${p.note?" · "+esc(p.note):""}</div></div>
+    <button class="ico" style="border:0;color:var(--ink3)" onclick="payDel('${j.id}','${p.id}')">✕</button>
+   </div>`).join("")
+   :`<p class="xs dim" style="margin:10px 0 0">Nothing recorded against this one yet.</p>`}
+  <div class="ln2" style="margin-top:8px"><span class="k">Your fee</span><b class="money">${money(f.gross)}</b></div>
+  ${f.adv?`<div class="ln2"><span class="k">Paid so far</span><b class="money v-paid">− ${money(f.adv)}</b></div>`:""}
+  <div class="ln2 tot" style="border-color:var(--c-${f.due>0?"out":"paid"})">
+   <span class="k">${f.over?"They overpaid":"Still owed"}</span>
+   <span class="v money v-${f.due>0?"out":"paid"}">${money(f.over||f.due)}</span></div>
+ </div>`;
+}
+function payAdd(id){
+ const j=job(id),f=fee(j);
+ sheet("Record a payment",`
+  <label><span class="t">Amount</span>
+   <input class="in" id="payamt" type="number" inputmode="decimal" placeholder="${Math.max(0,Math.round(f.due))||""}"></label>
+  <label><span class="t">Date</span><input class="in" id="paydate" type="date" value="${today()}"></label>
+  <label><span class="t">Note <em>optional</em></span>
+   <input class="in" id="paynote" placeholder="check 1042 / zelle"></label>
+  <p class="xs dim" style="margin:-10px 0 16px">Owed right now: <b class="money">${money(f.due)}</b></p>
+  <button class="btn" onclick="paySave('${id}')">Save</button>`);
+ setTimeout(()=>$("#payamt")&&$("#payamt").focus(),90);
+}
+function paySave(id){
+ const j=job(id),amt=+$("#payamt").value||0;
+ if(!amt){toast("Put an amount in");return;}
+ if(!Array.isArray(j.payments))j.payments=[];
+ j.payments.push({id:uid(),amount:amt,date:$("#paydate").value||today(),note:$("#paynote").value.trim()});
+ const f=fee(j);
+ /* clearing the balance closes the job out, but only if it was already billed */
+ if(f.due<=0&&j.status==="Invoiced"){j.status="Paid";j.paidDate=today();}
+ save();close_();render();
+ toast(f.due<=0?"Paid in full":money(f.due)+" still owed");
+}
+function payDel(id,pid){const j=job(id);
+ j.payments=payList(j).filter(p=>p.id!==pid);save();render();toast("Removed");}
+
+/* ---------- what to charge to hit the month ------------------------------ */
+function chargeHintHTML(j){
+ if(NUT().on===false||!nutTotal())return "";
+ const s=nutStats();if(!s.gap)return "";
+ const f=fee(j),p=jobPct(j);
+ const already=Math.max(0,f.gross);
+ /* what estimate total would this job need to carry the whole remaining gap
+    on its own, at the rate this job actually pays */
+ const need=s.gap;
+ const basis=(j.feeMode==="aftersubs")?"after subs are paid":"of the estimate";
+ const totalNeeded=p>0?Math.round(need/(p/100)):0;
+ const openCount=byStage("Estimating").length||1;
+ const perJob=Math.ceil(need/openCount);
+ return `<div class="pan" style="margin-top:14px;border-color:var(--c-est)">
+  <div class="lab v-est">◈ To hit this month</div>
+  <p class="sm" style="margin:10px 0 0">You're <b class="money v-rdy">${money0(s.gap)}</b> short with ${plural(s.daysLeft,"day")} left.</p>
+  <div class="ln2" style="margin-top:10px"><span class="k">This job earns you</span>
+   <b class="money">${money(already)}</b></div>
+  ${p>0?`<div class="ln2"><span class="k">Would need a total of</span>
+   <b class="money v-est">${money0(totalNeeded)}</b></div>
+   <p class="xs dim" style="margin:8px 0 0">At ${p}% ${basis}, a ${money0(totalNeeded)} estimate covers the whole ${money0(s.gap)} on its own.</p>`
+  :`<p class="xs dim" style="margin:8px 0 0">This job is on a flat or hourly basis, so a percentage target doesn't apply.</p>`}
+  <p class="xs dim" style="margin:8px 0 0">Spread across your ${plural(openCount,"open estimate")}, that's about
+   <b class="v-est">${money0(perJob)}</b> of fee each.</p>
+  <p class="xs dim" style="margin:8px 0 0;opacity:.8">A target, not a price. What you charge is what the scope and your agreement support.</p>
+ </div>`;
 }
 function markDone(id){const j=job(id);
  if(!j.total){toast("Add the estimate total");return newJob(id);}
@@ -6332,8 +6470,31 @@ const BUILD_NOTE="C-08";
 R.map=R_map;
 applyTheme();
 window.addEventListener("resize",()=>{applyZoom();syncHdrH();try{wireTape()}catch(e){}});
+/* Benny's stated Green Dynasty terms, installed once so they just work.
+   Mitigation over $30k → 10% after subs. Remodel → 40% after subs. */
+function seedDeals(){
+ if(D.dealsSeeded)return;
+ try{
+  const gd=(typeof ACCOUNTS==="function"?ACCOUNTS():[])
+   .find(a=>normAcct(a.name)===normAcct("Green Dynasty Group"));
+  if(gd&&!Array.isArray(gd.rules)){
+   gd.rules=[
+    {id:uid(),loss:"Mitigation",minTotal:30000,pct:10,mode:"aftersubs"},
+    {id:uid(),loss:"Remodel",minTotal:0,pct:40,mode:"aftersubs"}
+   ];
+  }
+  /* apply to jobs that haven't been billed yet — never rewrite a sent invoice */
+  let n=0;
+  (D.jobs||[]).forEach(j=>{
+   if(["Invoiced","Paid"].includes(j.status))return;
+   if(applyAcctRule(j))n++;
+  });
+  D.dealsSeeded=true;save();
+  if(n)setTimeout(()=>toast(plural(n,"job")+" set to the Green Dynasty rate"),900);
+ }catch(e){}
+}
 migrate();
-openIDB().then(()=>{go("today")});
+openIDB().then(()=>{seedDeals();go("today")});
 </script>
 </body>
 </html>
