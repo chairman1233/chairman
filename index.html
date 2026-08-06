@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-94 · the deal answers to Water";
+const BUILD="C-95 · deals fixed + priced goals";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2893,6 +2893,7 @@ const NUT=()=>{
  if(!D.nut)D.nut=NUT_DEFAULT();
  if(!D.nut.pay)D.nut.pay={amount:0,every:"2weeks",anchor:"2026-07-31"};
  if(!Array.isArray(D.nut.items))D.nut.items=[];
+ if(!Array.isArray(D.nut.goals))D.nut.goals=[];
  if(D.nut.cash===undefined)D.nut.cash=0;
  if(D.nut.cashAt===undefined)D.nut.cashAt="";
  /* the first version anchored the pay schedule to whatever day it was created.
@@ -2900,7 +2901,9 @@ const NUT=()=>{
  if(!D.nut.anchorSet){D.nut.pay.anchor="2026-07-31";D.nut.anchorSet=true;}
  return D.nut;
 };
-const nutTotal=()=>NUT().items.reduce((n,i)=>n+(+i.amount||0),0)+(+NUT().buffer||0);
+const billsTotal=()=>NUT().items.reduce((n,i)=>n+(+i.amount||0),0);
+const goalsTotal=()=>NUT().goals.reduce((n,i)=>n+(+i.amount||0),0);
+const nutTotal=()=>billsTotal()+goalsTotal()+(+NUT().buffer||0);
 const ymNow=()=>today().slice(0,7);
 /* "2026-07-31" through new Date() parses as UTC midnight and can land on the
    wrong local day. Build it at local noon instead. */
@@ -2967,7 +2970,7 @@ function nutMeterHTML(){
    <button class="lnk" onclick="nutSheet()">Edit</button></div>
   <div class="row between" style="align-items:baseline;margin-top:12px;gap:14px">
    <div class="num money v-${s.gap?"rdy":"paid"}" style="font-size:36px">${money0(s.gap||s.surplus)}</div>
-   <div class="xs dim" style="text-align:right;line-height:1.5">${s.gap?"still to bring in":"target met — ahead by"}<br>target ${money0(s.target)}</div></div>
+   <div class="xs dim" style="text-align:right;line-height:1.5">${s.gap?"still to bring in":"target met — ahead by"}<br>target ${money0(s.target)}${goalsTotal()?`<br><span class="v-est">incl. ${money0(goalsTotal())} in goals</span>`:""}</div></div>
   <div class="nutbar">
    <i style="width:${pc(s.cash)}%;background:var(--c-paid)"></i>
    <i style="width:${pc(s.fees)}%;background:var(--c-est)"></i>
@@ -3018,7 +3021,18 @@ function nutSheet(){
     <input class="in" style="flex:1" type="number" inputmode="decimal" value="${+i.amount||0}" oninput="nutSet('${i.id}','amount',this.value)">
     <button class="ico" style="border:0;color:var(--ink3)" onclick="nutDel('${i.id}')">✕</button></div>`).join("")}</div>
   <button class="opt2" onclick="nutAdd()">+ Add a bill</button>
-  <div class="ln2 tot" style="margin-top:18px"><span class="k">Required each month</span>
+  <hr class="rule" style="margin:22px 0">
+  <div class="lab" style="margin-bottom:4px">Goals</div>
+  <p class="xs dim" style="margin:0 0 12px">Things you're working toward with a price on them — they sit on top of the bills, and the meter chases the whole number.</p>
+  <div id="nutgoals">${n.goals.map(g=>`<div class="row" style="gap:10px;margin-bottom:9px">
+    <input class="in" style="flex:2" value="${esc(g.label)}" placeholder="New truck fund" oninput="goalSet('${g.id}','label',this.value)">
+    <input class="in" style="flex:1" type="number" inputmode="decimal" value="${+g.amount||0}" oninput="goalSet('${g.id}','amount',this.value)">
+    <button class="ico" style="border:0;color:var(--ink3)" onclick="goalDel('${g.id}')">✕</button></div>`).join("")}</div>
+  <button class="opt2" onclick="goalAdd()">+ Add a goal</button>
+  <div class="ln2" style="margin-top:18px"><span class="k">Bills</span><span class="money">${money0(billsTotal())}</span></div>
+  ${goalsTotal()?`<div class="ln2"><span class="k">Goals</span><span class="money v-est">${money0(goalsTotal())}</span></div>`:""}
+  ${+n.buffer?`<div class="ln2"><span class="k">Buffer</span><span class="money">${money0(n.buffer)}</span></div>`:""}
+  <div class="ln2 tot"><span class="k">Required each month</span>
    <span class="v money">${money0(nutTotal())}</span></div>
   <hr class="rule" style="margin:22px 0">
   <div class="lab" style="margin-bottom:10px">In the account now</div>
@@ -3047,6 +3061,10 @@ function nutSet(id,f,v){const i=NUT().items.find(x=>x.id===id);if(!i)return;
  i[f]=f==="amount"?(+v||0):v;save();}
 function nutAdd(){NUT().items.push({id:uid(),label:"",amount:0});save();close_();nutSheet();}
 function nutDel(id){NUT().items=NUT().items.filter(x=>x.id!==id);save();close_();nutSheet();}
+function goalSet(id,f,v){const g=NUT().goals.find(x=>x.id===id);if(!g)return;
+ g[f]=f==="amount"?(+v||0):v;save();}
+function goalAdd(){NUT().goals.push({id:uid(),label:"",amount:0});save();close_();nutSheet();}
+function goalDel(id){NUT().goals=NUT().goals.filter(x=>x.id!==id);save();close_();nutSheet();}
 function nutEvery(el,k){NUT().pay.every=k;save();close_();nutSheet();}
 function saveNut(){const n=NUT();
  if($("#nutpay"))n.pay.amount=+$("#nutpay").value||0;
@@ -6513,7 +6531,7 @@ window.addEventListener("resize",()=>{applyZoom();syncHdrH();try{wireTape()}catc
 /* Benny's stated Green Dynasty terms, installed once so they just work.
    Mitigation over $30k → 10% after subs. Remodel → 40% after subs. */
 function seedDeals(){
- if(D.dealsSeeded)return;
+ if(D.dealsSeeded){seedDealsV2();return;}   /* the early return was skipping v2 */
  try{
   const gd=(typeof ACCOUNTS==="function"?ACCOUNTS():[])
    .find(a=>normAcct(a.name)===normAcct("Green Dynasty Group"));
@@ -6532,21 +6550,22 @@ function seedDeals(){
   D.dealsSeeded=true;save();
   if(n)setTimeout(()=>toast(plural(n,"job")+" set to the Green Dynasty rate"),900);
  }catch(e){}
- /* v1 seeded the mit rule against the literal word "Mitigation", but his mit
-    jobs are logged as Water — so the deal never fired on a single real job.
-    Upgrade the rules in place, once. */
+ seedDealsV2();
+}
+/* v1 seeded the mit rule against the literal word "Mitigation", but his mit
+   jobs are logged as Water — so the deal never fired on a single real job. */
+function seedDealsV2(){
  try{
-  if(!D.dealsSeeded2){
-   const gd=(typeof ACCOUNTS==="function"?ACCOUNTS():[])
-    .find(a=>normAcct(a.name)===normAcct("Green Dynasty Group"));
-   if(gd&&Array.isArray(gd.rules)){
-    gd.rules.forEach(r=>{
-     if(r.loss==="Mitigation")r.loss=["Mitigation","Water","Mold"];
-     if(r.loss==="Remodel")r.loss=["Remodel","Rebuild"];
-    });
-   }
-   D.dealsSeeded2=true;save();
+  if(D.dealsSeeded2)return;
+  const gd=(typeof ACCOUNTS==="function"?ACCOUNTS():[])
+   .find(a=>normAcct(a.name)===normAcct("Green Dynasty Group"));
+  if(gd&&Array.isArray(gd.rules)){
+   gd.rules.forEach(r=>{
+    if(r.loss==="Mitigation")r.loss=["Mitigation","Water","Mold"];
+    if(r.loss==="Remodel")r.loss=["Remodel","Rebuild"];
+   });
   }
+  D.dealsSeeded2=true;save();
  }catch(e){}
 }
 migrate();
