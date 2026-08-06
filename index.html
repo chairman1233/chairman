@@ -15,14 +15,20 @@
 /* ============ BORING-STYLE EDITORIAL SYSTEM ============ */
 :root{
  /* true black night mode — panels lift off the black instead of floating in grey */
- --paper:#000000; --panel:#0D0F11; --panel2:#171A1D; --rule:#22262A; --rule2:#333940;
- --ink:#FBF6EA; --ink2:#E9E2D4; --ink3:#D3CCBC;
+ /* Material dark-theme surfaces. Pure #000 was the mistake: white text on it
+    hits 21:1, which halates — the letters bloom and the eye keeps refocusing.
+    Elevation reads as a LIGHTER surface here, not a shadow. */
+ --paper:#121212; --panel:#1C1C1E; --panel2:#26262A; --rule:#33333A; --rule2:#45454D;
+ --ink:#EDE9E1; --ink2:#C4BFB6; --ink3:#ABA69E;
  --inv:#000000; --sig:#F2ECDE;
  /* on black the stage colours can carry more light without shouting */
  /* One warm colour: Claude orange. The old gold went brown in light mode and
     read as rust, so ready-to-bill and overdue now share the same orange —
     they stay apart by their symbol and label instead of by hue. */
- --c-est:#6FC3FF; --c-rdy:#FF8A50; --c-out:#FF8A50; --c-paid:#3FD996; --c-lost:#939DA4;
+ /* High luminance, LOW chroma. Bright without vibrating: saturated hues on a
+    dark surface shimmer at the edges, which is the strain. Light tones read
+    brighter than saturated ones anyway. */
+ --c-est:#A9D4F5; --c-rdy:#FFAE85; --c-out:#FFAE85; --c-paid:#9FE8C4; --c-lost:#A9AFB5;
  --serif:'Playfair Display','Bodoni MT',Didot,'Didot LT STD','Times New Roman',Times,serif;
  /* display face for the big wordmark — sturdy strokes, no hairlines to bloom */
  --display:Georgia,Cambria,Constantia,'Book Antiqua',Palatino,'Times New Roman',serif;
@@ -488,6 +494,34 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .frow:last-child{border-bottom:none}
 .frow .ic2{width:34px;height:34px;border:1px solid var(--rule2);display:grid;place-items:center;
  font-size:13px;flex:none}
+/* ---- document type tiles: type = filled square, stage = pill. Two channels. ---- */
+.ftile{position:relative;width:36px;height:36px;flex:none;display:grid;place-items:center;
+ border-radius:9px;font-size:15px;line-height:1;
+ background:color-mix(in srgb,var(--tint) 20%,transparent);
+ color:var(--tint);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tint) 45%,transparent)}
+.ftile .sgn{position:absolute;right:-4px;bottom:-4px;width:16px;height:16px;border-radius:50%;
+ background:var(--c-paid);color:#12140F;font:700 10px/16px var(--sans);text-align:center;
+ font-style:normal;box-shadow:0 0 0 2px var(--panel)}
+.ftype{font:700 10px var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--tint)}
+
+/* ---- job action bar: the five things he touches daily, always same place ----
+   Sticky, so it survives scrolling. Its contents never reorder based on which
+   fields happen to be filled in — a disabled button holds its slot rather than
+   collapsing, so muscle memory keeps working. */
+.actbar{position:sticky;top:0;z-index:35;display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;
+ background:var(--paper);padding:12px 0;margin:16px 0 4px;
+ border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.actbar button{display:flex;flex-direction:column;align-items:center;gap:6px;
+ padding:12px 6px;border:1px solid var(--rule2);border-radius:12px;background:var(--panel);
+ font:700 10px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);
+ transition:.12s;min-height:64px;justify-content:center}
+.actbar button .ag{font-size:19px;line-height:1;color:var(--tint,var(--ink))}
+.actbar button:hover:not(:disabled){background:var(--panel2);border-color:var(--tint,var(--ink3));color:var(--ink)}
+.actbar button:disabled{opacity:.4;cursor:not-allowed}
+.actbar button.key{border-color:var(--tint);background:color-mix(in srgb,var(--tint) 13%,var(--panel))}
+@media(max-width:520px){.actbar{grid-template-columns:repeat(4,1fr);gap:6px}
+ .actbar button{min-height:58px;font-size:9px;padding:9px 3px}.actbar button .ag{font-size:17px}}
 .frow .nm{font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .frow .mt{font-size:12px;font-weight:700;color:var(--ink3);letter-spacing:.04em;text-transform:uppercase}
 .upbar{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
@@ -625,7 +659,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-82 · bright and bold";
+const BUILD="C-83 · action bar + typed documents";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -894,7 +928,7 @@ const acctOf=j=>j&&j.accountId?ACCOUNTS().find(a=>a.id===j.accountId):null;
 const acctJobs=aid=>D.jobs.filter(j=>j.accountId===aid);
 /* no gold and nothing muted-warm in here either — those are the tones that
    kept reading as rust */
-const ACCT_COLORS=["#6FC3FF","#3FD9C9","#3FD996","#FF8A50","#B98CFF","#5B9DFF","#FFD24D","#FF6FA5"];
+const ACCT_COLORS=["#A9D4F5","#9FE0DA","#9FE8C4","#FFAE85","#CDB6F5","#B6C8F5","#F5D98F","#F5AFC6"];
 function acctColor(a){
  if(!a)return "";
  if(a.color)return a.color;
@@ -1109,7 +1143,23 @@ async function prepFile(f){
  }catch(e){return {data:raw,w:0,h:0};}
 }
 const FCAT=["Photo","Contract","Estimate","Email","Other"];
-const FICON={Photo:"▣",Contract:"✎",Estimate:"$",Email:"✉",Other:"▤"};
+/* Document type is a SEPARATE visual channel from pipeline stage. Stage owns the
+   pill; type owns a filled square tile. Different shape, different position, so
+   the eye never has to decode one against the other. Five types is under the
+   limit where colour stops helping (~7 alone, ~4 when read alongside anything
+   else) — and every tile carries its glyph too, so colour is never the only cue. */
+const FICON={Photo:"◙",Contract:"✍",Estimate:"$",Email:"✉",Other:"▤"};
+const FTINT={Photo:"#7FD4C1",Contract:"#C9AEF5",Estimate:"#FFC98F",Email:"#9FC4F5",Other:"#A9AFB5"};
+const fTint=c=>FTINT[c]||FTINT.Other;
+/* "Is this signed?" is unsolved across every CRM in this market — it lives as one
+   word in a text column. Here it is a badge on the tile itself. */
+/* filename match must be a whole word — "design.pdf" is not a signed contract */
+const isSigned=f=>!!(f&&(f.signed||/(^|[-_ .(])signed([-_ .)]|$)/i.test(f.name||"")));
+function fileTile(f){
+ const t=fTint(f.cat),sg=f.cat==="Contract"&&isSigned(f);
+ return `<span class="ftile" style="--tint:${t}">${FICON[f.cat]||"▤"}${
+  sg?`<i class="sgn" title="Signed">✓</i>`:""}</span>`;
+}
 function pickFiles(jobId,cat){
  const i=document.createElement("input");i.type="file";i.multiple=true;
  if(cat==="Photo")i.accept="image/*";
@@ -1692,7 +1742,7 @@ function statusDot(j){
  return L.divIcon({className:"jobpin",iconSize:null,iconAnchor:[11,11],
   html:`<div style="display:flex;align-items:center;gap:7px;white-space:nowrap;opacity:${done?.55:1}">
    <div style="width:22px;height:22px;border-radius:50%;background:${c};flex:none;
-     border:3px solid #0B0C0D;box-shadow:0 0 0 2px ${c}66, 0 2px 8px rgba(0,0,0,.85)"></div>
+     border:3px solid #121212;box-shadow:0 0 0 2px ${c}66, 0 2px 8px rgba(0,0,0,.85)"></div>
    <span style="font:600 12.5px -apple-system,Segoe UI,sans-serif;color:#F2ECDE;
      background:rgba(8,9,10,.86);border:1px solid ${c}88;border-radius:6px;
      padding:3px 8px;letter-spacing:.01em;text-shadow:0 1px 2px #000">${esc(label)}</span>
@@ -3262,6 +3312,28 @@ function delJob(id){const j=job(id);
   save();close_();go("jobs");toast("Deleted");});}
 
 /* ================= JOB ================= */
+/* The permanent set, taken from how the field apps that got this right behave:
+   call, navigate, capture, add a document, log a note. Nothing else earns a slot.
+   Buttons stay put and grey out rather than disappearing when data is missing. */
+function jobActionBar(j){
+ const clean=p=>(p||"").replace(/[^0-9+]/g,"");
+ const owner=clean(j.phone),con=clean(j.contractorPhone);
+ const primary=owner||con,who=owner?(j.owner||"owner"):(j.contractorContact||j.contractor||"contractor");
+ const act=(icon,label,tint,handler,on,extra="")=>
+  `<button ${on?`onclick="${handler}"`:"disabled"} style="--tint:${tint}" ${extra}>
+    <span class="ag">${icon}</span><span>${label}</span></button>`;
+ return `<div class="actbar">
+  ${act("✆","Call",fTint("Email"),`location.href='tel:${primary}'`,!!primary,
+        primary?`title="Call ${esc(who)}"`:`title="No number on this job yet"`)}
+  ${act("✉","Text",fTint("Email"),`location.href='sms:${primary}'`,!!primary)}
+  ${act("➤","Route","var(--c-est)",`window.open('${directionsURL(j)}','_blank','noopener')`,!!j.address)}
+  ${act(FICON.Photo,"Photos",fTint("Photo"),`pickFiles('${j.id}','Photo')`,true)}
+  ${act(FICON.Estimate,"Estimate",fTint("Estimate"),`pickFiles('${j.id}','Estimate')`,true)}
+  ${act(FICON.Contract,"Contract",fTint("Contract"),`pickFiles('${j.id}','Contract')`,true)}
+  ${act("✎","Note","var(--c-rdy)",`addNote('${j.id}')`,true)}
+  ${act("$","Bill","var(--c-paid)",`go('invoice',{id:'${j.id}'})`,true)}
+ </div>`;
+}
 R.job=({id})=>{
  const j=job(id);if(!j)return `<div class="empty"><div class="ser" style="font-size:22px">Job not found</div></div>`;
  D.last=id;save();const f=fee(j);const C=ck(j.status);
@@ -3284,6 +3356,7 @@ R.job=({id})=>{
   ${forContractor(j)?`<span class="chip v-est">Contractor job</span>`:""}
   ${j.loss?`<span class="chip v-${C}">${esc(j.loss)}</span>`:""}
   ${j.mport&&j.mport!=="Not needed"?`<span class="chip ${j.mport==="Done"?"v-paid":"v-rdy"}">Matterport ${esc(j.mport)}</span>`:""}</div>
+ ${jobActionBar(j)}
  <div class="pan" style="margin-top:22px;border-color:var(--c-${C})">
   ${forContractor(j)?`
    <div class="ln2"><span class="k">Estimate for</span><b class="v-${C}">${
@@ -3621,12 +3694,15 @@ function jobFilesHTML(j){
      <img src="" data-fid="${f.fileId}" onclick="openFile('${f.fileId}')" alt="${esc(f.name)}">
      <button class="del" onclick="event.stopPropagation();delFile('${f.id}')">✕</button></div>`).join("")}</div>`:""}
   ${docs.length?`<div class="lab" style="margin-top:22px">Documents</div>
-   ${docs.map(f=>`<div class="frow"><span class="ic2 v-${f.cat==="Contract"?"est":f.cat==="Estimate"?"rdy":"lost"}">${FICON[f.cat]||"▤"}</span>
+   ${docs.map(f=>`<div class="frow">${fileTile(f)}
      <div class="grow" onclick="openFile('${f.fileId}')"><div class="nm">${esc(f.name)}</div>
-      <div class="mt">${esc(f.cat)} —— ${kb(f.size)}</div></div>
+      <div class="mt" style="--tint:${fTint(f.cat)}"><span class="ftype">${esc(f.cat)}</span>${
+       f.cat==="Contract"?`<span class="ftype" style="--tint:${isSigned(f)?"var(--c-paid)":"var(--c-out)"}"> · ${isSigned(f)?"SIGNED":"UNSIGNED"}</span>`:""
+      } · ${kb(f.size)}</div></div>
      <button class="ico" style="width:28px;height:28px;font-size:11px;border:0;color:var(--ink3)" onclick="delFile('${f.id}')">✕</button></div>`).join("")}`:""}
   <div class="upbar" style="margin-top:16px">
-   ${FCAT.map(c=>`<button onclick="pickFiles('${j.id}','${c}')">+ ${c}</button>`).join("")}</div>
+   ${FCAT.map(c=>`<button style="--tint:${fTint(c)};color:${fTint(c)};border-color:color-mix(in srgb,${fTint(c)} 45%,transparent)"
+     onclick="pickFiles('${j.id}','${c}')">${FICON[c]} ${c}</button>`).join("")}</div>
   <p class="xs dim" style="margin-top:10px">Photos are auto-shrunk to save space. Contracts, estimates and emails upload as-is.</p>
  </div>`;
 }
@@ -5577,9 +5653,11 @@ R.docs=()=>{
     <h2 style="cursor:pointer" onclick="${j?`go('job',{id:'${jid}'})`:""}">${j?esc(jobName(j)):"Unfiled"}</h2>
     <span class="em dim">${fs2.length}</span></div>
    <div class="pan" style="margin-top:0">
-    ${fs2.map(f=>`<div class="frow"><span class="ic2">${f.cat==="Photo"?"▣":FICON[f.cat]||"▤"}</span>
+    ${fs2.map(f=>`<div class="frow">${fileTile(f)}
      <div class="grow" onclick="openFile('${f.fileId}')"><div class="nm">${esc(f.name)}</div>
-      <div class="mt">${esc(f.cat||"")} · ${kb(f.size||0)}</div></div>
+      <div class="mt" style="--tint:${fTint(f.cat)}"><span class="ftype">${esc(f.cat||"Other")}</span>${
+       f.cat==="Contract"?`<span class="ftype" style="--tint:${isSigned(f)?"var(--c-paid)":"var(--c-out)"}"> · ${isSigned(f)?"SIGNED":"UNSIGNED"}</span>`:""
+      } · ${kb(f.size||0)}</div></div>
      <button class="ico" style="width:26px;height:26px;font-size:11px;border:0;color:var(--ink3)" onclick="delFile('${f.id}')">✕</button></div>`).join("")}
    </div></div>`;}).join("")}
   ${logFiles.length?`<div class="colw"><div class="sechead" style="margin-top:0"><h2>Daybook</h2><span class="em dim">${logFiles.length}</span></div>
