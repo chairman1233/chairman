@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-95 · deals fixed + priced goals";
+const BUILD="C-96 · tabs stop fighting each other";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6568,6 +6568,27 @@ function seedDealsV2(){
   D.dealsSeeded2=true;save();
  }catch(e){}
 }
+/* ---- same-browser tabs -----------------------------------------------------
+   localStorage is one shared board, but each open tab held its own copy in
+   memory. A background tab saving — clock tick, AI ping, sync timer — wrote its
+   STALE copy straight over whatever was just typed in the front tab. With four
+   tabs open, a freshly entered estimate total lived for seconds. Every tab now
+   adopts the newest copy the instant any other tab writes. */
+function adoptStored(){
+ try{
+  if(document.getElementById("ov"))return;          /* never under an open form */
+  const ae=document.activeElement;
+  if(ae&&/INPUT|TEXTAREA/.test(ae.tagName))return;  /* never mid-keystroke */
+  const raw=localStorage.getItem(K);if(!raw)return;
+  const inc=JSON.parse(raw);
+  if((inc._ts||0)>(D._ts||0)){
+   D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),inc);
+   applyTheme();render();
+  }
+ }catch(e){}
+}
+window.addEventListener("storage",e=>{if(e.key===K)adoptStored();});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)adoptStored();});
 migrate();
 openIDB().then(()=>{seedDeals();go("today")});
 </script>
