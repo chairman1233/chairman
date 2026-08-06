@@ -176,6 +176,11 @@ header .h{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:12px
  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:560px){.hdmark b,.hdmark span{font-size:15px}.hdmark{gap:6px}}
 @media(max-width:380px){.hdmark span{display:none}}
+/* the date rides next to the name — quiet, but always current */
+.hddate{font:600 12.5px var(--sans);color:var(--ink3);letter-spacing:.05em;
+ white-space:nowrap;margin-left:14px;padding-left:14px;border-left:1px solid var(--rule2)}
+.hddate b{color:var(--ink2);font-weight:700}
+@media(max-width:640px){.hddate{display:none}}
 /* on wide screens this is exactly the empty run of header he wanted it in */
 @media(min-width:1000px){.hdmark b,.hdmark span{font-size:23px}}
 
@@ -669,6 +674,7 @@ body .col .ch .n{color:inherit}
 <body>
 <header><div class="h">
  <div class="hdmark"><b>Chairman</b><span>Command Center</span></div>
+ <div class="hddate" id="hddate"></div>
  <div style="flex:1"></div>
  <button class="ico" onclick="aiSheet()" id="aiBtn" title="Ask AI">✦</button>
  <button class="ico" onclick="toggleTheme()" id="thBtn">◐</button>
@@ -687,7 +693,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-98 · disputes live apart";
+const BUILD="C-99 · date rides the header";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2913,6 +2919,12 @@ function paintView(html){
 }
 /* The header height changes with the safe-area inset and with the breakpoint,
    so it cannot be a constant. Measure it and let CSS position off the result. */
+function hdDateTick(){
+ const el=document.getElementById("hddate");if(!el)return;
+ const n=new Date();
+ el.innerHTML=`<b>${n.toLocaleDateString("en-US",{weekday:"long"})}</b> · ${n.toLocaleDateString("en-US",{month:"long",day:"numeric"})} · ${h12(hm(n))}`;
+}
+setInterval(hdDateTick,30000);
 function syncHdrH(){
  const h=document.querySelector("header");
  const px=h?Math.round(h.getBoundingClientRect().height):68;
@@ -2924,7 +2936,7 @@ function render(){
   const sd=document.getElementById("side");if(sd)sd.innerHTML="";
   applyZoom();return;
  }
- paintView((R[V]||R.today)(P));renderSide();applyZoom();syncHdrH();
+ paintView((R[V]||R.today)(P));renderSide();applyZoom();syncHdrH();hdDateTick();
  try{wireTape()}catch(e){}
  if(V==="jobs"&&D.view==="board")wireDrag();
  if(V==="cal"&&D.calView!=="agenda")wireMonth();
@@ -3149,8 +3161,7 @@ R.today=()=>{
  ${nutMeterHTML()}
  ${aiMsgsHTML()}
  <div class="topbar">
-  <div class="grow"><h1>${new Date().toLocaleDateString("en-US",{weekday:"long"})}</h1>
-   <div class="sub2">${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div></div>
+  <div class="grow"><h1>Dashboard</h1></div>
   <button class="btn sec s" style="margin:0${!cs.in&&!cs.off?";border-color:var(--c-out);color:var(--c-out)":cs.in&&!cs.out?";border-color:var(--c-paid);color:var(--c-paid)":""}"
    onclick="${cs.in&&!cs.out?"clockOut()":"clockIn()"}"
    title="${cs.in&&!cs.out?"Tap to clock out":"Tap to clock in"}">
