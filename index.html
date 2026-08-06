@@ -705,7 +705,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-102 · paste a lead";
+const BUILD="C-103 · the clock tells the truth";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2317,45 +2317,121 @@ const calSort=a=>[...a].sort((x,y)=>(x.startTime||"99:99").localeCompare(y.start
 const dur=m=>{if(m==null)return "—";const h=Math.floor(m/60),x=m%60;return (h?h+"h ":"")+x+"m";};
 const dayKey=d=>isoDay(d);
 const schedFor=iso=>{const v=shiftOf(iso);return v?v.s:"";};
+/* ---- punch segments -------------------------------------------------------
+   A day held ONE in/out pair. Clocking in again on a day that already had an
+   out simply overwrote `in`, leaving out < in — which the duration maths read
+   as negative, added 1440 to, and reported as "23h 59m", rolling 24.0 into the
+   week total. Days now hold an array of segments so a lunch break or a second
+   trip out is expressible. `in`/`out` remain as derived first-in / last-out so
+   every existing screen keeps working untouched. */
+function segsOf(rec){
+ if(!rec)return [];
+ if(Array.isArray(rec.segs))return rec.segs;
+ return rec.in?[{in:rec.in,out:rec.out||null}]:[];   /* lazy migration, non-destructive */
+}
+function segMins(s,isToday){
+ if(!s||!s.in)return 0;
+ const a=mins(s.in);
+ const b=s.out?mins(s.out):(isToday?mins(hm(new Date())):null);
+ if(a==null||b==null)return 0;
+ let d=b-a;
+ if(d<0)d+=1440;                 /* genuinely crossed midnight */
+ if(d>=1439)return 0;            /* 23h59m is the corruption signature — never count it */
+ return Math.max(0,d);
+}
+const dayWorked=(rec,isToday)=>segsOf(rec).reduce((n,s)=>n+segMins(s,isToday),0);
+function openSeg(rec){const ss=segsOf(rec),l=ss[ss.length-1];return (l&&!l.out)?l:null;}
+
 function clockState(iso){
  const c=CK_(),k=iso||today(),rec=c.days[k]||{},sh=shiftOf(k),target=sh?sh.s:"";
  const endT=sh&&sh.e?sh.e:"";
- const inM=mins(rec.in),tM=mins(target);
+ const ss=segsOf(rec),first=ss[0]||null,last=ss[ss.length-1]||null,open=openSeg(rec);
+ const inTime=first?first.in:undefined;
+ const outTime=(!open&&last)?last.out:undefined;
+ const inM=mins(inTime),tM=mins(target);
  const late=(inM!=null&&tM!=null)?Math.max(0,inM-tM):null;
- const outM=mins(rec.out);
- let worked=inM!=null?((outM!=null?outM:mins(hm(new Date())))-inM):null;
- if(worked!=null&&worked<0)worked+=1440;   /* shift crossed midnight */
+ const outM=mins(outTime);
+ const worked=ss.length?dayWorked(rec,k===today()):null;
  const planned=(target&&endT)?Math.max(0,mins(endT)-mins(target)):null;
  const early=(endT&&outM!=null)?Math.max(0,mins(endT)-outM):0;
  const over=(endT&&outM!=null)?Math.max(0,outM-mins(endT)):0;
- return {rec,target,endT,planned,early,over,in:rec.in,out:rec.out,late,
-  worked:worked!=null&&worked>=0?worked:null,off:!target};
+ return {rec,segs:ss,open:!!open,target,endT,planned,early,over,
+  in:inTime,out:outTime,late,worked,off:!target};
 }
-function clockIn(){const c=CK_(),k=today();const now=hm(new Date());
- c.days[k]=Object.assign({},c.days[k],{in:now});save();render();
- const s=clockState();
- toast(s.late>0?"Clocked in — "+dur(s.late)+" late":"Clocked in — on time");
- say(s.late>0?`Clocked in ${dur(s.late)} late. What happened?`:"Clocked in on time. Let's work.");
- /* asks why, records either way, never blocks the day */
- if(s.late>0)setTimeout(lateGate,420);}
-function clockOut(){const c=CK_(),k=today();c.days[k]=Object.assign({},c.days[k],{out:hm(new Date())});
+function clockIn(){
+ const c=CK_(),k=today(),rec=c.days[k]||{};
+ if(openSeg(rec)){toast("Already on the clock");return;}
+ const ss=segsOf(rec).slice();
+ ss.push({in:hm(new Date()),out:null});
+ const next=Object.assign({},rec,{segs:ss,in:ss[0].in});
+ delete next.out;                       /* still running — no last-out yet */
+ c.days[k]=next;save();render();
+ const s=clockState(),again=ss.length>1;
+ toast(again?"Back on the clock — segment "+ss.length
+   :(s.late>0?"Clocked in — "+dur(s.late)+" late":"Clocked in — on time"));
+ if(!again){
+  say(s.late>0?`Clocked in ${dur(s.late)} late. What happened?`:"Clocked in on time. Let's work.");
+  if(s.late>0)setTimeout(lateGate,420);   /* the late gate belongs to the FIRST punch only */
+ }
+}
+function clockOut(){
+ const c=CK_(),k=today(),rec=c.days[k]||{};
+ const open=openSeg(rec);
+ if(!open){toast("Not on the clock");return;}
+ const now=hm(new Date());
+ open.out=now;
+ const ss=segsOf(rec);
+ c.days[k]=Object.assign({},rec,{segs:ss,in:ss[0].in,out:now});
  let stopped=0;
  D.jobs.forEach(j=>{if(j.timerAt){
   j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));
   j.timerAt=null;stopped++;}});
- save();render();const s=clockState();toast("Clocked out — "+dur(s.worked)+" today"+(stopped?" · "+plural(stopped,"timer")+" stopped":""));}
-function editClock(){const s=clockState();
+ save();render();const s=clockState();
+ toast("Clocked out — "+dur(s.worked)+" today"+(ss.length>1?" across "+ss.length+" segments":"")
+  +(stopped?" · "+plural(stopped,"timer")+" stopped":""));
+}
+function editClock(){
+ const s=clockState(),ss=s.segs;
  sheet("Fix today's times",`
-  <p class="sm dim" style="margin:0 0 20px">Forgot to hit the button? Set the real times here.</p>
-  <label><span class="t">Clocked in</span><input class="in" id="cin" type="time" value="${s.in||""}"></label>
-  <label><span class="t">Clocked out</span><input class="in" id="cout" type="time" value="${s.out||""}"></label>
-  <button class="btn" onclick="saveClock()">Save</button>
+  <p class="sm dim" style="margin:0 0 18px">Forgot to hit the button? Set the real times. Out must be after in.</p>
+  <div id="segrows">${ss.length?ss.map((g,i)=>`
+   <div class="row" style="gap:10px;margin-bottom:10px;align-items:center">
+    <span class="xs dim" style="width:22px;flex:none">${i+1}</span>
+    <input class="in" type="time" value="${g.in||""}" onchange="segEdit(${i},'in',this.value)" style="margin:0">
+    <span class="dim">to</span>
+    <input class="in" type="time" value="${g.out||""}" onchange="segEdit(${i},'out',this.value)" style="margin:0">
+    <button class="ico" style="border:0;color:var(--ink3);flex:none" onclick="segDel(${i})">✕</button>
+   </div>`).join("")
+  :`<p class="xs dim">No punches today.</p>`}</div>
+  <button class="opt2" onclick="segAdd()">+ Add a segment</button>
+  <div class="ln2 tot" style="margin-top:18px"><span class="k">Today</span>
+   <span class="v">${dur(s.worked)||"0m"}</span></div>
+  <button class="btn" onclick="close_();render()">Done</button>
   <button class="btn warn" onclick="clearClock()">Clear today</button>`);}
-function saveClock(){const c=CK_(),k=today();
- const i=$("#cin").value,o=$("#cout").value;
- c.days[k]=Object.assign({},c.days[k],{in:i||undefined,out:o||undefined});
- if(!i&&!o)delete c.days[k];
- save();close_();render();toast("Updated");}
+function segEdit(i,f,v){
+ const c=CK_(),k=today(),rec=c.days[k]||{};
+ const ss=segsOf(rec).slice();if(!ss[i])return;
+ ss[i]=Object.assign({},ss[i],{[f]:v||null});
+ const g=ss[i];
+ if(g.in&&g.out&&mins(g.out)<=mins(g.in)){
+  toast("Out has to be after in");close_();editClock();return;   /* refuse impossible data */
+ }
+ commitSegs(ss);close_();editClock();
+}
+function segAdd(){const c=CK_(),k=today();const ss=segsOf(c.days[k]||{}).slice();
+ ss.push({in:hm(new Date()),out:null});commitSegs(ss);close_();editClock();}
+function segDel(i){const c=CK_(),k=today();const ss=segsOf(c.days[k]||{}).slice();
+ ss.splice(i,1);commitSegs(ss);close_();editClock();}
+function commitSegs(ss){
+ const c=CK_(),k=today(),rec=c.days[k]||{};
+ ss=ss.filter(g=>g&&g.in).sort((a,b)=>mins(a.in)-mins(b.in));
+ if(!ss.length){delete c.days[k];save();render();return;}
+ const last=ss[ss.length-1];
+ const next=Object.assign({},rec,{segs:ss,in:ss[0].in});
+ if(last.out)next.out=last.out;else delete next.out;
+ c.days[k]=next;save();render();
+}
+function saveClock(){close_();render();}   /* legacy entry point — segments save as they change */
 function clearClock(){const c=CK_();delete c.days[today()];save();close_();render();toast("Cleared");}
 /* Monday-start week */
 function weekDays(){const n=new Date(),d=n.getDay(),back=(d+6)%7,out=[];
@@ -2370,10 +2446,7 @@ function weekStats(){
   if(s.in){ if(s.late>0){lateDays++;lateTotal+=s.late;} else if(!s.off)onTime++; }
   /* an open shift used to contribute nothing, so "Total 0.0h" sat next to
      "ACTIVE NOW 3h 14m" — count elapsed time for the shift still running */
-  if(s.in){
-   const end=s.out?mins(s.out):(k===t?mins(hm(new Date())):null);
-   if(end!=null){let d=end-mins(s.in);if(d<0)d+=1440;worked+=Math.max(0,d);}
-  }
+  if(s.in)worked+=dayWorked(s.rec,k===t);   /* sums segments; 23h59m corruption refused */
  }
  return {onTime,lateDays,worked,scheduled,lateTotal,plannedMin};
 }
@@ -2402,12 +2475,36 @@ function clockHTML(){
    <button class="ico" onclick="editClock()" title="Fix times">✎</button></div>
   <div class="row" style="margin-top:10px;gap:8px">
   ${!s.in?`<button class="btn s" style="margin:0" onclick="clockIn()">◷ Clock in${s.off?" anyway":""}</button>`
-   :!s.out?`<button class="btn sec s" style="margin:0" onclick="clockOut()">◷ Clock out</button>`
+   :s.open?`<button class="btn sec s" style="margin:0" onclick="clockOut()">◷ Clock out</button>`
    :`<button class="btn sec s" style="margin:0" onclick="clockIn()">Clock back in</button>`}</div>
+  ${s.segs.length>1?`<div class="xs dim" style="margin-top:10px">
+   ${s.segs.map((g,i)=>`${i?" · ":""}${h12(g.in)}–${g.out?h12(g.out):"now"}`).join("")}</div>`:""}
   <div class="strip" style="margin-top:12px">
    <div><span class="k">On time</span><span class="v v-paid">${w.onTime}</span></div>
    <div><span class="k">Late</span><span class="v ${w.lateDays?"v-out":""}">${w.lateDays}</span></div>
    <div><span class="k">Hours</span><span class="v">${(w.worked/60).toFixed(1)}${w.plannedMin?`<span class="dim" style="font-size:12px"> / ${Math.round(w.plannedMin/60)}</span>`:""}</span></div></div>
+ </div>
+ ${jobTimeHTML()}`;
+}
+/* Job timers were invisible on the Time clock screen, which showed the shift
+   clock only — so time banked to a job could not be checked against the day. */
+function jobTimeHTML(){
+ const run=D.jobs.find(j=>j.timerAt);
+ const withTime=D.jobs.filter(j=>jobMin(j)>0).sort((a,b)=>jobMin(b)-jobMin(a));
+ if(!run&&!withTime.length)return "";
+ const total=withTime.reduce((n,j)=>n+jobMin(j),0);
+ return `<div class="pan" style="margin-top:12px${run?";border-color:var(--c-rdy)":""}">
+  <div class="row between" style="align-items:baseline">
+   <div class="lab ${run?"v-rdy":""}">${run?"● Timer running":"◔ Time on jobs"}</div>
+   <span class="xs dim">${dur(total)} banked</span></div>
+  ${run?`<div class="row between" style="margin-top:12px;gap:10px">
+   <div class="grow" style="cursor:pointer" onclick="go('job',{id:'${run.id}'})">
+    <b>${esc(jobName(run))}</b><div class="xs dim">since ${h12(hm(new Date(run.timerAt)))}</div></div>
+   <b class="money ser v-rdy" style="font-size:19px">${dur(jobMin(run))}</b>
+   <button class="opt2" style="flex:none" onclick="toggleTimer('${run.id}')">stop</button></div>`:""}
+  ${withTime.filter(j=>!run||j.id!==run.id).slice(0,5).map(j=>`<div class="ln2">
+   <span class="k" style="cursor:pointer" onclick="go('job',{id:'${j.id}'})">${esc(jobName(j))}</span>
+   <b>${dur(jobMin(j))}</b></div>`).join("")}
  </div>`;
 }
 const SHIFTS=[["06:00","15:00"],["07:00","16:00"],["07:00","17:00"],["08:00","17:00"],["09:00","18:00"]];
@@ -2653,22 +2750,21 @@ function say(text,opts){
 function shutUp(){try{speechSynthesis.cancel()}catch(e){}}
 /* Esc always silences it — a voice you can't interrupt is a voice you turn off */
 window.addEventListener("keydown",e=>{if(e.key==="Escape")shutUp();});
-/* a job timer must never outlive the workday */
+/* A job timer must never outlive the DAY. It used to also be killed the moment
+   the shift clock wasn't running, which fought the deliberate choice to let a
+   job timer run off the clock — clocking out already stops timers explicitly. */
 function timerGuard(){
- const cs=clockState();let changed=false;
+ let changed=false;
  D.jobs.forEach(j=>{
   if(!j.timerAt)return;
   const started=new Date(j.timerAt);
-  const sameDay=isoDay(started)===today();
-  const offClock=!cs.in||!!cs.out;
-  if(!sameDay||offClock){
-   const cap=sameDay?Date.now():new Date(isoDay(started)+"T23:59:00").getTime();
-   j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((cap-started)/60000));
-   j.timerAt=null;changed=true;
-  }
+  if(isoDay(started)===today())return;
+  const cap=new Date(isoDay(started)+"T23:59:00").getTime();
+  j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((cap-started)/60000));
+  j.timerAt=null;changed=true;
  });
- if(changed){save();if(V==="today"||V==="job")render();
-  toast("Timer stopped — you were off the clock");}
+ if(changed){save();if(V==="today"||V==="job"||V==="clock")render();
+  toast("Timer stopped — it was left running overnight");}
 }
 setInterval(timerGuard,60*1000);
 function foremanTick(){
@@ -4323,14 +4419,25 @@ function saveSubCost(jobId,sid){const j=job(jobId);
 function jobMin(j){let m=+j.timeMin||0;
  if(j.timerAt)m+=Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));
  return m;}
-function toggleTimer(id){const j=job(id);
- if(!j.timerAt){const cs=clockState();
-  if(!cs.in||cs.out){const c=CK_(),k=today();
-   c.days[k]=Object.assign({},c.days[k],{in:hm(new Date())});delete c.days[k].out;
-   toast("Clocked you in too");}}
- if(j.timerAt){j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));
-  j.timerAt=null;save();render();toast("Timer stopped — "+dur(jobMin(j)));}
- else{j.timerAt=new Date().toISOString();save();render();toast("Timer running");}}
+function toggleTimer(id){const j=job(id);if(!j)return;
+ if(j.timerAt){
+  j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));
+  j.timerAt=null;save();render();toast("Timer stopped — "+dur(jobMin(j)));return;
+ }
+ /* Only ever ONE job timer. Two running at once double-counted the same hour
+    onto two jobs, and Focus Mode could stack a second on top of the first. */
+ let bumped="";
+ D.jobs.forEach(x=>{if(x.id!==id&&x.timerAt){
+  x.timeMin=(+x.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(x.timerAt))/60000));
+  x.timerAt=null;bumped=jobName(x);}});
+ j.timerAt=new Date().toISOString();save();render();
+ /* The shift clock used to get punched silently here — which then reported a
+    late start he never made. Job time is tracked either way; the shift clock
+    is his to punch. */
+ const cs=clockState();
+ toast(bumped?"Timer running — stopped "+bumped
+  :!cs.open?"Timer running — you're not on the shift clock":"Timer running");
+}
 function addTime(id){const j=job(id);
  sheet("Time on this estimate",`
   <p class="sm dim" style="margin:0 0 20px">Logged so far: <b>${dur(jobMin(j))}</b></p>
@@ -6993,6 +7100,30 @@ applyTheme();
 window.addEventListener("resize",()=>{applyZoom();syncHdrH();try{wireTape()}catch(e){}});
 /* Benny's stated Green Dynasty terms, installed once so they just work.
    Mitigation over $30k → 10% after subs. Remodel → 40% after subs. */
+/* Repair days already written by the old single-pair clock: out <= in is the
+   signature of a second clock-in overwriting the first. The out belonged to the
+   FIRST segment; the in that overwrote it started a SECOND. Split them rather
+   than deleting, so no worked time is invented or thrown away. */
+function fixClockDays(){
+ if(D.clockFixed2)return;
+ try{
+  const c=CK_();let n=0;
+  Object.keys(c.days||{}).forEach(k=>{
+   const rec=c.days[k];if(!rec||Array.isArray(rec.segs))return;
+   if(!rec.in)return;
+   if(rec.out&&mins(rec.out)<=mins(rec.in)){
+    /* first segment ended at the recorded out; the later in opened a new one */
+    rec.segs=[{in:rec.out,out:rec.out},{in:rec.in,out:null}];
+    rec.segs[0].in=rec.out;rec.segs[0].out=rec.out;   /* zero-length: unknowable start */
+    rec.in=rec.segs[0].in;delete rec.out;n++;
+   }else{
+    rec.segs=[{in:rec.in,out:rec.out||null}];
+   }
+  });
+  D.clockFixed2=true;save();
+  if(n)setTimeout(()=>toast(plural(n,"day")+" of impossible clock time repaired"),1200);
+ }catch(e){}
+}
 function seedDeals(){
  if(D.dealsSeeded){seedDealsV2();return;}   /* the early return was skipping v2 */
  try{
@@ -7053,7 +7184,7 @@ function adoptStored(){
 window.addEventListener("storage",e=>{if(e.key===K)adoptStored();});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)adoptStored();});
 migrate();
-openIDB().then(()=>{seedDeals();go("today")});
+openIDB().then(()=>{fixClockDays();seedDeals();go("today")});
 </script>
 </body>
 </html>
