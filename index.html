@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-90 · deals, payments, charge target";
+const BUILD="C-91 · deals, payments, charge target";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -880,7 +880,13 @@ const jobPct=j=>(j.feePct===0||j.feePct)?+j.feePct:(+D.me.rate||2);
    render time. He can see what it did, and override it — which locks it. */
 function applyAcctRule(j){
  if(!j||j.feeLocked)return false;
- const r=ruleFor(j);if(!r)return false;
+ const r=ruleFor(j);
+ /* A total edited back under the threshold must give the rate back, or the job
+    keeps charging 10% on a $20k mitigation that never qualified. */
+ if(!r){
+  if(j.feeRule){delete j.feeRule;j.feePct=undefined;j.feeMode="pct";return true;}
+  return false;
+ }
  const mode=r.mode||"aftersubs";
  if(j.feeMode===mode&&+j.feePct===+r.pct){j.feeRule=r.id;return false;}
  j.feeMode=mode;j.feePct=+r.pct;j.feeRule=r.id;
