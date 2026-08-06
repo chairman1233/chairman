@@ -706,7 +706,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-105 · four destinations";
+const BUILD="C-106 · four destinations";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3273,8 +3273,6 @@ function renderSide(){
       return `<button class="sitem sub ${V===v?"cur":""}" onclick="go('${v}')">
       <span class="ic3"></span>${sl}${sb?`<span class="sbadge">${sb}</span>`:""}</button>`;}).join(""):""}`;
   }).join("")}
-  <button class="sitem ${V==="ai"?"on":""}" onclick="go('ai')"><span class="ic3">✦</span>AI assistant</button>
-  <button class="sitem" onclick="settings()"><span class="ic3">⚙</span>Settings</button>
   <div class="sfoot">
    <div class="lab" style="padding:0 8px 8px">Apps</div>
    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 6px 12px">
