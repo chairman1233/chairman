@@ -705,7 +705,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-103 · the clock tells the truth";
+const BUILD="C-104 · the clock tells the truth";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2484,11 +2484,12 @@ function clockHTML(){
    <div><span class="k">Late</span><span class="v ${w.lateDays?"v-out":""}">${w.lateDays}</span></div>
    <div><span class="k">Hours</span><span class="v">${(w.worked/60).toFixed(1)}${w.plannedMin?`<span class="dim" style="font-size:12px"> / ${Math.round(w.plannedMin/60)}</span>`:""}</span></div></div>
  </div>
- ${jobTimeHTML()}`;
+ ${clockJobsHTML()}`;
 }
 /* Job timers were invisible on the Time clock screen, which showed the shift
-   clock only — so time banked to a job could not be checked against the day. */
-function jobTimeHTML(){
+   clock only — so time banked to a job could not be checked against the day.
+   NB: jobTimeHTML(j) already exists for the job screen — different thing. */
+function clockJobsHTML(){
  const run=D.jobs.find(j=>j.timerAt);
  const withTime=D.jobs.filter(j=>jobMin(j)>0).sort((a,b)=>jobMin(b)-jobMin(a));
  if(!run&&!withTime.length)return "";
