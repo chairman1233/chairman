@@ -534,6 +534,18 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  font:700 10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .nutkey b{width:9px;height:9px;border-radius:3px;flex:none}
 
+/* ---- co-pilot ---- */
+.cop{display:flex;align-items:center;gap:8px;font:600 13px var(--sans);color:var(--ink2);
+ padding:11px 16px;border:1px solid var(--rule);border-radius:999px;background:var(--panel);
+ margin-bottom:12px;min-width:0}
+.cop b{color:var(--ink)}
+.upnext{border:1px solid var(--tint,var(--rule2));border-left-width:3px;border-radius:14px;
+ background:var(--panel);padding:22px;box-shadow:0 12px 34px rgba(0,0,0,.38)}
+#focus{position:fixed;inset:0;z-index:220;background:#0B0B0C;display:flex;flex-direction:column;
+ align-items:center;justify-content:center;text-align:center;padding:26px;color:var(--ink)}
+#focus .fx{position:absolute;top:18px;right:20px;width:38px;height:38px;border:1px solid var(--rule2);
+ border-radius:999px;background:none;color:var(--ink3);font-size:14px}
+
 /* ---- job action bar: the five things he touches daily, always same place ----
    Sticky, so it survives scrolling. Its contents never reorder based on which
    fields happen to be filled in — a disabled button holds its slot rather than
@@ -693,7 +705,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-99 · date rides the header";
+const BUILD="C-100 · the co-pilot";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -956,6 +968,148 @@ const DSTAGES=["Negotiation","Demand sent","Demand expired","Pre-suit","Mediatio
 const inDispute=j=>!!(j&&j.disputeStage&&j.disputeStage!=="Settled");
 const disputes=()=>D.jobs.filter(j=>j.disputeStage);
 const openDisputes=()=>D.jobs.filter(inDispute);
+
+/* ---- the next move --------------------------------------------------------
+   Every active job carries exactly one dated next action. Not a task list —
+   ONE move, so the board can manage him instead of the other way round.
+   A job without one is itself a queue item: "set the next move". */
+const NEXT_PRESETS=["Call to schedule the visit","Site visit","Start the estimate",
+ "Send the estimate","Follow up — no answer","Chase the invoice","Write the supplement"];
+const ACTIVE_ST=["Waiting","Estimating","Complete","Invoiced"];
+const nextOf=j=>(j&&j.next&&j.next.text)?j.next:null;
+const needsNext=j=>ACTIVE_ST.includes(j.status)&&!inDispute(j)&&!j._demo;
+function nextState(j){const n=nextOf(j);if(!n)return "none";
+ return n.date<today()?"over":n.date===today()?"today":"later";}
+function setNextSheet(id){
+ const j=job(id);if(!j)return;
+ const n=nextOf(j);
+ sheet("Next move — "+jobName(j),`
+  <label><span class="t">One action</span>
+   <input class="in" id="nxt" value="${esc(n?n.text:"")}" placeholder="Call to schedule the site visit" autocomplete="off"></label>
+  <div class="upbar" style="margin:-10px 0 16px">
+   ${NEXT_PRESETS.map(x=>`<button type="button" onclick="document.getElementById('nxt').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>
+  <label><span class="t">When</span><input class="in" id="nxd" type="date" value="${esc(n?n.date:today())}"></label>
+  <div class="upbar" style="margin:-10px 0 16px">
+   <button type="button" onclick="nxdSet(0)">today</button><button type="button" onclick="nxdSet(1)">tomorrow</button>
+   <button type="button" onclick="nxdSet(2)">in 2 days</button><button type="button" onclick="nxdSet(7)">next week</button></div>
+  <button class="btn" onclick="saveNextQuick('${id}')">Lock it in</button>`);
+ setTimeout(()=>$("#nxt")&&$("#nxt").focus(),90);
+}
+function nxdSet(d){const t=new Date();t.setDate(t.getDate()+d);const el=$("#nxd");if(el)el.value=isoDay(t);}
+function saveNextQuick(id){const j=job(id);if(!j)return;
+ const t=$("#nxt").value.trim();
+ if(!t){toast("One action — even 'call them' counts");return;}
+ j.next={text:t,date:$("#nxd").value||today()};save();close_();render();toast("Locked in");}
+function doneNext(id){const j=job(id);if(!j||!nextOf(j))return;
+ D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),
+  text:"[Done] "+j.next.text});
+ j.next=null;save();
+ setNextSheet(id);   /* finishing one move immediately asks for the next */
+}
+
+/* ---- the queue and the co-pilot ------------------------------------------
+   Overdue moves first, then today's, then jobs missing a move entirely.
+   The user should never have to hold the day in working memory. */
+let _skips=[];
+function skipNext(id){_skips.push(id);render();}
+function queueItems(){
+ const items=[];
+ const active=D.jobs.filter(needsNext);
+ const dated=active.filter(nextOf);
+ dated.filter(j=>j.next.date<today()).sort((a,b)=>a.next.date.localeCompare(b.next.date))
+  .forEach(j=>items.push({j,kind:"over",label:j.next.text,
+   why:plural(Math.max(1,Math.round((dayFromISO(today())-dayFromISO(j.next.date))/86400000)),"day")+" overdue"}));
+ dated.filter(j=>j.next.date===today())
+  .forEach(j=>items.push({j,kind:"today",label:j.next.text,why:"due today"}));
+ active.filter(j=>!nextOf(j)).forEach(j=>{const fl=flowOf(j);
+  items.push({j,kind:"none",label:"Set the next move",why:"no next move set",flow:fl||null});});
+ return items.filter(x=>!_skips.includes(x.j.id));
+}
+function copilotLine(q){
+ const cs=clockState();let t="";
+ if(!cs.off){
+  const nowM=mins(hm(new Date())),tM=cs.target?mins(cs.target):null;
+  if(!cs.in&&tM!=null&&nowM>tM)t=dur(nowM-tM)+" past your "+h12(cs.target)+" start";
+  else if(cs.in&&!cs.out&&cs.late>0)t="started "+dur(cs.late)+" late";
+  else if(cs.in&&!cs.out)t=dur(cs.worked)+" on the clock";
+ }
+ const head=!q[0]?"queue is clear"
+  :q[0].kind==="none"?"pick the next move on "+jobName(q[0].j)
+  :q[0].label.replace(/\.$/,"")+" — "+jobName(q[0].j);
+ return (t?t+" · ":"")+head;
+}
+function copilotHTML(){
+ const q=queueItems(),top=q[0];
+ const tint=k=>k==="over"?"var(--c-out)":k==="today"?"var(--c-rdy)":"var(--c-est)";
+ return `<div class="cop">✦ <b>Co-pilot</b><span class="trunc"> · ${esc(copilotLine(q))}</span></div>
+ ${top?`<div class="upnext" style="--tint:${tint(top.kind)}">
+   <div class="xs" style="letter-spacing:.08em;text-transform:uppercase;color:${tint(top.kind)};font-weight:700">▸ Up next · ${esc(top.why)}</div>
+   <div class="ser" style="font-size:clamp(24px,4vw,34px);margin:10px 0 2px;line-height:1.12;cursor:pointer"
+    onclick="go('job',{id:'${top.j.id}'})">${esc(jobName(top.j))}</div>
+   <div class="sm dim">${esc([top.j.loss,top.j.address].filter(Boolean).join(" · ")||"—")}</div>
+   <div class="row" style="gap:10px;margin-top:18px;flex-wrap:wrap">
+    ${top.kind==="none"
+     ?`<button class="btn" style="margin:0;max-width:340px" onclick="setNextSheet('${top.j.id}')">＋ Set the next move</button>
+       ${top.flow?`<button class="btn sec s" style="margin:0" onclick="${top.flow.fn}">${esc(top.flow.l)} →</button>`:""}`
+     :`<button class="btn" style="margin:0;max-width:340px" onclick="focusOn('${top.j.id}')">▶ ${esc(top.label)}</button>
+       <button class="btn sec s" style="margin:0" onclick="doneNext('${top.j.id}')">✓ Already done</button>`}
+    <button class="lnk" style="border:0;color:var(--ink3)" onclick="skipNext('${top.j.id}')">skip ↷</button>
+   </div></div>
+  ${q.length>1?`<div class="pan" style="margin-top:10px;padding:6px 18px">
+   ${q.slice(1,4).map(x=>`<div class="li" style="padding:11px 0">
+     <span style="flex:none;font-size:9px;color:${tint(x.kind)}">●</span>
+     <div class="grow trunc" style="cursor:pointer" onclick="go('job',{id:'${x.j.id}'})">
+      <b>${esc(jobName(x.j))}</b> <span class="dim sm">— ${esc(x.label)}</span></div>
+     <button class="opt2" style="flex:none" onclick="${x.kind==="none"?`setNextSheet('${x.j.id}')`:`focusOn('${x.j.id}')`}">${x.kind==="none"?"set":"go"}</button>
+    </div>`).join("")}
+   ${q.length>4?`<p class="xs dim" style="margin:4px 0 10px">+ ${q.length-4} more behind these</p>`:""}
+  </div>`:""}`
+ :`<div class="pan" style="border-color:var(--c-paid)"><div class="lab v-paid">✓ Queue clear</div>
+   <p class="sm dim" style="margin:8px 0 0">Every active job has a dated next move and none are due. That's the whole game.</p></div>`}`;
+}
+
+/* ---- focus mode: one job, one timer, one action, nothing else ---- */
+let _fq=[],_ftick=null;
+function focusOn(id){
+ const q=queueItems().map(x=>x.j.id);
+ _fq=[id,...q.filter(x=>x!==id)];
+ const j=job(id);if(j&&!j.timerAt)toggleTimer(id);
+ paintFocus();
+ clearInterval(_ftick);
+ _ftick=setInterval(()=>{const el=document.getElementById("ftime"),jj=job(_fq[0]);
+  if(el&&jj)el.textContent=dur(jobMin(jj))||"0m";},1000);
+}
+function paintFocus(){
+ const j=job(_fq[0]);if(!j){focusExit();return;}
+ let el=document.getElementById("focus");
+ if(!el){el=document.createElement("div");el.id="focus";document.body.appendChild(el);}
+ const n=nextOf(j);
+ el.innerHTML=`
+  <button class="fx" onclick="focusExit()" title="Leave focus">✕</button>
+  <div class="xs" style="letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)">Focus</div>
+  <div class="ser" style="font-size:clamp(30px,6vw,54px);margin:14px 0 6px;line-height:1.08;max-width:14em">${esc(jobName(j))}</div>
+  <div class="sm dim">${esc([j.loss,j.address].filter(Boolean).join(" · ")||"")}</div>
+  <div class="money ser" id="ftime" style="font-size:clamp(40px,8vw,72px);margin:32px 0 26px">${dur(jobMin(j))||"0m"}</div>
+  <div style="font:600 17px var(--sans);max-width:30em">${n?"▸ "+esc(n.text):"No next move on this one — set it when you surface."}</div>
+  <button class="btn" style="max-width:380px;margin-top:32px" onclick="focusDone()">✓ Done — next</button>
+  <div class="xs dim" style="position:absolute;bottom:24px;left:0;right:0;text-align:center">
+   ${plural(_fq.length,"item")} in the queue · time banks to this job · Esc leaves</div>`;
+}
+function focusDone(){
+ const id=_fq[0],j=job(id);
+ if(j){
+  if(j.timerAt)toggleTimer(id);
+  if(nextOf(j)){D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,
+   created:new Date().toISOString(),text:"[Done] "+j.next.text});j.next=null;save();}
+ }
+ _fq.shift();
+ if(!_fq.length){focusExit();toast("Queue clear");say("Queue clear. Good work.");return;}
+ const nj=job(_fq[0]);if(nj&&!nj.timerAt)toggleTimer(_fq[0]);
+ paintFocus();
+}
+function focusExit(){clearInterval(_ftick);_ftick=null;
+ const el=document.getElementById("focus");if(el)el.remove();render();}
+window.addEventListener("keydown",e=>{if(e.key==="Escape"&&document.getElementById("focus"))focusExit();});
 /* priority: High > Moderate > Low, then soonest due date */
 const PRIO=["High","Moderate","Low"];
 const PCOL2={High:"out",Moderate:"rdy",Low:"lost"};
@@ -3158,9 +3312,8 @@ R.today=()=>{
   :!cs.out?`◷ ${h12(cs.in)} → · ${dur(cs.worked)}`
   :`◷ ${dur(cs.worked)} today`;
  return `
- ${nutMeterHTML()}
- ${aiMsgsHTML()}
- <div class="topbar">
+ ${copilotHTML()}
+ <div class="topbar" style="margin-top:18px">
   <div class="grow"><h1>Dashboard</h1></div>
   <button class="btn sec s" style="margin:0${!cs.in&&!cs.off?";border-color:var(--c-out);color:var(--c-out)":cs.in&&!cs.out?";border-color:var(--c-paid);color:var(--c-paid)":""}"
    onclick="${cs.in&&!cs.out?"clockOut()":"clockIn()"}"
@@ -3169,14 +3322,11 @@ R.today=()=>{
   <button class="ico" onclick="aiSheet()" title="Ask AI">✦</button>
   <button class="btn s" style="margin:0" onclick="newJob()">+ New Job</button>
  </div>
+ ${nutMeterHTML()}
+ ${aiMsgsHTML()}
  ${tickerHTML()}
  ${callBarHTML()}
  ${daySummaryHTML()}
- ${(()=>{const nx=flowNext();return nx?`<div class="pan" style="margin:0 0 14px;border-left:3px solid var(--c-${nx.fl.c})">
-   <div class="row between"><div class="grow" style="cursor:pointer" onclick="go('job',{id:'${nx.j.id}'})">
-    <div class="lab v-${nx.fl.c}" style="margin-bottom:4px">▸ Up next</div>
-    <div class="ser" style="font-size:19px">${esc(jobName(nx.j))}</div></div>
-   ${flowBtn(nx.j,true)}</div></div>`:"";})()}
  ${launcherHTML()}
  <div class="cols wide" style="margin-top:2px">
   <div class="colw" style="grid-column:span 2">
@@ -3286,6 +3436,10 @@ function jcard(j){const f=fee(j),C=ck(j.status);
   ${(j.priority&&j.priority!=="Moderate")||j.dueDate?`<div class="tags" style="margin:-4px 0 8px">
     ${j.priority&&j.priority!=="Moderate"?`<span class="chip v-${PCOL2[j.priority]}">${esc(j.priority)}</span>`:""}
     ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
+  ${nextOf(j)?`<div class="xs trunc" style="margin:0 0 8px;font-weight:600;color:${nextState(j)==="over"?"var(--c-out)":nextState(j)==="today"?"var(--c-rdy)":"var(--ink3)"}"
+    onclick="event.stopPropagation();setNextSheet('${j.id}')">▸ ${esc(j.next.text)} · ${j.next.date===today()?"today":nextState(j)==="over"?"overdue":fmt(j.next.date)}</div>`
+   :needsNext(j)?`<div class="xs" style="margin:0 0 8px;color:var(--ink3);cursor:pointer"
+    onclick="event.stopPropagation();setNextSheet('${j.id}')">＋ set the next move</div>`:""}
   <div class="f"><span class="dim money">${j.total?money0(j.total):"—"}</span>
    <b class="money ser v-${C}" style="font-size:15px">${onRetainer(j)&&f.due===0?"retainer":money(j.status==="Paid"?f.gross:f.due)}</b></div>
   ${flowOf(j)?`<div style="margin-top:8px">${flowBtn(j)}</div>`:""}</div>`;
@@ -3397,6 +3551,17 @@ function newJob(id){const j=id?job(id):{};
   <!-- suggestions float over the form; they used to push every field below
        them down while he was still typing -->
   <div style="position:relative;margin:-14px 0 14px"><div id="addrHits" class="addrpop"></div></div>
+  ${(!id||ACTIVE_ST.includes(j.status||"Estimating"))?`
+  <label><span class="t">Next move <em>one action — the board manages it from here</em></span>
+   <input class="in" id="jna" value="${esc((j.next&&j.next.text)||"")}" placeholder="Call to schedule the site visit"
+    autocomplete="off" autocorrect="off" spellcheck="false"></label>
+  <div class="upbar" style="margin:-10px 0 16px">
+   ${NEXT_PRESETS.slice(0,5).map(x=>`<button type="button" onclick="document.getElementById('jna').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>
+  <label><span class="t">When</span>
+   <input class="in" id="jnd" type="date" value="${esc((j.next&&j.next.date)||today())}"></label>`:""}
+
+  <button type="button" class="btn sec" id="moreTog" onclick="togMoreJob()">More — money, status, insurance, dates… ▾</button>
+  <div id="moreblk" style="display:none;margin-top:18px">
   ${(!id||["Waiting","Estimating"].includes(j.status||"Estimating"))?`
   <label><span class="t">Where does it stand?</span>
    <div class="segwrap" id="jstat">
@@ -3413,7 +3578,7 @@ function newJob(id){const j=id?job(id):{};
   <label><span class="t">Estimate total <em>blank until the Xactimate's done</em></span>
    <input class="in" id="jt" type="number" inputmode="decimal" value="${j.total||""}" placeholder="38500"></label>
 
-  <div class="lab" style="margin:6px 0 12px">＄ How you get paid</div>
+  <div class="lab" style="margin:6px 0 12px">＄ How you get paid <span class="dim" style="letter-spacing:0;text-transform:none">— company deals apply themselves</span></div>
   <label><span class="t">Fee basis</span>
    <div class="segwrap" id="jfmode">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${(j.feeMode||"pct")===k?"on":""}"
     onclick="pickFeeMode(this,'${k}')">${lab}</button>`).join("")}</div></label>
@@ -3437,9 +3602,6 @@ function newJob(id){const j=id?job(id):{};
    :(j.feeMode==="flat")?"A fixed amount, whatever the estimate comes to."
    :(j.feeMode==="retainer")?"Covered by the contractor's retainer — nothing gets invoiced. Extras still bill on top."
    :"Your percentage of the estimate total."}</p>
-
-  <button type="button" class="btn sec" id="moreTog" onclick="togMoreJob()">More details — insurance, dates, Matterport… ▾</button>
-  <div id="moreblk" style="display:none;margin-top:18px">
    <label><span class="t">Their contact person <em>optional</em></span>
     <input class="in" id="jcp" value="${esc(j.contractorContact||"")}" placeholder="Mike, PM"></label>
    <label><span class="t">Contractor email</span>
@@ -3612,6 +3774,11 @@ function validateJob(forWho){
  }
  const total=$("#jt")?+$("#jt").value:0;
  if(total<0){fieldErr("#jt","That can't be negative.");problems.push("total");}
+ /* a job with no next move is a job that goes quiet — required when offered */
+ if($("#jna")&&!$("#jna").value.trim()){
+  fieldErr("#jna","One next move — so tomorrow-you knows where to pick this up.");
+  problems.push("next");
+ }
  const adv=$("#jv")?+$("#jv").value:0;
  if(adv<0){fieldErr("#jv","That can't be negative.");problems.push("advance");}
  const sd=$("#jsd")&&$("#jsd").value, dd=$("#jdd")&&$("#jdd").value;
@@ -3649,6 +3816,8 @@ function saveJob(id){
   loss:_loss,mport:(link&&_mp==="Not needed")?"Done":_mp,mportLink:link,who:$("#jw").value.trim(),
   insurer:$("#ji").value.trim(),claim:$("#jn").value.trim(),total:+$("#jt").value||0,advance:+$("#jv").value||0};
  o.client=o.owner;   // keep the legacy field in step
+ if($("#jna")){const _nx=$("#jna").value.trim();
+  o.next=_nx?{text:_nx,date:($("#jnd")&&$("#jnd").value)||today()}:(id?(job(id)||{}).next||null:null);}
  /* If the address changed, the old pin is now a lie. Drop it and look the new
     one up — otherwise editing an address keeps the previous coordinates and
     the job still claims to be "on the map". */
@@ -3733,6 +3902,16 @@ R.job=({id})=>{
   ${j.loss?`<span class="chip v-${C}">${esc(j.loss)}</span>`:""}
   ${j.mport&&j.mport!=="Not needed"?`<span class="chip ${j.mport==="Done"?"v-paid":"v-rdy"}">Matterport ${esc(j.mport)}</span>`:""}</div>
  ${jobActionBar(j)}
+ ${needsNext(j)?`<div class="pan" style="margin-top:12px;padding:13px 16px;border-left:3px solid ${
+   nextState(j)==="over"?"var(--c-out)":nextState(j)==="today"?"var(--c-rdy)":"var(--rule2)"}">
+  <div class="row between" style="gap:10px">
+   <div class="grow" style="cursor:pointer" onclick="setNextSheet('${j.id}')">
+    <span style="font:700 10.5px var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)">Next move</span>
+    <div style="margin-top:4px;font-weight:600">${nextOf(j)?esc(j.next.text)+` <span class="dim sm">· ${j.next.date===today()?"today":fmt(j.next.date)}</span>`
+      :'<span class="dim">— tap to set —</span>'}</div></div>
+   ${nextOf(j)?`<button class="opt2" style="flex:none" onclick="doneNext('${j.id}')">✓ done</button>
+    <button class="opt2" style="flex:none" onclick="focusOn('${j.id}')">▶ focus</button>`:""}
+  </div></div>`:""}
  <div class="pan" style="margin-top:22px;border-color:var(--c-${C})">
   ${forContractor(j)?`
    <div class="ln2"><span class="k">Estimate for</span><b class="v-${C}">${
