@@ -665,7 +665,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-85 · Claude reads your PDFs";
+const BUILD="C-86 · a key per provider";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4758,7 +4758,24 @@ function delSub(id){const s=D.subs.find(x=>x.id===id);
   save();close_();go("subs");toast("Deleted");});}
 
 /* ================= AI ================= */
-const AICFG=()=>{if(!D.ai)D.ai={provider:"gemini",key:"",ollamaUrl:"http://localhost:11434",ollamaModel:"llama3.1"};return D.ai;};
+/* Keys are per provider. One shared slot meant switching provider silently
+   pointed the old key at the new endpoint — a Claude key sent to Google, which
+   answers "API key not valid" and gives you no clue why. */
+const keyOwner=k=>!k?"":/^sk-ant-/.test(k)?"claude":/^AIza/.test(k)?"gemini":/^gsk_/.test(k)?"groq":"";
+const AICFG=()=>{
+ if(!D.ai)D.ai={provider:"gemini",key:"",keys:{},ollamaUrl:"http://localhost:11434",ollamaModel:"llama3.1"};
+ const a=D.ai;
+ if(!a.keys){
+  a.keys={};
+  /* one-time migration: file the existing key under whoever actually issued it,
+     and follow it, so a working key never ends up pointed at the wrong API */
+  if(a.key){const own=keyOwner(a.key)||a.provider;a.keys[own]=a.key;if(own!==a.provider)a.provider=own;}
+ }
+ a.key=a.keys[a.provider]||"";
+ return a;
+};
+/* which providers he has a usable key for — drives the mismatch warning */
+const aiKeyed=()=>{const a=AICFG();return Object.keys(a.keys||{}).filter(p=>a.keys[p]);};
 const AIPROV={
  claude:{label:"Claude",note:"Sonnet day to day · Opus for the weekly read. Pay as you go.",
   model:"claude-sonnet-5",deep:"claude-opus-5",
@@ -5495,9 +5512,15 @@ function keyProblem(provider,k){
 function saveAI(){const c=AICFG();
  if($("#aikey")){
   const raw=$("#aikey").value.trim();
+  /* paste a key for a provider you aren't on and we follow the key, not the tab */
+  const own=keyOwner(raw);
+  if(raw&&own&&own!==c.provider){
+   c.keys[own]=raw;c.provider=own;save();close_();settings();
+   toast("That's a "+AIPROV[own].label+" key — switched you over");return;
+  }
   const problem=keyProblem(c.provider,raw);
   if(problem){toast(problem);return;}
-  c.key=raw;
+  c.keys[c.provider]=raw;c.key=raw;
  }
  if($("#aiurl"))c.ollamaUrl=$("#aiurl").value.trim();
  if($("#aimodel"))c.ollamaModel=$("#aimodel").value.trim();
@@ -5801,7 +5824,15 @@ function settings(){const m=D.me;
    <label><span class="t">Ollama address</span><input class="in" id="aiurl" value="${esc(AICFG().ollamaUrl||"")}" placeholder="http://localhost:11434"></label>
    <label><span class="t">Model</span><input class="in" id="aimodel" value="${esc(AICFG().ollamaModel||"")}" placeholder="llama3.1"></label>
    <p class="xs dim">Runs on your own PC — nothing leaves the building, no key, no limits. Ollama must be running, started with OLLAMA_ORIGINS=* so this page can reach it.</p>`
-  :`<label><span class="t">API key</span>
+  :`${(!AICFG().key&&aiKeyed().length)?`<div class="pan" style="border-color:var(--c-out);margin:0 0 14px">
+     <div class="lab v-out">◉ No ${esc(AIPROV[AICFG().provider].label)} key on file</div>
+     <p class="sm" style="margin:8px 0 0">You have a key saved for
+      ${aiKeyed().map(p=>esc(AIPROV[p].label)).join(" and ")}. Calls will fail until you
+      either paste a ${esc(AIPROV[AICFG().provider].label)} key below or switch back.</p>
+     ${aiKeyed().map(p=>`<button class="btn sec s" style="margin:10px 8px 0 0"
+       onclick="AICFG().provider='${p}';save();close_();settings()">Use ${esc(AIPROV[p].label)}</button>`).join("")}
+    </div>`:""}
+   <label><span class="t">API key</span>
     <input class="in" id="aikey" type="password" value="${esc(AICFG().key||"")}" placeholder="paste your key"
      autocomplete="new-password" data-lpignore="true" data-1p-ignore spellcheck="false"></label>
    <p class="xs dim" style="margin:-8px 0 14px">Stored in this browser only and called straight from this device — it is never sent to us, and it is left out of backups. Treat it like a password.</p>
@@ -5880,7 +5911,7 @@ function resetLogo(){D.me.logo="";save();close_();settings();toast("Back to the 
 function backup(){
  /* never write the API key into a file that leaves the device */
  const safe=JSON.parse(JSON.stringify(D));
- if(safe.ai)safe.ai.key="";
+ if(safe.ai){safe.ai.key="";safe.ai.keys={};}   /* keys never travel in a backup */
 
  const b=new Blob([JSON.stringify(safe,null,2)],{type:"application/json"});
  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="chairman-backup-"+today()+".json";a.click();}
