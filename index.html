@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-97 · it speaks";
+const BUILD="C-98 · disputes live apart";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -940,6 +940,16 @@ function fee(j){
 }
 
 const sum=(a,f)=>a.reduce((s,j)=>s+f(j),0);
+
+/* ---- disputes ------------------------------------------------------------
+   Money that's gone legal is not a receivable, it's a case. It leaves every
+   collection nag — no "chase this invoice" advice on something in mediation —
+   and lives on its own screen with a stage, the contested amount, and a
+   dated chronology that can be handed to an attorney as-is. */
+const DSTAGES=["Negotiation","Demand sent","Demand expired","Pre-suit","Mediation","Filed","Trial","Settled"];
+const inDispute=j=>!!(j&&j.disputeStage&&j.disputeStage!=="Settled");
+const disputes=()=>D.jobs.filter(j=>j.disputeStage);
+const openDisputes=()=>D.jobs.filter(inDispute);
 /* priority: High > Moderate > Low, then soonest due date */
 const PRIO=["High","Moderate","Low"];
 const PCOL2={High:"out",Moderate:"rdy",Low:"lost"};
@@ -2486,7 +2496,7 @@ function pingTriggers(){
  if(!p.s.off&&!p.s.in&&p.s.target&&mins(hm(new Date()))>mins(p.s.target)+15)aiPing("late");
  if(p.gap!=null&&p.gap>30&&p.left>45)aiPing("behind");
  if(p.s.in&&!p.s.out&&p.left!=null&&p.left<=60&&p.needed>30)aiPing("endshift");
- if(byStage("Invoiced").some(j=>ago(j.invDate)>=14))aiPing("stale");
+ if(byStage("Invoiced").some(j=>!inDispute(j)&&ago(j.invDate)>=14))aiPing("stale");
  if(billable().some(j=>j.readyDate&&ago(j.readyDate)>=2))aiPing("billable");
 }
 function dismissMsg(id){const m=AIMSG().find(x=>x.id===id);if(m)m.read=true;save();render();}
@@ -2520,7 +2530,7 @@ function aiMsgsHTML(){
 function brief(){
  const h=new Date().getHours();
  const hello=(h<12?"Good morning":h<17?"Good afternoon":"Good evening")+", "+(D.me.name||"Benny")+".";
- const est=byStage("Estimating"),ready=billable(),out=byStage("Invoiced");
+ const est=byStage("Estimating"),ready=billable(),out=byStage("Invoiced").filter(j=>!inDispute(j));
  const owed=sum(out,j=>fee(j).due), tobill=sum(ready,j=>fee(j).due);
  const plans=D.plans.filter(p=>p.date===today()), left=plans.filter(p=>!p.done);
  const L=[],A=[];
@@ -2555,6 +2565,7 @@ function brief(){
  if(wtg.length)bits.push(`<b>${wtg.length}</b> waiting to start`);
  if(ready.length)bits.push(`<b>${ready.length}</b> ready to bill`);
  if(out.length)bits.push(`<b>${money0(owed)}</b> out for collection`);
+ if(openDisputes().length)bits.push(`<b>${money0(sum(openDisputes(),j=>fee(j).due))}</b> in dispute — handled on its own screen`);
  L.push(bits.length?bits.join(" &nbsp;·&nbsp; ")+".":"Nothing active on the board right now.");
  const stale=[...out].filter(j=>ago(j.invDate)>=14).sort((a,b)=>ago(b.invDate)-ago(a.invDate))[0];
  const sitting=[...ready].sort((a,b)=>ago(b.readyDate)-ago(a.readyDate))[0];
@@ -2872,6 +2883,7 @@ function renderSide(){
   ["summary","▤","Estimates",""],
   ["invoices","⎙","Invoices",(ready+inv)||""],
   ["money","＄","Money",""],
+  ["disputes","⚖","Disputes",openDisputes().length||""],
   ["reports","◧","Analytics",""]];
  el.innerHTML=`<div class="slogo">
    <div class="sname">CHAIRMAN</div>
@@ -3705,6 +3717,7 @@ R.job=({id})=>{
     visitOf(j).state==="onsite"?"◉ On site now":"◷ Visit "+(visitOf(j).at?fmt(visitOf(j).at):"scheduled")}</span>`:""}
   <span class="chip v-${PCOL2[j.priority||"Moderate"]}">${esc(j.priority||"Moderate")} priority</span>
   ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"rdy"}">${j.dueDate<today()?"Overdue "+fmt(j.dueDate):"Due "+fmt(j.dueDate)}</span>`:""}
+  ${j.disputeStage?`<span class="chip v-out" style="cursor:pointer" onclick="go('disputes')">⚖ ${esc(j.disputeStage)}</span>`:""}
   ${forContractor(j)?`<span class="chip v-est">Contractor job</span>`:""}
   ${j.loss?`<span class="chip v-${C}">${esc(j.loss)}</span>`:""}
   ${j.mport&&j.mport!=="Not needed"?`<span class="chip ${j.mport==="Done"?"v-paid":"v-rdy"}">Matterport ${esc(j.mport)}</span>`:""}</div>
@@ -3908,9 +3921,83 @@ function flowBtn(j,big){
 function flowNext(){
  const order=["Invoiced","Complete","Estimating"];   /* Waiting never nags — it's not his move */
  for(const st of order){
-  for(const j of byStage(st)){const fl=flowOf(j);if(fl)return {j,fl};}
+  for(const j of byStage(st)){if(inDispute(j))continue;const fl=flowOf(j);if(fl)return {j,fl};}
  }
  return null;
+}
+
+/* ================= DISPUTES ================= */
+R.disputes=()=>{
+ const list=disputes().sort((a,b)=>(inDispute(b)?1:0)-(inDispute(a)?1:0));
+ const open=list.filter(inDispute);
+ return `<div class="topbar"><div class="grow"><h1>Disputes</h1>
+  <div class="sub2">${open.length?plural(open.length,"open case")+" · "+money0(sum(open,j=>fee(j).due))+" of your money contested":"No open cases"}</div></div></div>
+ ${list.length?list.map(j=>{const f=fee(j);const stage=j.disputeStage;
+  const chron=disputeChron(j);
+  return `<div class="pan" style="border-color:${inDispute(j)?"var(--c-out)":"var(--c-paid)"};border-left-width:3px">
+   <div class="row between" style="flex-wrap:wrap;gap:10px">
+    <div class="grow" style="cursor:pointer" onclick="go('job',{id:'${j.id}'})">
+     <div class="ser" style="font-size:20px">${esc(jobName(j))}</div>
+     <div class="xs dim" style="margin-top:4px">${esc(j.address||"")}${j.insurer?" · "+esc(j.insurer):""}${j.claim?" · claim "+esc(j.claim):""}</div></div>
+    <span class="st ${inDispute(j)?"s-out":"s-paid"}"><span class="m">⚖</span>${esc(stage)}</span></div>
+   <div class="segwrap" style="margin-top:14px">${DSTAGES.map(s=>`<button type="button" class="opt2 ${s===stage?"on":""}"
+     onclick="setDisputeStage('${j.id}',${JSON.stringify(s).replace(/"/g,"&quot;")})">${s}</button>`).join("")}</div>
+   <div class="ln2" style="margin-top:12px"><span class="k">Contested on the claim</span>
+    <b class="money v-out" style="cursor:pointer" onclick="quickEdit('${j.id}','disputeAmt','Contested amount')">${j.disputeAmt?money(j.disputeAmt):"— tap to set —"}</b></div>
+   <div class="ln2"><span class="k">Your cut outstanding</span><b class="money">${money(f.due)}</b></div>
+   ${chron.length?`<div class="lab" style="margin-top:16px">Chronology — ${plural(chron.length,"entry")}</div>
+    ${chron.slice(0,4).map(e=>`<div class="frow"><div class="grow">
+      <div class="nm" style="font-size:13.5px;white-space:normal">${esc(e.text.length>150?e.text.slice(0,148)+"…":e.text)}</div>
+      <div class="mt">${esc(e.date)}${e.kind?" · "+esc(e.kind):""}</div></div></div>`).join("")}
+    ${chron.length>4?`<p class="xs dim" style="margin:6px 0 0">+ ${chron.length-4} more in the export</p>`:""}`:""}
+   <div class="upbar" style="margin-top:14px">
+    <button onclick="copyText(disputeChronText(job('${j.id}')))">Copy chronology</button>
+    <button onclick="printChron('${j.id}')">⎙ Chronology PDF</button>
+    <button onclick="addNote('${j.id}')">+ Log an event</button>
+   </div></div>`;}).join("")
+ :`<div class="empty"><div class="g dim">⚖</div><div class="ser" style="font-size:21px">Nothing in dispute</div>
+   <p class="sm dim" style="margin-top:8px">Flag any job as a dispute from its page — it leaves the collection nags and moves here.</p></div>`}
+ <p class="xs dim" style="margin:18px 0 0">This screen organizes your records — it is not legal advice. Deadlines and strategy belong to your attorney.</p>`;
+};
+function setDisputeStage(id,s){const j=job(id);if(!j)return;
+ j.disputeStage=s;save();render();
+ toast(s==="Settled"?"Settled — back to normal handling":"Stage: "+s);}
+function markDispute(id){const j=job(id);if(!j)return;
+ if(j.disputeStage){delete j.disputeStage;save();render();toast("Dispute flag removed");return;}
+ j.disputeStage="Negotiation";save();render();toast("Moved to Disputes — collection nags stop");}
+/* everything dated on the job, oldest first — the shape a mediator wants */
+function disputeChron(j){
+ const out=[];
+ if(j.created2)out.push({date:j.created2,kind:"Job",text:"Job opened / estimate work began"});
+ if(j.invDate)out.push({date:j.invDate,kind:"Invoice",text:"Invoice "+(j.invNo||"")+" issued"+(j.total?" — "+money(j.total)+" contract":"")});
+ coll("notes",j.id).forEach(n=>out.push({date:isoDay(new Date(n.created)),kind:n.kind||"Note",text:n.text}));
+ (D.log||[]).filter(x=>x.jobId===j.id).forEach(x=>out.push({date:isoDay(new Date(x.created)),kind:"Call/Log",text:(x.who?x.who+": ":"")+(x.text||"")}));
+ payList(j).forEach(p=>out.push({date:p.date||"(date unknown)",kind:"Payment to me",text:money(p.amount)+(p.note?" — "+p.note:"")}));
+ return out.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+function disputeChronText(j){
+ const f=fee(j);
+ return [
+  "DISPUTE CHRONOLOGY — "+jobName(j),
+  "Property: "+(j.address||"—"),
+  "Carrier: "+(j.insurer||"—")+(j.claim?"   Claim: "+j.claim:""),
+  "Company: "+(j.contractor||"—"),
+  "Stage: "+(j.disputeStage||"—"),
+  "Contract/estimate total: "+money(j.total),
+  (j.disputeAmt?"Contested amount: "+money(j.disputeAmt):""),
+  "Fee outstanding to "+(D.me.name||"estimator")+": "+money(f.due),
+  "Prepared "+today()+" from Chairman Command Center records.",
+  "","--- TIMELINE ---",
+  ...disputeChron(j).map(e=>e.date+"  ["+e.kind+"]  "+e.text.replace(/\n+/g," / "))
+ ].filter(Boolean).join("\n");
+}
+function printChron(id){
+ const j=job(id);if(!j)return;
+ const pa=document.getElementById("printarea");
+ pa.innerHTML=`<div style="font:11pt/1.6 Georgia,serif;color:#111;max-width:7.5in">
+  <h2 style="font:700 16pt Georgia">Dispute Chronology — ${esc(jobName(j))}</h2>
+  <pre style="white-space:pre-wrap;font:10.5pt/1.65 Georgia,serif">${esc(disputeChronText(j))}</pre></div>`;
+ window.print();pa.innerHTML="";
 }
 
 /* ---------- partner split breakdown ---------- */
@@ -4153,7 +4240,7 @@ function quickEdit(id,field,label){
  setTimeout(()=>$("#qe")?.focus(),90);}
 function saveQuick(id,field){const j=job(id);
  const v=$("#qe").value.trim();
- j[field]=(field==="total"||field==="advance")?(+v||0):v;
+ j[field]=(field==="total"||field==="advance"||field==="disputeAmt")?(+v||0):v;
  /* the $30k threshold means a total change can flip which deal applies */
  const moved=(field==="total")&&applyAcctRule(j);
  save();close_();render();
@@ -4183,6 +4270,8 @@ function samePropHTML(j){
       <div class="mt">${esc(s.loss||"—")} · ${esc(s.status)}${s.total?" · "+money0(s.total):""}</div></div></div>`).join("")}`
   :`<p class="xs dim" style="margin:8px 0 12px">Only job at this address so far.</p>`}
   <button class="btn sec" onclick="dupJobSheet('${j.id}')">⧉ Same property — another company</button>
+  <button class="btn ${j.disputeStage?"":"sec"}" style="${j.disputeStage?"background:var(--c-lost);border-color:var(--c-lost)":""}"
+   onclick="markDispute('${j.id}')">${j.disputeStage?"⚖ In dispute ("+esc(j.disputeStage)+") — unflag":"⚖ Mark as dispute / legal"}</button>
  </div>`;
 }
 function dupJobSheet(id){
@@ -4536,7 +4625,8 @@ function sendInv(id){
 
 /* ================= MONEY ================= */
 R.money=()=>{
- const inv=byStage("Invoiced"),paid=byStage("Paid"),ready=billable();
+ const inv=byStage("Invoiced").filter(j=>!inDispute(j)),paid=byStage("Paid"),ready=billable();
+ const disp=openDisputes(),dispDue=sum(disp,j=>fee(j).due);
  const owed=sum(inv,j=>fee(j).due),tobill=sum(ready,j=>fee(j).due),got=sum(paid,j=>fee(j).gross);
  return `<div class="lab">✦ Money</div>
  <h1 class="disp" style="margin:12px 0 6px">Where<br> You Stand</h1>
@@ -4546,6 +4636,10 @@ R.money=()=>{
   <div class="lab v-out">◉ Owed to you</div>
   <div class="num money v-out" style="margin:14px 0 4px">${money(owed)}</div>
   <div class="xs v-out" style="letter-spacing:.16em;text-transform:uppercase;opacity:.75">${plural(inv.length,"invoice")} out</div></div>
+ ${disp.length?`<div class="pan" style="border-color:var(--c-lost);cursor:pointer" onclick="go('disputes')">
+  <div class="lab">⚖ In dispute — kept apart</div>
+  <div class="num money" style="margin:14px 0 4px">${money(dispDue)}</div>
+  <div class="xs dim" style="letter-spacing:.16em;text-transform:uppercase">${plural(disp.length,"case")} · legal, not collections · tap to open</div></div>`:""}
  <div class="strip">
   <div><span class="k">Unbilled</span><span class="v money v-rdy">${money0(tobill)}</span></div>
   <div><span class="k">Collected</span><span class="v money v-paid">${money0(got)}</span></div>
@@ -5628,8 +5722,10 @@ function aiContext(){
    +`${forContractor(j)?" | for contractor "+j.contractor:""}`
    +`${j.insurer?" | "+j.insurer:""}${j.claim?" claim "+j.claim:""}`
    +` | fee ${fee(j).kind==="retainer"?"RETAINER (do not bill)":fee(j).kind==="flat"?"flat":fee(j).rate+"%"+(fee(j).kind==="aftersubs"?" after subs":"")}`);});
- const owed=sum(byStage("Invoiced"),j=>fee(j).due), tobill=sum(byStage("Complete"),j=>fee(j).due);
+ const owed=sum(byStage("Invoiced").filter(j=>!inDispute(j)),j=>fee(j).due), tobill=sum(byStage("Complete").filter(j=>!inDispute(j)),j=>fee(j).due);
  L.push(`\nMONEY: ${money(owed)} invoiced and unpaid, ${money(tobill)} finished but not yet billed.`);
+ if(openDisputes().length)L.push(`\nIN DISPUTE / LEGAL — these are legal matters, NOT collections. Never suggest nudging, chasing or invoicing these; suggest only documentation, chronology-keeping, or talking to the attorney:\n`
+  +openDisputes().map(j=>`- ${jobName(j)}: stage ${j.disputeStage}, contested ${money(j.disputeAmt||0)}, his cut outstanding ${money(fee(j).due)}`).join("\n"));
  const recent=(D.log||[]).slice(0,8);
  if(recent.length)L.push(`\nDAYBOOK (recent conversations):\n`+recent.map(x=>`- ${isoDay(new Date(x.created))} ${x.who||"?"}: ${(x.text||"").slice(0,140)}${x.amount?" ($"+x.amount+")":""}`).join("\n"));
  const pl=D.plans.filter(p=>p.date===today());
@@ -5641,6 +5737,7 @@ function aiJobContext(j){
  const L=[`JOB: ${jobName(j)}`,`Status: ${j.status}`,`Property: ${j.address||"n/a"}`,
   `Type: ${j.loss||"n/a"}`,`Carrier: ${j.insurer||"n/a"}`,`Claim #: ${j.claim||"n/a"}`,
   `Estimate total: ${money(j.total)}`,`Your fee: ${money(f.gross)}${f.adv?` (less ${money(f.adv)} advance = ${money(f.due)} due)`:""}`];
+ if(j.disputeStage)L.push(`IN DISPUTE — stage: ${j.disputeStage}${j.disputeAmt?`, contested amount ${money(j.disputeAmt)}`:""}. This is a legal matter, not a collection. Do not suggest payment nudges; only documentation and attorney coordination.`);
  if(forContractor(j))L.push(`This is for contractor ${j.contractor}${j.contractorContact?" (contact "+j.contractorContact+")":""}; property owner is ${j.owner}. Invoice goes to ${billParty(j).name}.`);
  else L.push(`Client / owner: ${j.owner||"n/a"}`);
  if(j.startDate)L.push(`Scheduled ${j.startDate} to ${j.dueDate||j.startDate}`);
