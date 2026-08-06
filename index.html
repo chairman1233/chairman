@@ -369,6 +369,12 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 #side .sitem:hover{background:var(--panel2)}
 #side .sitem.on{background:var(--sig);color:var(--inv)}
 #side .sitem.on .ic3{opacity:1}
+#side .sitem.sub{padding-left:13px;font-size:12.5px;color:var(--ink3);margin-bottom:1px}
+#side .sitem.sub .ic3{width:19px}
+#side .sitem.sub.cur{color:var(--ink);background:var(--panel2)}
+nav button .nb{position:absolute;top:7px;right:calc(50% - 26px);min-width:16px;height:16px;
+ border-radius:999px;background:var(--c-rdy);color:#151212;font:700 9.5px/16px var(--sans);
+ font-style:normal;text-align:center;padding:0 4px}
 #side .sbadge{margin-left:auto;font:600 10.5px var(--sans);color:var(--ink3);background:var(--panel2);
  padding:2px 8px;border-radius:10px}
 #side .sitem.on .sbadge{background:rgba(255,255,255,.18);color:var(--inv)}
@@ -695,17 +701,12 @@ body .col .ch .n{color:inherit}
 <aside id="side"></aside>
 <div class="wrap" id="view"></div>
 <div id="printarea"></div>
-<!-- four destinations. Everything else is one tap away behind More —
-     fewer places to go is the point, not a smaller screen. -->
-<nav>
- <button data-v="today" onclick="go('today')"><span class="g">◉</span>Today</button>
- <button data-v="jobs" onclick="go('jobs')"><span class="g">▤</span>Pipeline</button>
- <button data-v="money" onclick="go('money')"><span class="g">✦</span>Money</button>
- <button data-v="__more" onclick="moreNav()"><span class="g">☰</span>More</button>
-</nav>
+<!-- Four destinations, rendered from navGroups() so the bottom bar and the
+     sidebar can never disagree about labels or badge counts. -->
+<nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-104 · the clock tells the truth";
+const BUILD="C-105 · four destinations";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1107,18 +1108,46 @@ function leadCreate(){
  toast("Lead's on the board — original text saved to its notes");
 }
 
-/* the rest of the app, one tap behind More — grouped so the eye can skip */
-function moreNav(){
- const grp=(label,items)=>`<div class="lab" style="margin:18px 0 8px">${label}</div>
-  <div class="segwrap">${items.map(([v,l,badge])=>`<button class="opt2 ${V===v?"on":""}"
-   onclick="close_();go('${v}')">${l}${badge?" · "+badge:""}</button>`).join("")}</div>`;
- sheet("Everything else",
-  grp("Plan",[["cal","◷ Calendar"],["clock","◔ Time clock"],["foreman","◉ Foreman"],["log","✎ Daybook"]])
- +grp("Work",[["map","◎ Map"],["docs","▣ Documents"],["summary","▤ Estimates"],["invoices","⎙ Invoices"]])
- +grp("People & money",[["accounts","▲ Accounts",String(ACCOUNTS().length||"")],["subs","◈ Crew"],
-   ["disputes","⚖ Disputes",String(openDisputes().length||"")],["reports","◧ Analytics"]])
- +grp("Assistant",[["ai","✦ Chairman AI"]])
- +`<button class="btn sec" style="margin-top:22px" onclick="close_();settings()">⚙ Settings</button>`);
+/* ---- one nav definition -----------------------------------------------------
+   The sidebar and the bottom bar each computed their own counts and disagreed
+   (Accounts 3 in one, 4 in the other; Invoices and Foreman had none at all).
+   Badges are computed ONCE here and both navs read the same object. */
+/* ONE accessor. Both navs call it; nothing else computes a badge.
+   These return exactly what the app already showed — including the counts that
+   are known to be wrong. They are deliberately NOT reconciled here: the money
+   engine fix replaces this data, and this function is the single place it
+   lands. Fixing them now would mean building them twice. */
+function navBadge(section){
+ switch(section){
+  case "jobs":     return D.jobs.filter(j=>!["Paid","Lost"].includes(j.status)).length;
+  case "cal":      return D.jobs.filter(j=>j.status==="Estimating"&&j.dueDate&&j.dueDate<=today()).length;
+  case "foreman":  return (typeof foremanItems==="function")?foremanItems().length:0;
+  case "invoices": return byStage("Invoiced").length+billable().length;
+  case "accounts": return ACCOUNTS().filter(a=>acctStats(a.id).open).length;
+  case "disputes": return openDisputes().length;
+  default:         return 0;
+ }
+}
+/* four destinations; everything else nests underneath one of them.
+   Top-level rows carry no badge — none of them had one before. */
+function navGroups(){return [
+ ["today","◉","Today",[["today","Dashboard"],["clock","Time clock"],["log","Daybook"],["foreman","Foreman"]]],
+ ["jobs","▤","Jobs",[["jobs","Pipeline"],["cal","Calendar"],["map","Map"],["docs","Documents"],["subs","Crew"],["accounts","Accounts"],["disputes","Disputes"]]],
+ ["money","＄","Money",[["money","Overview"],["invoices","Invoices"],["summary","Estimates"],["reports","Analytics"]]],
+ ["business","◇","Business",[["business","Overview"],["ai","Chairman AI"]]]
+];}
+/* which of the four owns the screen you're on */
+const NAVOF={today:"today",clock:"today",log:"today",foreman:"today",
+ jobs:"jobs",job:"jobs",cal:"jobs",map:"jobs",docs:"jobs",subs:"jobs",sub:"jobs",
+ accounts:"jobs",account:"jobs",disputes:"jobs",
+ money:"money",invoice:"money",invoices:"money",summary:"money",reports:"money",
+ business:"business",ai:"business"};
+const navHome=()=>NAVOF[V]||"today";
+function renderNav(){
+ const el=document.getElementById("nav");if(!el)return;
+ const home=navHome();
+ el.innerHTML=navGroups().map(([k,ic,lab])=>`<button data-v="${k}" class="${home===k?"on":""}"
+   onclick="go('${k}')"><span class="g">${ic}</span>${lab}</button>`).join("");
 }
 function queueItems(){
  const items=[];
@@ -3222,32 +3251,28 @@ function briefHTML(){
 
 /* ================= ROUTER ================= */
 let V="today",P={};
-function go(v,p={}){V=v;P=p;
- document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",
-  b.dataset.v===v||(v==="job"&&b.dataset.v==="jobs")||(v==="invoice"&&b.dataset.v==="money")
-  ||(v==="sub"&&b.dataset.v==="subs")||(v==="cal"&&b.dataset.v==="cal")||(v==="log"&&b.dataset.v==="log")));
- render();window.scrollTo(0,0);}
+function go(v,p={}){
+ /* A restored view or an old link pointing at a destination that no longer
+    renders must land somewhere sensible, not on a blank pane. */
+ if(!R[v]){const home=NAVOF[v];v=(home&&R[home])?home:"today";}
+ V=v;P=p;
+ render();window.scrollTo(0,0);}   /* renderNav() sets the active group from NAVOF */
 function renderSide(){
  const el=document.getElementById("side");if(!el)return;
- const t=today();
- const act=D.jobs.filter(j=>!["Paid","Lost"].includes(j.status)).length;
- const inv=byStage("Invoiced").length;
- const due=D.jobs.filter(j=>j.status==="Estimating"&&j.dueDate&&j.dueDate<=t).length;
- const ready=byStage("Complete").length;
- const alerts=(typeof foremanItems==="function")?foremanItems().length:0;
- /* grouped, so the eye lands on a section instead of scanning fifteen rows */
- const groups=[
-  ["",[["today","▦","Dashboard",""],["jobs","▤","Pipeline",act||""],["money","＄","Money",""]]],
-  ["Plan",[["cal","◷","Calendar",due||""],["clock","◔","Time clock",""],["foreman","◉","Foreman",alerts||""],["log","✎","Daybook",""]]],
-  ["Work",[["map","◎","Map",""],["docs","▣","Documents",""],["summary","▤","Estimates",""],["invoices","⎙","Invoices",(ready+inv)||""]]],
-  ["People",[["accounts","▲","Accounts",ACCOUNTS().filter(a=>acctStats(a.id).open).length||""],["subs","◈","Crew",""],
-   ["disputes","⚖","Disputes",openDisputes().length||""],["reports","◧","Analytics",""]]]];
- const item=([v,ic,lab,b])=>`<button class="sitem ${(V===v||(V==="job"&&v==="jobs")||(V==="invoice"&&v==="money")||(V==="sub"&&v==="subs")||(V==="account"&&v==="accounts"))?"on":""}"
-    onclick="go('${v}')"><span class="ic3">${ic}</span>${lab}${b?`<span class="sbadge">${b}</span>`:""}</button>`;
+ /* Same four groups as the bottom bar, and every badge comes from navBadge().
+    Sub-items nest under the group you're in — four rows at rest, not thirteen. */
+ const home=navHome();
  el.innerHTML=`<div class="slogo">
    <div class="sname">CHAIRMAN</div>
    <div class="xs dim" style="letter-spacing:.28em;margin-top:-2px">EST. CO.</div></div>
-  ${groups.map(([g,its])=>`${g?`<div class="lab" style="padding:12px 12px 5px;font-size:9px;opacity:.7">${g}</div>`:""}${its.map(item).join("")}`).join("")}
+  ${navGroups().map(([k,ic,lab,subs])=>{
+   const open=home===k;
+   return `<button class="sitem ${open?"on":""}" onclick="go('${k}')">
+     <span class="ic3">${ic}</span>${lab}</button>
+    ${open?subs.map(([v,sl])=>{const sb=navBadge(v);
+      return `<button class="sitem sub ${V===v?"cur":""}" onclick="go('${v}')">
+      <span class="ic3"></span>${sl}${sb?`<span class="sbadge">${sb}</span>`:""}</button>`;}).join(""):""}`;
+  }).join("")}
   <button class="sitem ${V==="ai"?"on":""}" onclick="go('ai')"><span class="ic3">✦</span>AI assistant</button>
   <button class="sitem" onclick="settings()"><span class="ic3">⚙</span>Settings</button>
   <div class="sfoot">
@@ -3288,7 +3313,7 @@ function render(){
   const sd=document.getElementById("side");if(sd)sd.innerHTML="";
   applyZoom();return;
  }
- paintView((R[V]||R.today)(P));renderSide();applyZoom();syncHdrH();hdDateTick();
+ paintView((R[V]||R.today)(P));renderSide();renderNav();applyZoom();syncHdrH();hdDateTick();
  try{wireTape()}catch(e){}
  if(V==="jobs"&&D.view==="board")wireDrag();
  if(V==="cal"&&D.calView!=="agenda")wireMonth();
@@ -4316,6 +4341,29 @@ function flowNext(){
  }
  return null;
 }
+
+/* ================= BUSINESS =================
+   The fourth destination. Settings, the assistant, backup and version history
+   were only reachable through a catch-all sheet or the gear icon. */
+R.business=()=>{
+ const row=(icon,label,sub,fn)=>`<div class="frow" style="cursor:pointer" onclick="${fn}">
+   <span class="ftile" style="--tint:var(--c-est)">${icon}</span>
+   <div class="grow"><div class="nm">${label}</div><div class="mt">${sub}</div></div>
+   <span class="dim">→</span></div>`;
+ return `<div class="topbar"><div class="grow"><h1>Business</h1>
+   <div class="sub2">${esc((D.me||{}).biz||"Chairman Remodeling")}</div></div></div>
+ <div class="pan">
+  ${row("⚙","Settings","Your rate, schedule, theme, AI provider, voice","settings()")}
+  ${row("✦","Chairman AI",aiReady()?"Connected · "+esc(AIPROV[AICFG().provider].label):"Not connected yet","go('ai')")}
+  ${row("☁","Cloud sync &amp; login",signedIn()?"Signed in as "+esc((SESS.user||{}).email||"you"):"Set up phone ↔ desktop sync","cloudSetup()")}
+  ${row("⤓","Backup &amp; restore","A JSON copy of the board — keys are never included","backup()")}
+  ${row("↺","Version history","Roll the board back to an earlier snapshot","historySheet()")}
+ </div>
+ <div class="strip" style="margin-top:14px">
+  <div><span class="k">Jobs</span><span class="v">${D.jobs.length}</span></div>
+  <div><span class="k">Companies</span><span class="v">${ACCOUNTS().length}</span></div>
+  <div><span class="k">Build</span><span class="v" style="font-size:15px">${esc(BUILD.split(" ")[0])}</span></div></div>`;
+};
 
 /* ================= DISPUTES ================= */
 R.disputes=()=>{
