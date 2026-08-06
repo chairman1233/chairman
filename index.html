@@ -665,7 +665,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-86 · a key per provider";
+const BUILD="C-87 · one property, many companies";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1148,14 +1148,14 @@ async function prepFile(f){
   return {data:c.toDataURL("image/jpeg",.82),w,h};
  }catch(e){return {data:raw,w:0,h:0};}
 }
-const FCAT=["Photo","Contract","Estimate","Email","Other"];
+const FCAT=["Photo","Contract","Estimate","Policy","Email","Other"];
 /* Document type is a SEPARATE visual channel from pipeline stage. Stage owns the
    pill; type owns a filled square tile. Different shape, different position, so
    the eye never has to decode one against the other. Five types is under the
    limit where colour stops helping (~7 alone, ~4 when read alongside anything
    else) — and every tile carries its glyph too, so colour is never the only cue. */
-const FICON={Photo:"◙",Contract:"✍",Estimate:"$",Email:"✉",Other:"▤"};
-const FTINT={Photo:"#7FD4C1",Contract:"#C9AEF5",Estimate:"#FFC98F",Email:"#9FC4F5",Other:"#A9AFB5"};
+const FICON={Photo:"◙",Contract:"✍",Estimate:"$",Policy:"⚖",Email:"✉",Other:"▤"};
+const FTINT={Photo:"#7FD4C1",Contract:"#C9AEF5",Estimate:"#FFC98F",Policy:"#F5C8A0",Email:"#9FC4F5",Other:"#A9AFB5"};
 const fTint=c=>FTINT[c]||FTINT.Other;
 /* "Is this signed?" is unsolved across every CRM in this market — it lives as one
    word in a text column. Here it is a badge on the tile itself. */
@@ -3392,9 +3392,11 @@ R.job=({id})=>{
     ${j.contractorPhone?`<div class="ln2"><span class="k">Contractor</span><b><a href="tel:${esc(j.contractorPhone.replace(/[^0-9+]/g,""))}" style="color:inherit">${esc(j.contractorPhone)}</a></b></div>`:""}`}
   <div class="ln2"><span class="k">${isProject(j)?"Contract total":"Estimate total"}</span>
    <b class="money ser v-${C}" style="font-size:19px;cursor:pointer" onclick="quickEdit('${j.id}','total','${isProject(j)?"Contract":"Estimate"} total')">${j.total?money0(j.total):"— tap to add —"}</b></div>
-  <div class="ln2"><span class="k">Job type</span><b class="v-${C}">${esc(j.loss||"—")}</b></div>
+  <div class="ln2"><span class="k">Job type</span>
+   <b class="v-${C}" style="cursor:pointer" onclick="quickPick('${j.id}','loss','What kind of job?',LOSS)">${esc(j.loss||"— tap to pick —")}</b></div>
   <div class="ln2"><span class="k">Matterport</span>
-   <b class="${j.mport==="Done"?"v-paid":j.mport&&j.mport!=="Not needed"?"v-rdy":""}">${esc(j.mport||"Not needed")}</b></div>
+   <b class="${j.mport==="Done"?"v-paid":j.mport&&j.mport!=="Not needed"?"v-rdy":""}" style="cursor:pointer"
+    onclick="quickPick('${j.id}','mport','Matterport / 3D scan',MPORT)">${esc(j.mport||"Not needed")}</b></div>
   ${mportBillHTML(j)}
   <div class="ln2"><span class="k">Matterport link</span>
    ${j.mportLink?`<a href="${esc(j.mportLink)}" target="_blank" rel="noopener" class="v-rdy" style="font-size:14px">Open scan →</a>`
@@ -3428,7 +3430,9 @@ R.job=({id})=>{
    <button onclick="pickFiles('${j.id}','Photo')">⬆ Photos</button>
    <button onclick="pickFiles('${j.id}','Contract')">⬆ Signed contract</button></div>
   ${!j.total?`<button class="btn sec" onclick="readDoc('${j.id}')" style="margin-top:12px">✦ Read the estimate &amp; fill this in</button>`:""}
+  ${policyBtnHTML(j)}
  </div>
+ ${samePropHTML(j)}
  ${splitHTML(j)}
  ${extrasHTML(j)}
  ${j.status==="Estimating"?`<button class="btn" onclick="markDone('${j.id}')">✦ Estimate complete — bill it</button>`:""}
@@ -3781,6 +3785,18 @@ function askReview(id){
  sheet("Ask for a review",`<pre class="inv">${esc(body)}</pre>
   <button class="btn" onclick="location.href='mailto:${encodeURIComponent(B.email||"")}?subject=${encodeURIComponent("Thanks — and a quick favour")}&body=${encodeURIComponent(body)}'">✉ Email it</button>
   <button class="btn sec" onclick="copyText(${JSON.stringify(body).replace(/"/g,"&quot;")})">Copy for a text</button>`);}
+/* Enum fields were rendered as dead text on the job screen — the only way to
+   change one was to reopen the whole edit form. Same defect the owner field had.
+   quickEdit is for free text; this is its counterpart for fixed choices. */
+function quickPick(id,field,label,opts){
+ const j=job(id);if(!j)return;
+ sheet(label,`<div class="segwrap" style="margin-bottom:6px">
+   ${opts.map(o=>`<button type="button" class="opt2 ${((j[field]||"")===o)?"on":""}"
+    onclick="setPick('${id}','${field}',${JSON.stringify(o).replace(/"/g,"&quot;")})">${esc(o)}</button>`).join("")}
+  </div>`);
+}
+function setPick(id,field,val){const j=job(id);if(!j)return;
+ j[field]=val;save();close_();render();toast(val);}
 function quickEdit(id,field,label){
  const j=job(id);
  sheet(label,`<label><span class="t">${esc(label)}</span>
@@ -3791,6 +3807,71 @@ function saveQuick(id,field){const j=job(id);
  const v=$("#qe").value.trim();
  j[field]=(field==="total"||field==="advance")?(+v||0):v;
  save();close_();render();toast("Saved");}
+/* ---------- same property, different company ----------------------------
+   Mitigation for one outfit, the remodel for another, one house. The property
+   facts are shared; the money never is. Address is the natural key here — it is
+   the thing that genuinely identifies a job, far better than a client name. */
+const normAddr=a=>(a||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const PROP_FIELDS=["owner","ownerEmail","client","address","lat","lon","phone",
+ "insurer","claim","loss","who","priority","mportLink","jobFor","billTo"];
+function propId(j){if(!j.propId){j.propId=uid();save();}return j.propId;}
+function sameProperty(j){
+ if(!j)return [];
+ const key=normAddr(j.address);
+ return D.jobs.filter(x=>x.id!==j.id&&(
+  (j.propId&&x.propId===j.propId)||(key&&normAddr(x.address)===key)));
+}
+function samePropHTML(j){
+ const sibs=sameProperty(j);
+ return `<div class="pan" style="margin-top:14px">
+  <div class="lab">⧉ This property</div>
+  ${sibs.length?`<p class="xs dim" style="margin:8px 0 12px">${plural(sibs.length+1,"job")} at ${esc(j.address||"this address")}.</p>
+   ${sibs.map(s=>`<div class="frow" style="cursor:pointer" onclick="go('job',{id:'${s.id}'})">
+     <span class="ftile" style="--tint:${jobColor(s)||"var(--c-"+ck(s.status)+")"}">⌂</span>
+     <div class="grow"><div class="nm">${esc(jobName(s))}</div>
+      <div class="mt">${esc(s.loss||"—")} · ${esc(s.status)}${s.total?" · "+money0(s.total):""}</div></div></div>`).join("")}`
+  :`<p class="xs dim" style="margin:8px 0 12px">Only job at this address so far.</p>`}
+  <button class="btn sec" onclick="dupJobSheet('${j.id}')">⧉ Same property — another company</button>
+ </div>`;
+}
+function dupJobSheet(id){
+ const j=job(id);if(!j)return;
+ const others=ACCOUNTS().filter(a=>a.id!==(j.accountId||""));
+ sheet("Copy to another company",`
+  <p class="sm mut" style="margin:0 0 4px">Owner, address, phone, carrier, claim number and job type come across.</p>
+  <p class="sm" style="margin:0 0 18px;color:var(--c-rdy)">The estimate total, your fee, the invoice, files, notes and logged time do <b>not</b> — it's a separate scope, so it starts empty.</p>
+  ${others.length?`<div class="lab" style="margin-bottom:10px">Which company?</div>
+   <div class="segwrap" style="margin-bottom:6px">
+   ${others.map(a=>`<button type="button" class="opt2" style="color:${acctColor(a)};border-color:${acctColor(a)}80"
+     onclick="dupJobTo('${id}','${a.id}')">${esc(a.name)}</button>`).join("")}</div>`:""}
+  <label style="margin-top:18px"><span class="t">${others.length?"Or a company not listed":"Company name"}</span>
+   <input class="in" id="dupnew" placeholder="Green Dynasty Group"></label>
+  <button class="btn" onclick="dupJobTo('${id}','')">Copy it over</button>`);
+}
+function dupJobTo(id,acctId){
+ const src=job(id);if(!src)return;
+ let aid=acctId,name="";
+ if(aid){const a=ACCOUNTS().find(x=>x.id===aid);name=a?a.name:"";}
+ else{
+  name=($("#dupnew")&&$("#dupnew").value.trim())||"";
+  if(!name){toast("Pick a company or type one in");return;}
+  const ex=ACCOUNTS().find(x=>normAcct(x.name)===normAcct(name));
+  if(ex){aid=ex.id;name=ex.name;}
+  else{const a={id:uid(),name,created:new Date().toISOString()};
+   D.accounts=ACCOUNTS().concat([a]);aid=a.id;}
+ }
+ const pid=propId(src);
+ const copy={id:uid(),status:"Estimating",created2:today(),propId:pid,
+  accountId:aid,contractor:name,jobFor:"Contractor",billTo:"Contractor",
+  feeMode:"pct",flat:0,total:0,advance:0};
+ PROP_FIELDS.forEach(f=>{const v=src[f];if(v!==undefined&&v!=="")copy[f]=v;});
+ copy.jobFor="Contractor";copy.billTo="Contractor";
+ copy.mport=src.mportLink?"Done":"Not needed";
+ const a=ACCOUNTS().find(x=>x.id===aid);
+ if(a&&a.feeMode){copy.feeMode=a.feeMode;if(a.feePct!=null)copy.feePct=a.feePct;}
+ D.jobs.unshift(copy);save();close_();go("job",{id:copy.id});
+ toast("Copied to "+name+" — now add the scope");
+}
 function markDone(id){const j=job(id);
  if(!j.total){toast("Add the estimate total");return newJob(id);}
  moveJob(id,"Complete");go("invoice",{id});}
@@ -4930,6 +5011,72 @@ const DOC_SYS=()=>`You read insurance restoration paperwork for ${D.me.name||"Be
  +'```json\n{"actions":[{"do":"set_details","job":"JOB NAME","total":38500,"claim":"...","insurer":"...","address":"...","owner":"...","loss":"Water"}]}\n```\n'
  +`Include only keys you actually found. loss must be one of: ${LOSS.join(", ")}. Omit the json block entirely if you could read nothing.`;
 
+/* ---------- policy breakdown ----------------------------------------------
+   A policy is not an estimate and must not share its prompt. What matters here
+   is what the carrier owes and where the traps are: sublimits, the wind/hail
+   deductible that is usually a percentage of Coverage A rather than a flat sum,
+   and whether Ordinance & Law exists at all — that one decides whether code
+   upgrades are billable or eaten. */
+const POLICY_SYS=()=>`You read US property insurance policies and declaration pages for ${D.me.name||"Benny"}, `
+ +`a Houston general contractor and insurance estimator preparing a repair scope.\n`
+ +`Report ONLY what is printed. Never infer, never fill a typical value. If a figure is not on the page, write "not shown".\n`
+ +`Cover, in this order:\n`
+ +`1. Named insured, carrier, policy number, and the policy period.\n`
+ +`2. Coverage limits line by line: A dwelling, B other structures, C contents, D loss of use / ALE.\n`
+ +`3. Deductibles. State the all-other-perils deductible AND the wind/hail or named-storm deductible separately. `
+ +`If wind/hail is a percentage, give the percentage AND the dollar amount it works out to against Coverage A, and show the arithmetic.\n`
+ +`4. Whether the dwelling is replacement cost or actual cash value, and whether contents are RCV or ACV. Say if roof surfaces carry a separate ACV or payment schedule endorsement — flag that loudly, it changes the whole claim.\n`
+ +`5. Ordinance or Law coverage: present or absent, and the limit or percentage. If absent, say so plainly — code upgrades will not be paid.\n`
+ +`6. Endorsements and sublimits that affect a repair scope: mold/fungi, water damage, service line, matching, cosmetic damage exclusions.\n`
+ +`7. Anything that will cost him money if he misses it, and anything you could not read.\n`
+ +`Plain sentences and short labelled lines. No preamble. Write it so it can be pasted into an email to an adjuster.`;
+function policyBtnHTML(j){
+ const fs=coll("files",j.id);
+ /* tagged Policy wins; otherwise fall back to reading the filename, since the
+    older uploads predate the Policy category */
+ const pol=fs.filter(f=>f.cat==="Policy")
+  .concat(fs.filter(f=>f.cat!=="Photo"&&f.cat!=="Policy"&&/polic|declarat|dec ?page/i.test(f.name||"")));
+ if(!pol.length)return `<p class="xs dim" style="margin:12px 0 0">Upload the policy or dec page as <b>⚖ Policy</b> and a coverage breakdown button appears here.</p>`;
+ return `<button class="btn sec" style="margin-top:12px;border-color:${fTint("Policy")};color:${fTint("Policy")}"
+   onclick="policyRead('${j.id}','${pol[0].fileId}')">⚖ Break down the policy — ${esc(pol[0].name.slice(0,28))}</button>`;
+}
+async function policyRead(jobId,fileId){
+ if(!aiReady())return sheet("Connect AI first",`<p class="sm mut">Set up an AI provider in Settings, then come back.</p>
+  <button class="btn" onclick="close_();settings()">Open settings</button>`);
+ if(!canReadDocs())return sheet("Claude or Gemini required",`<p class="sm mut">Reading documents needs Claude or Google Gemini.</p>
+  <button class="btn" onclick="close_();settings()">Switch provider</button>`);
+ const j=job(jobId);
+ sheet("Reading the policy",`<div class="pan"><div class="lab">◷ Working through the declarations…</div>
+   <p class="xs dim" style="margin-top:8px">Limits, deductibles, ordinance &amp; law, endorsements.</p></div>
+  <div id="polout"></div>`);
+ const out=$("#polout");
+ try{
+  const blob=await idbGet(fileId);
+  if(!blob)throw new Error("That file isn't on this device — re-upload it here.");
+  const meta=(D.files||[]).find(f=>f.fileId===fileId)||{};
+  const file=new File([blob],meta.name||"policy.pdf",{type:blob.type||meta.type||"application/pdf"});
+  const txt=await callAIFile(POLICY_SYS(),
+   `Property: ${j.address||"—"}. Insured: ${j.owner||"—"}. Break down this policy.`,file);
+  _polText=txt;_polJob=jobId;
+  out.innerHTML=`<div class="pan" style="border-color:${fTint("Contract")}">
+    <div class="lab" style="color:${fTint("Contract")}">⚖ Policy breakdown</div>
+    <div class="note bd" style="margin-top:12px;white-space:pre-wrap">${esc(txt)}</div></div>
+   <p class="xs dim" style="margin:10px 0 0">Read from the document only — check anything you're going to rely on against the page itself.</p>
+   <button class="btn" onclick="savePolicyNote()">Save to this job's notes</button>
+   <button class="btn sec" onclick="copyText(_polText)">Copy</button>`;
+ }catch(e){
+  out.innerHTML=`<div class="pan" style="border-color:var(--c-out)">
+   <div class="lab v-out">◉ Couldn't read it</div>
+   <p class="sm" style="margin:10px 0 0">${esc(e.message||String(e))}</p></div>`;
+ }
+}
+let _polText="",_polJob="";
+function savePolicyNote(){
+ if(!_polJob||!_polText)return;
+ D.notes.unshift({id:uid(),jobId:_polJob,text:"[Policy breakdown]\n"+_polText,
+  kind:"Note",pin:true,created:new Date().toISOString()});
+ save();close_();render();toast("Saved and pinned to the job");
+}
 function readDoc(jobId){
  if(!aiReady())return sheet("Connect AI first",`<p class="sm mut">Set up an AI provider in Settings, then come back.</p>
   <button class="btn" onclick="close_();settings()">Open settings</button>`);
