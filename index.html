@@ -674,7 +674,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-88 · the monthly nut";
+const BUILD="C-89 · required monthly revenue";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2809,102 +2809,162 @@ const sec=(t,em="")=>`<div class="sechead"><h2>${t}</h2>${em?`<span class="em di
    carry a third payday. Budgeting on a flat x2 understates the year by $3,200
    and makes those two months look like a windfall when they are just arithmetic.
    So paydays are counted for real off an anchor date, month by month. */
-const NUT_DEFAULT=()=>({on:true,buffer:0,
- pay:{amount:1600,every:"2weeks",anchor:today()},
+const NUT_DEFAULT=()=>({on:true,buffer:0,cash:0,cashAt:"",
+ pay:{amount:1600,every:"2weeks",anchor:"2026-07-31"},
  items:[["Rent",1500],["Child support",1200],["Electricity",250],["Groceries",600],
   ["Mobile",100],["Internet",100],["Peptides",300],["Gas",100],["Car insurance",200]]
   .map(([label,amount])=>({id:uid(),label,amount}))});
 const NUT=()=>{
  if(!D.nut)D.nut=NUT_DEFAULT();
- if(!D.nut.pay)D.nut.pay={amount:0,every:"2weeks",anchor:today()};
+ if(!D.nut.pay)D.nut.pay={amount:0,every:"2weeks",anchor:"2026-07-31"};
  if(!Array.isArray(D.nut.items))D.nut.items=[];
+ if(D.nut.cash===undefined)D.nut.cash=0;
+ if(D.nut.cashAt===undefined)D.nut.cashAt="";
+ /* the first version anchored the pay schedule to whatever day it was created.
+    Correct it once to the real last payday, without clobbering a later edit. */
+ if(!D.nut.anchorSet){D.nut.pay.anchor="2026-07-31";D.nut.anchorSet=true;}
  return D.nut;
 };
 const nutTotal=()=>NUT().items.reduce((n,i)=>n+(+i.amount||0),0)+(+NUT().buffer||0);
 const ymNow=()=>today().slice(0,7);
+/* "2026-07-31" through new Date() parses as UTC midnight and can land on the
+   wrong local day. Build it at local noon instead. */
+const dayFromISO=s=>{const p=String(s||today()).split("-").map(Number);
+ return new Date(p[0],(p[1]||1)-1,p[2]||1,12,0,0,0);};
 function nutPaydays(ym){
  const p=NUT().pay,out=[];
  const Y=+ym.slice(0,4),M=+ym.slice(5,7);
- const first=new Date(Y,M-1,1),last=new Date(Y,M,0);
- if(p.every==="month")return [isoDay(new Date(Y,M-1,Math.min(+p.day||1,last.getDate())))];
+ const first=new Date(Y,M-1,1,0,0,0,0),last=new Date(Y,M,0,23,59,59,0);
+ if(p.every==="month")return [isoDay(new Date(Y,M-1,Math.min(+p.day||1,new Date(Y,M,0).getDate())))];
  if(p.every==="2x")return [isoDay(new Date(Y,M-1,1)),isoDay(new Date(Y,M-1,15))];
  const step=p.every==="week"?7:14;
- const d=new Date(p.anchor||today());d.setHours(12,0,0,0);
+ const d=dayFromISO(p.anchor);
  let guard=0;
- while(d>first&&guard++<500)d.setDate(d.getDate()-step);
+ while(d>first&&guard++<3000)d.setDate(d.getDate()-step);
  guard=0;
- while(d<=last&&guard++<500){if(d>=first)out.push(isoDay(d));d.setDate(d.getDate()+step);}
+ while(d<=last&&guard++<3000){if(d>=first)out.push(isoDay(d));d.setDate(d.getDate()+step);}
  return out;
 }
+function nextPayday(){
+ const p=NUT().pay,t=today();
+ if(p.every==="month"||p.every==="2x"){
+  const here=nutPaydays(ymNow()).filter(d=>d>=t);
+  if(here.length)return here[0];
+  const n=new Date();n.setMonth(n.getMonth()+1);
+  return nutPaydays(isoDay(n).slice(0,7))[0]||"";
+ }
+ const step=p.every==="week"?7:14;
+ const d=dayFromISO(p.anchor);
+ let g=0;while(isoDay(d)<t&&g++<3000)d.setDate(d.getDate()+step);
+ return isoDay(d);
+}
+/* The target is met by WORK — cash already banked plus fees actually collected.
+   The retainer sits outside it deliberately: it's the floor he'd rather not
+   touch, so counting it as income would hide the month going wrong. */
 function nutStats(ym){
  ym=ym||ymNow();
- const t=today(),target=nutTotal(),amt=+NUT().pay.amount||0;
- const days=nutPaydays(ym);
- const got=days.filter(d=>d<=t).length,left=days.length-got;
- const retainerIn=got*amt,retainerDue=left*amt;
- /* only money actually collected counts — an unpaid invoice is not income */
+ const target=nutTotal(),amt=+NUT().pay.amount||0;
+ const cash=+NUT().cash||0;
  const fees=D.jobs.filter(j=>j.paidDate&&String(j.paidDate).slice(0,7)===ym)
   .reduce((n,j)=>n+fee(j).gross,0);
- const covered=retainerIn+fees;
- const gap=Math.max(0,target-covered-retainerDue);
+ const covered=cash+fees;
+ const gap=Math.max(0,target-covered);
+ const days=nutPaydays(ym);
+ const retainerMonth=days.length*amt;
+ const next=nextPayday();
+ const daysToPay=Math.max(0,Math.round((dayFromISO(next)-dayFromISO(today()))/86400000));
  const lastDay=new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate();
  const daysLeft=ym===ymNow()?Math.max(1,lastDay-new Date().getDate()+1):lastDay;
- return {target,amt,paydays:days,got,left,retainerIn,retainerDue,fees,covered,gap,
-  surplus:Math.max(0,covered+retainerDue-target),daysLeft,perDay:Math.ceil(gap/daysLeft)};
+ return {target,amt,cash,fees,covered,gap,
+  surplus:Math.max(0,covered-target),
+  paydays:days,retainerMonth,next,daysToPay,
+  retainerNeeded:Math.min(gap,retainerMonth),      /* how deep he'd have to dip */
+  shortEvenWithRetainer:Math.max(0,gap-retainerMonth),
+  daysLeft,perDay:Math.ceil(gap/daysLeft)};
 }
 function nutMeterHTML(){
  if(NUT().on===false||!nutTotal())return "";
  const s=nutStats(),pc=v=>Math.max(0,Math.min(100,(v/s.target)*100));
+ const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dayFromISO(s.next).getDay()];
  return `<div class="pan" style="border-color:var(--c-${s.gap?"rdy":"paid"})">
   <div class="row between" style="align-items:baseline">
-   <div class="lab">◈ This month's nut</div>
+   <div class="lab">◈ Required monthly revenue</div>
    <button class="lnk" onclick="nutSheet()">Edit</button></div>
   <div class="row between" style="align-items:baseline;margin-top:12px;gap:14px">
    <div class="num money v-${s.gap?"rdy":"paid"}" style="font-size:36px">${money0(s.gap||s.surplus)}</div>
-   <div class="xs dim" style="text-align:right;line-height:1.5">${s.gap?"still to earn":"ahead"}<br>nut is ${money0(s.target)}</div></div>
+   <div class="xs dim" style="text-align:right;line-height:1.5">${s.gap?"still to bring in":"target met — ahead by"}<br>target ${money0(s.target)}</div></div>
   <div class="nutbar">
-   <i style="width:${pc(s.retainerIn)}%;background:var(--c-paid)"></i>
+   <i style="width:${pc(s.cash)}%;background:var(--c-paid)"></i>
    <i style="width:${pc(s.fees)}%;background:var(--c-est)"></i>
-   <i style="width:${pc(s.retainerDue)}%;background:var(--c-paid);opacity:.42"></i>
   </div>
   <div class="nutkey">
-   <span><b style="background:var(--c-paid)"></b>Retainer in ${money0(s.retainerIn)}</span>
+   <span><b style="background:var(--c-paid)"></b>In the account ${money0(s.cash)}</span>
    <span><b style="background:var(--c-est)"></b>Fees collected ${money0(s.fees)}</span>
-   ${s.retainerDue?`<span><b style="background:var(--c-paid);opacity:.42"></b>Retainer still due ${money0(s.retainerDue)}</span>`:""}
-   ${s.gap?`<span><b style="background:var(--c-rdy)"></b>Gap ${money0(s.gap)}</span>`:""}
+   ${s.gap?`<span><b style="background:var(--c-rdy)"></b>Short ${money0(s.gap)}</span>`:""}
   </div>
   <p class="xs dim" style="margin:13px 0 0">
-   ${plural(s.paydays.length,"payday")} this month${s.paydays.length>2?" — a three-cheque month, so it's a lighter one":""}.
-   ${s.gap?`${plural(s.daysLeft,"day")} left · about <b class="v-rdy">${money0(s.perDay)}/day</b> in collected fees.`
-    :`Everything you collect from here is on top.`}</p></div>`;
+   ${s.gap?`${plural(s.daysLeft,"day")} left · about <b class="v-rdy">${money0(s.perDay)}/day</b> to close it.`
+    :`Anything else you collect this month is profit.`}
+   <button class="lnk" style="margin-left:8px" onclick="cashSheet()">Update balance</button></p>
+
+  <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--rule2)">
+   <div class="row between" style="align-items:baseline;gap:12px;flex-wrap:wrap">
+    <div><div class="lab" style="color:var(--ink3)">⛉ Retainer — held back</div>
+     <p class="xs dim" style="margin:6px 0 0">Next <b class="v-paid">${money0(s.amt)}</b> on ${wd} ${fmt(s.next)}${
+      s.daysToPay===0?" — today":s.daysToPay===1?" — tomorrow":` — in ${plural(s.daysToPay,"day")}`}.
+      ${plural(s.paydays.length,"payday")} this month, ${money0(s.retainerMonth)} total.</p></div>
+   </div>
+   <p class="xs" style="margin:10px 0 0;color:${s.gap?"var(--ink3)":"var(--c-paid)"}">
+    ${!s.gap?"Not needed this month — the work covered it."
+     :s.shortEvenWithRetainer
+      ?`If the work doesn't land you'd still be <b class="v-out">${money0(s.shortEvenWithRetainer)}</b> short after the whole retainer.`
+      :`Worst case the retainer covers the ${money0(s.gap)} and leaves <b>${money0(s.retainerMonth-s.gap)}</b> of it untouched.`}</p>
+  </div></div>`;
 }
+function cashSheet(){
+ const n=NUT();
+ sheet("What's in the account",`
+  <label><span class="t">Balance right now</span>
+   <input class="in" id="nutcash" type="number" inputmode="decimal" value="${+n.cash||0}" placeholder="0"></label>
+  <p class="xs dim" style="margin:-10px 0 18px">Counts toward this month's target. ${n.cashAt?"Last set "+fmt(n.cashAt)+".":"Update it whenever you check."}</p>
+  <button class="btn" onclick="saveCash()">Save</button>`);
+ setTimeout(()=>$("#nutcash")&&$("#nutcash").focus(),90);
+}
+function saveCash(){const n=NUT();
+ n.cash=+$("#nutcash").value||0;n.cashAt=today();
+ save();close_();render();toast("Balance updated");}
 function nutSheet(){
  const n=NUT(),s=nutStats();
  const every=[["week","Weekly"],["2weeks","Every 2 weeks"],["2x","Twice a month"],["month","Monthly"]];
- sheet("What you have to cover",`
+ sheet("Required monthly revenue",`
   <div class="lab" style="margin-bottom:10px">Monthly bills</div>
   <div id="nutitems">${n.items.map(i=>`<div class="row" style="gap:10px;margin-bottom:9px" data-nid="${i.id}">
     <input class="in" style="flex:2" value="${esc(i.label)}" oninput="nutSet('${i.id}','label',this.value)">
     <input class="in" style="flex:1" type="number" inputmode="decimal" value="${+i.amount||0}" oninput="nutSet('${i.id}','amount',this.value)">
     <button class="ico" style="border:0;color:var(--ink3)" onclick="nutDel('${i.id}')">✕</button></div>`).join("")}</div>
   <button class="opt2" onclick="nutAdd()">+ Add a bill</button>
-  <div class="ln2 tot" style="margin-top:18px"><span class="k">Nut</span>
+  <div class="ln2 tot" style="margin-top:18px"><span class="k">Required each month</span>
    <span class="v money">${money0(nutTotal())}</span></div>
   <hr class="rule" style="margin:22px 0">
-  <div class="lab" style="margin-bottom:10px">Retainer income</div>
+  <div class="lab" style="margin-bottom:10px">In the account now</div>
+  <label><span class="t">Current balance <em>counts toward the target</em></span>
+   <input class="in" id="nutcash2" type="number" inputmode="decimal" value="${+n.cash||0}"></label>
+  <hr class="rule" style="margin:22px 0">
+  <div class="lab" style="margin-bottom:4px">⛉ Retainer — held back</div>
+  <p class="xs dim" style="margin:0 0 14px">Kept out of the target on purpose. It's the floor you'd rather not touch, so the meter shows what the <b>work</b> has to cover.</p>
   <label><span class="t">Amount each time</span>
    <input class="in" id="nutpay" type="number" inputmode="decimal" value="${+n.pay.amount||0}"></label>
   <label><span class="t">How often</span>
    <div class="segwrap">${every.map(([k,l])=>`<button type="button" class="opt2 ${n.pay.every===k?"on":""}"
     onclick="nutEvery(this,'${k}')">${l}</button>`).join("")}</div></label>
-  ${["week","2weeks"].includes(n.pay.every)?`<label><span class="t">A date you got paid <em>anchors the schedule</em></span>
+  ${["week","2weeks"].includes(n.pay.every)?`<label><span class="t">Last time you were paid <em>anchors the schedule</em></span>
    <input class="in" id="nutanchor" type="date" value="${esc(n.pay.anchor||today())}"></label>`:""}
   <label><span class="t">Buffer / savings on top <em>optional</em></span>
    <input class="in" id="nutbuf" type="number" inputmode="decimal" value="${+n.buffer||0}"></label>
   <div class="pan" style="margin-top:4px">
-   <p class="xs dim" style="margin:0">At ${money0(n.pay.amount)} ${n.pay.every==="2weeks"?"every two weeks that's 26 cheques a year":"per period"}${
-    n.pay.every==="2weeks"?` — <b>${money0(n.pay.amount*26)}</b> a year, or <b>${money0(n.pay.amount*26/12)}</b> a month averaged.
-    Most months bring two cheques (${money0(n.pay.amount*2)}); two months a year bring three.`:""}</p></div>
+   <p class="xs dim" style="margin:0">Next one lands <b class="v-paid">${fmt(s.next)}</b>.
+    ${n.pay.every==="2weeks"?`Every two weeks is 26 a year, not 24 — <b>${money0(n.pay.amount*26)}</b> annually.
+     Most months bring two (${money0(n.pay.amount*2)}); two months a year bring three.`:""}</p></div>
   <button class="btn" onclick="saveNut()">Save</button>
   <button class="btn sec" onclick="NUT().on=false;save();close_();render()">Turn the meter off</button>`);
 }
@@ -2917,7 +2977,8 @@ function saveNut(){const n=NUT();
  if($("#nutpay"))n.pay.amount=+$("#nutpay").value||0;
  if($("#nutanchor"))n.pay.anchor=$("#nutanchor").value||today();
  if($("#nutbuf"))n.buffer=+$("#nutbuf").value||0;
- n.on=true;save();close_();render();toast("Nut set — "+money0(nutTotal()));}
+ if($("#nutcash2")){const v=+$("#nutcash2").value||0;if(v!==(+n.cash||0)){n.cash=v;n.cashAt=today();}}
+ n.on=true;save();close_();render();toast("Target set — "+money0(nutTotal()));}
 
 R.today=()=>{
  const t=today();
