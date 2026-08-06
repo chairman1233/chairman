@@ -687,7 +687,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-91 · deals, payments, charge target";
+const BUILD="C-92 · deal fires from the form too";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3554,7 +3554,16 @@ function saveJob(id){
   D.jobs.unshift(j);id=j.id;}
  {const jj=job(id);
   if($("#jstat")&&["Waiting","Estimating"].includes(jj.status)&&_stat&&jj.status!==_stat)jj.status=_stat;
-  if(jj.status!=="Waiting")jj.waitingOn="";}
+  if(jj.status!=="Waiting")jj.waitingOn="";
+  /* The form path never ran the company deal — only the quick-edit taps did.
+     So a Green Dynasty mitigation entered through the form sat at 2%. */
+  const r=ruleFor(jj);
+  if(r&&(o.feePct!==undefined)&&+o.feePct!==+r.pct&&jj.feeRule){
+   jj.feeLocked=true;      /* he typed his own rate over a live deal — respect it */
+  }else{
+   const moved=applyAcctRule(jj);
+   if(moved)setTimeout(()=>toast("Deal applied — "+jobPct(jj)+"% "+(FEELABEL[jj.feeMode]||"")),600);
+  }}
  D.last=id;save();close_();go("job",{id});
  /* A typed address never got geocoded at all — only picked suggestions did.
     Look it up in the background and say so if it misses. */
@@ -4184,26 +4193,33 @@ function chargeHintHTML(j){
  if(NUT().on===false||!nutTotal())return "";
  const s=nutStats();if(!s.gap)return "";
  const f=fee(j),p=jobPct(j);
- const already=Math.max(0,f.gross);
- /* what estimate total would this job need to carry the whole remaining gap
-    on its own, at the rate this job actually pays */
- const need=s.gap;
- const basis=(j.feeMode==="aftersubs")?"after subs are paid":"of the estimate";
- const totalNeeded=p>0?Math.round(need/(p/100)):0;
  const openCount=byStage("Estimating").length||1;
- const perJob=Math.ceil(need/openCount);
+ const perJob=Math.ceil(s.gap/openCount);
+ /* The month is closed by FEES, so talk in fees. A "what total would carry the
+    whole month alone at 2%" number comes out near a quarter million — true and
+    useless. Totals are only shown against the deals he actually has. */
+ const r=ruleFor(j);
+ const dealLines=[];
+ if(r&&p>0){
+  const t=Math.round((s.gap/(p/100))+(j.feeMode==="aftersubs"?subTotal(j):0));
+  dealLines.push(`On this job's deal — ${p}% ${FEELABEL[j.feeMode]||""} — the whole gap is a
+   <b class="money v-est">${money0(t)}</b> ${(j.loss||"job").toLowerCase()}.`);
+ }
+ (acctRules(j)||[]).forEach(rule=>{
+  if(r&&rule.id===r.id)return;
+  const t=Math.round(s.gap/(+rule.pct/100));
+  dealLines.push(`${esc(rule.loss||"Any")} at ${rule.pct}%: about <b class="money">${money0(t)}</b>${rule.minTotal?` <span class="dim">(deal starts at ${money0(rule.minTotal)})</span>`:""}.`);
+ });
  return `<div class="pan" style="margin-top:14px;border-color:var(--c-est)">
   <div class="lab v-est">◈ To hit this month</div>
-  <p class="sm" style="margin:10px 0 0">You're <b class="money v-rdy">${money0(s.gap)}</b> short with ${plural(s.daysLeft,"day")} left.</p>
-  <div class="ln2" style="margin-top:10px"><span class="k">This job earns you</span>
-   <b class="money">${money(already)}</b></div>
-  ${p>0?`<div class="ln2"><span class="k">Would need a total of</span>
-   <b class="money v-est">${money0(totalNeeded)}</b></div>
-   <p class="xs dim" style="margin:8px 0 0">At ${p}% ${basis}, a ${money0(totalNeeded)} estimate covers the whole ${money0(s.gap)} on its own.</p>`
-  :`<p class="xs dim" style="margin:8px 0 0">This job is on a flat or hourly basis, so a percentage target doesn't apply.</p>`}
-  <p class="xs dim" style="margin:8px 0 0">Spread across your ${plural(openCount,"open estimate")}, that's about
-   <b class="v-est">${money0(perJob)}</b> of fee each.</p>
-  <p class="xs dim" style="margin:8px 0 0;opacity:.8">A target, not a price. What you charge is what the scope and your agreement support.</p>
+  <div class="ln2" style="margin-top:10px"><span class="k">Fees still needed</span>
+   <b class="money v-rdy">${money0(s.gap)}</b></div>
+  <div class="ln2"><span class="k">This job earns</span>
+   <b class="money ${f.gross?"":"dim"}">${money(f.gross)}</b></div>
+  ${openCount>1?`<div class="ln2"><span class="k">Across ${openCount} open estimates</span>
+   <b class="money v-est">${money0(perJob)} each</b></div>`:""}
+  ${dealLines.length?`<p class="xs dim" style="margin:12px 0 0;line-height:1.7">${dealLines.join("<br>")}</p>`:""}
+  <p class="xs dim" style="margin:10px 0 0;opacity:.8">A target, not a price — the scope decides what the estimate says.</p>
  </div>`;
 }
 function markDone(id){const j=job(id);
