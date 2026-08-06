@@ -695,17 +695,17 @@ body .col .ch .n{color:inherit}
 <aside id="side"></aside>
 <div class="wrap" id="view"></div>
 <div id="printarea"></div>
+<!-- four destinations. Everything else is one tap away behind More —
+     fewer places to go is the point, not a smaller screen. -->
 <nav>
  <button data-v="today" onclick="go('today')"><span class="g">◉</span>Today</button>
  <button data-v="jobs" onclick="go('jobs')"><span class="g">▤</span>Pipeline</button>
- <button data-v="cal" onclick="go('cal')"><span class="g">◷</span>Calendar</button>
- <button data-v="log" onclick="go('log')"><span class="g">✎</span>Log</button>
- <button data-v="subs" onclick="go('subs')"><span class="g">◈</span>Crew</button>
  <button data-v="money" onclick="go('money')"><span class="g">✦</span>Money</button>
+ <button data-v="__more" onclick="moreNav()"><span class="g">☰</span>More</button>
 </nav>
 <script>
 "use strict";
-const BUILD="C-100 · the co-pilot";
+const BUILD="C-101 · four doors";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1012,6 +1012,19 @@ function doneNext(id){const j=job(id);if(!j||!nextOf(j))return;
    The user should never have to hold the day in working memory. */
 let _skips=[];
 function skipNext(id){_skips.push(id);render();}
+/* the rest of the app, one tap behind More — grouped so the eye can skip */
+function moreNav(){
+ const grp=(label,items)=>`<div class="lab" style="margin:18px 0 8px">${label}</div>
+  <div class="segwrap">${items.map(([v,l,badge])=>`<button class="opt2 ${V===v?"on":""}"
+   onclick="close_();go('${v}')">${l}${badge?" · "+badge:""}</button>`).join("")}</div>`;
+ sheet("Everything else",
+  grp("Plan",[["cal","◷ Calendar"],["clock","◔ Time clock"],["foreman","◉ Foreman"],["log","✎ Daybook"]])
+ +grp("Work",[["map","◎ Map"],["docs","▣ Documents"],["summary","▤ Estimates"],["invoices","⎙ Invoices"]])
+ +grp("People & money",[["accounts","▲ Accounts",String(ACCOUNTS().length||"")],["subs","◈ Crew"],
+   ["disputes","⚖ Disputes",String(openDisputes().length||"")],["reports","◧ Analytics"]])
+ +grp("Assistant",[["ai","✦ Chairman AI"]])
+ +`<button class="btn sec" style="margin-top:22px" onclick="close_();settings()">⚙ Settings</button>`);
+}
 function queueItems(){
  const items=[];
  const active=D.jobs.filter(needsNext);
@@ -3030,26 +3043,19 @@ function renderSide(){
  const due=D.jobs.filter(j=>j.status==="Estimating"&&j.dueDate&&j.dueDate<=t).length;
  const ready=byStage("Complete").length;
  const alerts=(typeof foremanItems==="function")?foremanItems().length:0;
- const items=[["today","▦","Dashboard",""],
-  ["jobs","▤","Pipeline",act||""],
-  ["cal","◷","Calendar",due||""],
-  ["clock","◔","Time clock",""],
-  ["foreman","◉","Foreman",alerts||""],
-  ["log","✎","Daybook",""],
-  ["docs","▣","Documents",""],
-  ["map","◎","Map",""],
-  ["subs","◈","Crew",""],
-  ["accounts","▲","Accounts",ACCOUNTS().filter(a=>acctStats(a.id).open).length||""],
-  ["summary","▤","Estimates",""],
-  ["invoices","⎙","Invoices",(ready+inv)||""],
-  ["money","＄","Money",""],
-  ["disputes","⚖","Disputes",openDisputes().length||""],
-  ["reports","◧","Analytics",""]];
+ /* grouped, so the eye lands on a section instead of scanning fifteen rows */
+ const groups=[
+  ["",[["today","▦","Dashboard",""],["jobs","▤","Pipeline",act||""],["money","＄","Money",""]]],
+  ["Plan",[["cal","◷","Calendar",due||""],["clock","◔","Time clock",""],["foreman","◉","Foreman",alerts||""],["log","✎","Daybook",""]]],
+  ["Work",[["map","◎","Map",""],["docs","▣","Documents",""],["summary","▤","Estimates",""],["invoices","⎙","Invoices",(ready+inv)||""]]],
+  ["People",[["accounts","▲","Accounts",ACCOUNTS().filter(a=>acctStats(a.id).open).length||""],["subs","◈","Crew",""],
+   ["disputes","⚖","Disputes",openDisputes().length||""],["reports","◧","Analytics",""]]]];
+ const item=([v,ic,lab,b])=>`<button class="sitem ${(V===v||(V==="job"&&v==="jobs")||(V==="invoice"&&v==="money")||(V==="sub"&&v==="subs")||(V==="account"&&v==="accounts"))?"on":""}"
+    onclick="go('${v}')"><span class="ic3">${ic}</span>${lab}${b?`<span class="sbadge">${b}</span>`:""}</button>`;
  el.innerHTML=`<div class="slogo">
    <div class="sname">CHAIRMAN</div>
    <div class="xs dim" style="letter-spacing:.28em;margin-top:-2px">EST. CO.</div></div>
-  ${items.map(([v,ic,lab,b])=>`<button class="sitem ${(V===v||(V==="job"&&v==="jobs")||(V==="invoice"&&v==="money")||(V==="sub"&&v==="subs")||(V==="account"&&v==="accounts"))?"on":""}"
-    onclick="go('${v}')"><span class="ic3">${ic}</span>${lab}${b?`<span class="sbadge">${b}</span>`:""}</button>`).join("")}
+  ${groups.map(([g,its])=>`${g?`<div class="lab" style="padding:12px 12px 5px;font-size:9px;opacity:.7">${g}</div>`:""}${its.map(item).join("")}`).join("")}
   <button class="sitem ${V==="ai"?"on":""}" onclick="go('ai')"><span class="ic3">✦</span>AI assistant</button>
   <button class="sitem" onclick="settings()"><span class="ic3">⚙</span>Settings</button>
   <div class="sfoot">
