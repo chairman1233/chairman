@@ -705,7 +705,7 @@ body .col .ch .n{color:inherit}
 </nav>
 <script>
 "use strict";
-const BUILD="C-101 · four doors";
+const BUILD="C-102 · paste a lead";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1012,6 +1012,101 @@ function doneNext(id){const j=job(id);if(!j||!nextOf(j))return;
    The user should never have to hold the day in working memory. */
 let _skips=[];
 function skipNext(id){_skips.push(id);render();}
+/* ---- lead intake: paste, parse, one tap -----------------------------------
+   Leads arrive as forwarded texts and emails; retyping them is where errors
+   get in. Deterministic client-side parse — instant, offline, no key needed.
+   Low confidence is fine: everything lands in editable fields before saving. */
+function parseLeadText(t){
+ const out={};
+ const ph=t.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/);
+ if(ph)out.phone=ph[0].trim();
+ const em=t.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+ if(em)out.email=em[0];
+ const ad=t.match(/\d{1,6}\s+[A-Za-z0-9'.\s]{2,40}\b(?:St|Street|Dr|Drive|Ln|Lane|Rd|Road|Ct|Court|Blvd|Boulevard|Ave|Avenue|Way|Cir|Circle|Trl|Trail|Pkwy|Pl|Place|Hwy|Loop)\b\.?(?:[,\s]+[A-Za-z\s]{2,20})?(?:[,\s]+(?:TX|Texas))?(?:[,\s]+\d{5})?/i);
+ if(ad)out.address=ad[0].replace(/\s+/g," ").replace(/[,\s]+$/,"").trim();
+ const cl=t.match(/claim\s*(?:no\.?|number|#)?\s*[:#]?\s*([A-Z0-9][A-Z0-9\-]{5,})/i);
+ if(cl)out.claim=cl[1];
+ const CARR=["State Farm","Allstate","USAA","Farmers","Liberty Mutual","Travelers","Nationwide",
+  "Progressive","TWIA","Chubb","SageSure","SafePoint","American Family","Homeowners of America","Lemonade"];
+ const ca=CARR.find(c=>new RegExp(c.replace(/ /g,"\\s+"),"i").test(t));
+ if(ca)out.insurer=ca;
+ let nm=(t.match(/(?:name|from|client|insured|homeowner|customer)\s*[:\-]\s*([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,2})/i)||[])[1];
+ if(!nm){const lines=t.split(/\n/).map(x=>x.trim()).filter(Boolean);
+  nm=lines.find(l=>/^[A-Z][a-z'’.\-]+(\s+[A-Z][a-z'’.\-]+){1,2}$/.test(l))||"";}
+ if(nm)out.owner=nm.trim();
+ const LK=[["water","Water"],["leak","Water"],["flood","Water"],["fire","Fire"],["mold","Mold"],
+  ["roof","Roof"],["hail","Wind / Hail"],["wind","Wind / Hail"],["storm","Wind / Hail"],
+  ["remodel","Remodel"],["rebuild","Rebuild"],["mitigation","Mitigation"]];
+ const hit=LK.find(([k])=>new RegExp("\\b"+k,"i").test(t));
+ if(hit)out.loss=hit[1];
+ return out;
+}
+let _leadLoss="";
+function leadSheet(){
+ sheet("⤵ Paste a lead",`
+  <label><span class="t">Text, email or voicemail transcript — paste the whole thing</span>
+   <textarea class="in" id="leadtxt" rows="6" style="resize:vertical"
+    placeholder="Fwd: new water loss — Maria Gonzales, 8123 Winkler Dr, Houston 77017. 832-555-0117. State Farm claim 53-889-XX12"></textarea></label>
+  <button class="btn" onclick="leadParse()">Parse it →</button>
+  <div id="leadout"></div>`);
+ setTimeout(()=>$("#leadtxt")&&$("#leadtxt").focus(),90);
+}
+function leadParse(){
+ const t=$("#leadtxt").value.trim();
+ if(!t){toast("Paste something first");return;}
+ const p=parseLeadText(t);_leadLoss=p.loss||"";
+ const found=["owner","phone","address","email","insurer","claim","loss"].filter(k=>p[k]);
+ const f=(id,lab,val,ph)=>`<label><span class="t">${lab}</span>
+  <input class="in" id="${id}" value="${esc(val||"")}" placeholder="${ph||""}" autocomplete="off" autocorrect="off" spellcheck="false"></label>`;
+ $("#leadout").innerHTML=`
+  <p class="xs" style="margin:16px 0 14px;color:${found.length?"var(--c-paid)":"var(--c-rdy)"}">
+   ${found.length?"Pulled: "+found.join(", ")+" — fix anything wrong, then one tap.":"Couldn't pull much — fill in what you know, it still saves."}</p>
+  ${f("ldn","Client name",p.owner,"Maria Gonzales")}
+  ${f("ldp","Phone",p.phone)}
+  ${f("lda","Property address",p.address)}
+  ${f("lde","Email",p.email)}
+  ${f("ldc","Company — only if a contractor sent it","","Green Dynasty Group")}
+  ${f("ldi","Carrier",p.insurer)}
+  ${f("ldcl","Claim #",p.claim)}
+  ${f("ldw","Source",p.email&&/fwd|forward/i.test(t)?"forwarded email":"","forwarded text")}
+  <label><span class="t">Next move <em>required</em></span>
+   <input class="in" id="ldna" value="Call them back" autocomplete="off"></label>
+  <div class="upbar" style="margin:-10px 0 14px">
+   ${NEXT_PRESETS.slice(0,4).map(x=>`<button type="button" onclick="document.getElementById('ldna').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>
+  <label><span class="t">When</span><input class="in" id="ldnd" type="date" value="${today()}"></label>
+  <button class="btn" onclick="leadCreate()">Create the job</button>`;
+ const lo=document.getElementById("leadout");if(lo)lo.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function leadCreate(){
+ const v=id=>($("#"+id)&&$("#"+id).value.trim())||"";
+ const owner=v("ldn"),na=v("ldna");
+ if(!owner){toast("Needs a name");return;}
+ if(!na){toast("One next move — required");return;}
+ const comp=v("ldc");
+ const j={id:uid(),status:"Estimating",created2:today(),
+  owner,client:owner,phone:v("ldp"),address:v("lda"),ownerEmail:v("lde"),
+  insurer:v("ldi"),claim:v("ldcl"),who:v("ldw")||"pasted lead",loss:_leadLoss||"",
+  jobFor:comp?"Contractor":"Homeowner",billTo:comp?"Contractor":"Owner",
+  feeMode:"pct",flat:0,total:0,advance:0,
+  next:{text:na,date:v("ldnd")||today()}};
+ if(comp){
+  j.contractor=comp;
+  const a=ACCOUNTS().find(x=>normAcct(x.name)===normAcct(comp));
+  if(a)j.accountId=a.id;
+  else{const nw={id:uid(),name:comp,created:new Date().toISOString()};
+   D.accounts=ACCOUNTS().concat([nw]);j.accountId=nw.id;}
+ }
+ const raw=$("#leadtxt")?$("#leadtxt").value.trim():"";
+ D.jobs.unshift(j);
+ applyAcctRule(j);
+ if(raw)D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:false,
+  created:new Date().toISOString(),text:"[Pasted lead — original]\n"+raw.slice(0,600)});
+ save();close_();
+ if(j.address){try{geocodeJob(j.id)}catch(e){}}
+ go("job",{id:j.id});
+ toast("Lead's on the board — original text saved to its notes");
+}
+
 /* the rest of the app, one tap behind More — grouped so the eye can skip */
 function moreNav(){
  const grp=(label,items)=>`<div class="lab" style="margin:18px 0 8px">${label}</div>
@@ -3326,6 +3421,7 @@ R.today=()=>{
    title="${cs.in&&!cs.out?"Tap to clock out":"Tap to clock in"}">
    ${cs.in&&!cs.out?'<span class="live"></span>':""}${chip}</button>
   <button class="ico" onclick="aiSheet()" title="Ask AI">✦</button>
+  <button class="ico" onclick="leadSheet()" title="Paste a lead">⤵</button>
   <button class="btn s" style="margin:0" onclick="newJob()">+ New Job</button>
  </div>
  ${nutMeterHTML()}
@@ -3409,7 +3505,9 @@ R.jobs=()=>{
  <div class="row between" style="margin-top:22px">
   <div class="seg"><button class="${b?"on":""}" onclick="setView('board')">Board</button>
    <button class="${b?"":"on"}" onclick="setView('list')">List</button></div>
-  <button class="btn sec s" onclick="newJob()">+ New</button></div>
+  <div class="row" style="gap:8px">
+   <button class="btn sec s" onclick="leadSheet()">⤵ Paste a lead</button>
+   <button class="btn sec s" onclick="newJob()">+ New</button></div></div>
  ${D.jobs.length?(b?boardHTML():`<div style="margin-top:6px">${listHTML()}</div>`):`<div class="empty">
    <div class="g dim">✦ ✦ ✦</div><div class="ser" style="font-size:22px">Board's empty</div>
    <p class="sm dim" style="margin-top:8px">Add a job and drag it across as it moves.</p>
