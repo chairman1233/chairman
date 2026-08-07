@@ -758,7 +758,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-115 · hexagon only, centered, orange number";
+const BUILD="C-116 · PDFs name themselves";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4500,7 +4500,10 @@ function printChron(id){
  pa.innerHTML=`<div style="font:11pt/1.6 Georgia,serif;color:#111;max-width:7.5in">
   <h2 style="font:700 16pt Georgia">Dispute Chronology — ${esc(jobName(j))}</h2>
   <pre style="white-space:pre-wrap;font:10.5pt/1.65 Georgia,serif">${esc(disputeChronText(j))}</pre></div>`;
- window.print();pa.innerHTML="";
+ const was=document.title;
+ document.title=safeFile("Dispute chronology — "+jobName(j)+" — "+today());
+ window.print();
+ setTimeout(()=>{document.title=was;pa.innerHTML="";},600);
 }
 
 /* ---------- partner split breakdown ---------- */
@@ -5164,6 +5167,14 @@ function invoiceHTML(j){
   </div>
  </div>`;
 }
+/* Chrome names a Save-as-PDF after document.title, so the file was always
+   "Chairman.pdf". Swap in a real filename for the duration of the print. */
+const safeFile=s=>String(s||"").replace(/[\\/:*?"<>|]+/g,"").replace(/\s+/g," ").trim().slice(0,60);
+function invoiceFileName(j){
+ const who=safeFile(billParty(j).name||jobName(j));
+ const when=(j.invDate||today());
+ return safeFile([j.invNo||"Invoice",who,when].filter(Boolean).join(" — "));
+}
 async function printInvoice(id){
  const j=job(id);
  if(!j.invNo){j.invNo="INV-"+D.invNo;D.invNo++;j.invDate=today();
@@ -5171,7 +5182,12 @@ async function printInvoice(id){
  _logoForPrint=await cleanPrintLogo();   /* the mark, frame cropped, tile erased */
  document.getElementById("printarea").innerHTML=invoiceHTML(j);
  close_();
- setTimeout(()=>{window.print();render();},120);
+ const was=document.title;
+ document.title=invoiceFileName(j);
+ setTimeout(()=>{
+  window.print();
+  setTimeout(()=>{document.title=was;render();},600);   /* restore after the dialog reads it */
+ },120);
 }
 function previewPDF(id){const j=job(id);
  sheet("Invoice preview",`
@@ -5826,7 +5842,10 @@ function printWeekly(id){
  const a=ACCOUNTS().find(x=>x.id===id);if(!a)return;
  document.getElementById("printarea").innerHTML=weeklyUpdateHTML(a);
  close_();
- setTimeout(()=>{window.print();render();},80);
+ const was=document.title;
+ document.title=safeFile("Weekly update — "+a.name+" — "+today());
+ setTimeout(()=>{window.print();
+  setTimeout(()=>{document.title=was;render();},600);},80);
 }
 function emailWeekly(id){
  const a=ACCOUNTS().find(x=>x.id===id);if(!a||!a.email)return;
