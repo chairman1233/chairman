@@ -292,25 +292,23 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  body>header,body>nav,body>.wrap,body>.ov,body>.toast{display:none!important}
  #printarea{display:block!important;font:12pt/1.45 Georgia,'Times New Roman',serif;color:#000}
  #printarea *{color:#000!important}
- /* ---- Option C: main column + claim rail ---- */
- /* No min-height — a short invoice was rendering a half-page slab of grey. */
- .inv-c{display:flex;gap:0;align-items:flex-start}
- .inv-main{flex:1;padding-right:30pt;min-width:0}
- .inv-brand{display:flex;align-items:center;gap:15pt;margin-bottom:30pt}
- .inv-rail{width:196pt;flex:none;background:#f4f3f0!important;padding:24pt 20pt 26pt;
-  -webkit-print-color-adjust:exact;print-color-adjust:exact}
- .rail-kicker{font:11pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#666!important}
- .rail-no{font:bold 19pt Georgia,serif;margin:4pt 0 2pt}
- .rail-date{font:10pt Helvetica,Arial,sans-serif;color:#666!important}
- .rail-due{margin:18pt 0;padding:12pt 0;border-top:1pt solid #d8d6d0;border-bottom:1pt solid #d8d6d0}
- .rail-due span{display:block;font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;
-  text-transform:uppercase;color:#666!important}
- .rail-due b{font:bold 27pt Georgia,serif;letter-spacing:-.015em;line-height:1.15}
- .rail-lab{font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;
-  color:#666!important;margin:16pt 0 4pt}
- .rail-v{font:11pt/1.55 Helvetica,Arial,sans-serif;color:#333!important}
- .rail-links{line-height:2}
- .inv-billto{font:12.5pt/1.5 Helvetica,Arial,sans-serif;margin-bottom:6pt}
+ /* ---- Layout H: centered mark, client-first ---- */
+ .inv-h{max-width:7.2in;margin:0 auto}
+ .hd{text-align:center;padding-bottom:22pt;border-bottom:.75pt solid #d5d5d5}
+ .hlogo{width:88pt;height:auto}
+ .hname{font:bold 16pt Georgia,serif;letter-spacing:.26em;margin-top:10pt}
+ .htag{font:9pt Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
+  color:#888!important;margin-top:5pt}
+ .hfor{text-align:center;padding:24pt 0 20pt}
+ .hkick{font:9.5pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#888!important}
+ .hclient{font:bold 30pt Georgia,serif;margin:8pt 0 5pt;letter-spacing:-.005em}
+ .hsub{font:11.5pt/1.5 Helvetica,Arial,sans-serif;color:#444!important}
+ .hsub2{font:10.5pt Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt}
+ .hgrid{display:flex;gap:22pt;margin-top:20pt;align-items:stretch}
+ .hgrid>div{flex:1}
+ .hpay{border:1.5pt solid #000;padding:12pt 14pt}
+ .hfoot{text-align:center;border-top:.75pt solid #d5d5d5;margin-top:24pt;padding-top:11pt;
+  font:10pt Helvetica,Arial,sans-serif;color:#555!important}
  .inv-head{display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:.75pt solid #d5d5d5;padding-bottom:16pt;margin-bottom:22pt}
  .inv-logo{width:74pt;height:auto}
@@ -743,7 +741,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-110 · invoice C, name once";
+const BUILD="C-111 · your mark, centered, client-first";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5038,7 +5036,9 @@ function invText(j){
  return {no,body:L.join("\n"),subj:`Invoice ${no} — ${j.address||jobName(j)}`};
 }
 /* ---------- printable / PDF invoice ---------- */
-const LOGO_PRINT="";
+/* Benny's actual black mark, shipped with the app — logo-print.jpg in the repo.
+   An uploaded logo in Settings still wins; this is the default under it. */
+const LOGO_PRINT="logo-print.jpg";
 /* The mark, drawn as vector so it prints sharp at any size and needs no asset:
    a hexagon with a C notched out of it. Falls back to an uploaded logo if set. */
 const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 124 136" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -5078,54 +5078,45 @@ function invoiceHTML(j){
  const links=[];
  if(j.mportLink)links.push(link(j.mportLink,"3D scan — walk the property"));
  if(j.ccLink)links.push(link(j.ccLink,"Job photos — CompanyCam"));
- /* Option C — claim facts, links and payment live in a rail so the money
-    column stays clean. Two columns on paper, stacked if it ever wraps. */
- const railLab=t=>`<div class="rail-lab">${t}</div>`;
- /* "CHAIRMAN" then "Chairman Remodeling" printed the name twice. The wordmark
-    owns the name; the line under it carries only what's left. */
- const bizTail=(me.biz||"").replace(/^\s*chairman\s*/i,"").trim();
- /* A retainer job legitimately bills nothing — printing "$0.00" as the headline
-    number reads as a broken invoice rather than a covered one. */
+ /* Layout H — his spec: the mark centered, the name once directly under it,
+    and the CLIENT as the headline. This document was prepared FOR someone;
+    the page says so before it says anything else. */
  const covered=f.kind==="retainer"&&f.due===0;
- const dueBig=covered?"Covered":money(f.over||f.due);
  return `
- <div class="inv-c">
-  <div class="inv-main">
-   <div class="inv-brand">
-    ${myLogo()?`<img class="inv-logo" src="${esc(myLogo())}" alt="">`:CHAIRMAN_MARK}
-    <div><div class="inv-wordmark">CHAIRMAN</div>
-     ${bizTail?`<div class="inv-biz">${esc(bizTail)}</div>`:""}</div>
-   </div>
-   <div class="inv-lab">Bill to</div>
-   <div class="inv-billto"><b>${esc(B.name)}</b>${j.contractorContact&&B.isC?"<br>Attn: "+esc(j.contractorContact):""}
-    ${B.email?"<br>"+link("mailto:"+B.email,B.email):""}</div>
-   <table class="inv"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
-    <tbody>${rows.join("")}</tbody></table>
-   ${(me.zelle||me.payInfo)?`<div class="inv-pay"><h4>How to pay</h4>
-    ${me.zelle?`<div style="display:flex;align-items:center;gap:10pt;margin-bottom:${me.payInfo?"8pt":"0"}">
-     <span style="display:inline-block;border:1.5pt solid #6D1ED4;color:#6D1ED4!important;border-radius:5pt;
-      padding:3pt 8pt;font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:-.02em">Zelle&reg;</span>
-     <span style="font:bold 13pt Helvetica,Arial,sans-serif">${esc(me.zelle)}</span></div>`:""}
-    ${me.payInfo?`<p>${esc(me.payInfo)}</p>`:""}</div>`:""}
-   ${(me.yelp||me.fb)?`<div class="inv-review">Happy with the work? A quick review helps more than you'd think.
-    ${me.yelp?" "+link(me.yelp,"Yelp"):""}${me.fb?" · "+link(me.fb,"Facebook"):""}</div>`:""}
-   <div class="inv-foot">
-    <span>${esc(me.name||"")}${me.phone?" · "+esc(me.phone):""}${me.email?" · "+esc(me.email):""}</span>
-    <span class="inv-pow">Powered by Chairman Command Center</span></div>
+ <div class="inv-h">
+  <div class="hd">
+   <img class="hlogo" src="${esc(printLogo())}" alt="">
+   <div class="hname">CHAIRMAN REMODELING</div>
+   <div class="htag">Insurance estimating · Houston, Texas</div>
   </div>
 
-  <aside class="inv-rail">
-   <div class="rail-kicker">Invoice</div>
-   <div class="rail-no">${esc(no)}</div>
-   <div class="rail-date">${dateStr}${me.terms?" · "+esc(me.terms):""}</div>
-   <div class="rail-due"><span>${covered?"Status":f.over?"Credit":"Amount due"}</span>
-    <b${covered?' style="font-size:20pt"':""}>${dueBig}</b>
-    ${covered?`<div class="rail-sub">by retainer — nothing to pay</div>`:""}</div>
-   ${railLab("Property")}
-   <div class="rail-v">${esc(j.address||jobName(j))}${j.loss?"<br>"+esc(j.loss):""}</div>
-   ${(j.insurer||j.claim)?railLab("Claim")+`<div class="rail-v">${esc(j.insurer||"")}${j.claim?"<br>"+esc(j.claim):""}</div>`:""}
-   ${links.length?railLab("Documentation")+`<div class="rail-v rail-links">${links.join("<br>")}</div>`:""}
-  </aside>
+  <div class="hfor">
+   <div class="hkick">Prepared for</div>
+   <div class="hclient">${esc(B.name)}</div>
+   ${j.contractorContact&&B.isC?`<div class="hsub">Attn: ${esc(j.contractorContact)}</div>`:""}
+   <div class="hsub">${esc(j.address||jobName(j))}</div>
+   <div class="hsub2">${[j.insurer,j.claim?"Claim "+j.claim:"",j.loss].filter(Boolean).map(esc).join(" · ")||""}</div>
+  </div>
+
+  <table class="inv"><thead><tr><th>Scope of work</th><th class="r">Amount</th></tr></thead>
+   <tbody>${rows.join("")}</tbody></table>
+
+  <div class="hgrid">
+   <div class="hpay"><div class="inv-lab" style="border:0">How to pay</div>
+    ${me.zelle?`<div style="font:bold 12pt Helvetica,Arial,sans-serif;margin-top:4pt">Zelle · ${esc(me.zelle)}</div>`:""}
+    ${me.payInfo?`<div style="font:10.5pt/1.5 Helvetica,Arial,sans-serif;margin-top:4pt;white-space:pre-wrap">${esc(me.payInfo)}</div>`:""}
+    <div style="font:10pt Helvetica,Arial,sans-serif;color:#555!important;margin-top:5pt">Invoice ${esc(no)} · ${dateStr}${me.terms?" · "+esc(me.terms):""}</div></div>
+   ${links.length?`<div><div class="inv-lab" style="border:0">Documentation</div>
+    <div style="font:11pt/2 Helvetica,Arial,sans-serif;margin-top:4pt">${links.join("<br>")}</div></div>`:""}
+  </div>
+
+  ${(me.yelp||me.fb)?`<div class="inv-review" style="text-align:center">Happy with the work? A quick review helps more than you'd think.
+   ${me.yelp?" "+link(me.yelp,"Yelp"):""}${me.fb?" · "+link(me.fb,"Facebook"):""}</div>`:""}
+
+  <div class="hfoot">
+   <div>Prepared by ${esc(me.name||"Benny Mancillas")}${me.phone?" · "+link("tel:"+me.phone.replace(/[^0-9+]/g,""),me.phone):""}${me.email?" · "+link("mailto:"+me.email,me.email):""}</div>
+   <div class="inv-pow" style="margin-top:5pt">Powered by Chairman Command Center</div>
+  </div>
  </div>`;
 }
 function printInvoice(id){
