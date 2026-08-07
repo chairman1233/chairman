@@ -287,15 +287,33 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
 /* ---- printable invoice (black on white, whatever theme is on screen) ---- */
 #printarea{display:none}
 @media print{
- @page{size:letter;margin:0.6in}
+ @page{size:letter;margin:0.45in 0.5in}
  html,body{background:#fff!important;color:#000!important;zoom:1!important}
  body>header,body>nav,body>.wrap,body>.ov,body>.toast{display:none!important}
  #printarea{display:block!important;font:12pt/1.45 Georgia,'Times New Roman',serif;color:#000}
  #printarea *{color:#000!important}
+ /* ---- Option C: main column + claim rail ---- */
+ .inv-c{display:flex;gap:0;align-items:stretch;min-height:8.5in}
+ .inv-main{flex:1;padding-right:26pt}
+ .inv-brand{display:flex;align-items:center;gap:13pt;margin-bottom:26pt}
+ .inv-rail{width:170pt;flex:none;background:#f4f3f0!important;padding:22pt 18pt;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact}
+ .rail-kicker{font:11pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#666!important}
+ .rail-no{font:bold 19pt Georgia,serif;margin:4pt 0 2pt}
+ .rail-date{font:10pt Helvetica,Arial,sans-serif;color:#666!important}
+ .rail-due{margin:18pt 0;padding:12pt 0;border-top:1pt solid #d8d6d0;border-bottom:1pt solid #d8d6d0}
+ .rail-due span{display:block;font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#666!important}
+ .rail-due b{font:bold 27pt Georgia,serif;letter-spacing:-.015em;line-height:1.15}
+ .rail-lab{font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;
+  color:#666!important;margin:16pt 0 4pt}
+ .rail-v{font:11pt/1.55 Helvetica,Arial,sans-serif;color:#333!important}
+ .rail-links{line-height:2}
+ .inv-billto{font:12.5pt/1.5 Helvetica,Arial,sans-serif;margin-bottom:6pt}
  .inv-head{display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:.75pt solid #d5d5d5;padding-bottom:16pt;margin-bottom:22pt}
  .inv-logo{width:62pt;height:auto}
- .inv-mark{width:56pt;height:60pt;flex:none}
+ .inv-mark{width:56pt;height:61pt;flex:none}
  .inv-wordmark{font:bold 25pt Georgia,serif;letter-spacing:.16em;line-height:1}
  .inv-biz{font:10.5pt Helvetica,Arial,sans-serif;letter-spacing:.15em;text-transform:uppercase;
   color:#555!important;margin-top:4pt}
@@ -722,7 +740,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-108 · invoice type sized to print";
+const BUILD="C-109 · invoice option C";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5020,9 +5038,9 @@ function invText(j){
 const LOGO_PRINT="";
 /* The mark, drawn as vector so it prints sharp at any size and needs no asset:
    a hexagon with a C notched out of it. Falls back to an uploaded logo if set. */
-const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 100 108" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
- <path fill="#111" d="M50 0 96 27v54L50 108 4 81V27L50 0Z"/>
- <path fill="#fff" d="M50 20 78 36v14H62v-6l-12-7-14 8v22l14 8 12-7v-6h16v14L50 92 22 76V36L50 20Z"/>
+const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 124 136" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+ <path fill="#111" fill-rule="evenodd" d="M62 2 118 34v40H86V58L62 44 38 58v34l24 14 24-14v-4h32v14l-56 32L6 102V34L62 2Z
+  M62 26 94 44v10H78v-2L62 44 46 54v34l16 10 16-10v-2h16v10L62 114 30 96V44L62 26Z"/>
 </svg>`;
 const myLogo=()=>D.me.logo||LOGO_DEFAULT;
 const printLogo=()=>D.me.logo||LOGO_PRINT;
@@ -5055,46 +5073,45 @@ function invoiceHTML(j){
  const links=[];
  if(j.mportLink)links.push(link(j.mportLink,"3D scan — walk the property"));
  if(j.ccLink)links.push(link(j.ccLink,"Job photos — CompanyCam"));
+ /* Option C — claim facts, links and payment live in a rail so the money
+    column stays clean. Two columns on paper, stacked if it ever wraps. */
+ const railLab=t=>`<div class="rail-lab">${t}</div>`;
  return `
- <div class="inv-head">
-  <div style="display:flex;align-items:center;gap:13pt">
-   ${myLogo()?`<img class="inv-logo" src="${esc(myLogo())}" alt="">`:CHAIRMAN_MARK}
-   <div>
-    <div class="inv-wordmark">CHAIRMAN</div>
-    <div class="inv-biz">${esc(me.biz||"Remodeling Group LLC")}</div>
-    <div class="inv-sm" style="margin-top:3pt">${esc(me.name||"")}${me.addr?" · "+esc(me.addr).replace(/\n/g,", "):""}
-     ${me.phone?"<br>"+link("tel:"+me.phone.replace(/[^0-9+]/g,""),me.phone):""}${me.email?" · "+link("mailto:"+me.email,me.email):""}</div>
-   </div></div>
-  <div style="text-align:right">
-   <div class="inv-title">Invoice</div>
-   <div class="inv-no"><b>${esc(no)}</b><br>${dateStr}${me.terms?"<br>"+esc(me.terms):""}</div>
-   <div class="inv-due"><span>Amount due</span><b>${money(f.over||f.due)}</b></div>
+ <div class="inv-c">
+  <div class="inv-main">
+   <div class="inv-brand">
+    ${myLogo()?`<img class="inv-logo" src="${esc(myLogo())}" alt="">`:CHAIRMAN_MARK}
+    <div><div class="inv-wordmark">CHAIRMAN</div>
+     <div class="inv-biz">${esc(me.biz||"Remodeling Group LLC")}</div></div>
+   </div>
+   <div class="inv-lab">Bill to</div>
+   <div class="inv-billto"><b>${esc(B.name)}</b>${j.contractorContact&&B.isC?"<br>Attn: "+esc(j.contractorContact):""}
+    ${B.email?"<br>"+link("mailto:"+B.email,B.email):""}</div>
+   <table class="inv"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
+    <tbody>${rows.join("")}</tbody></table>
+   ${(me.zelle||me.payInfo)?`<div class="inv-pay"><h4>How to pay</h4>
+    ${me.zelle?`<div style="display:flex;align-items:center;gap:10pt;margin-bottom:${me.payInfo?"8pt":"0"}">
+     <span style="display:inline-block;border:1.5pt solid #6D1ED4;color:#6D1ED4!important;border-radius:5pt;
+      padding:3pt 8pt;font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:-.02em">Zelle&reg;</span>
+     <span style="font:bold 13pt Helvetica,Arial,sans-serif">${esc(me.zelle)}</span></div>`:""}
+    ${me.payInfo?`<p>${esc(me.payInfo)}</p>`:""}</div>`:""}
+   ${(me.yelp||me.fb)?`<div class="inv-review">Happy with the work? A quick review helps more than you'd think.
+    ${me.yelp?" "+link(me.yelp,"Yelp"):""}${me.fb?" · "+link(me.fb,"Facebook"):""}</div>`:""}
+   <div class="inv-foot">
+    <span>${esc(me.name||"")}${me.phone?" · "+esc(me.phone):""}${me.email?" · "+esc(me.email):""}</span>
+    <span class="inv-pow">Powered by Chairman Command Center</span></div>
   </div>
- </div>
- <div class="inv-grid">
-  <div><div class="inv-lab">Bill to</div>
-   <div><b>${esc(B.name)}</b>${j.contractorContact&&B.isC?"<br>Attn: "+esc(j.contractorContact):""}
-    ${B.email?"<br>"+link("mailto:"+B.email,B.email):""}</div></div>
-  <div><div class="inv-lab">Property</div>
-   <div>${esc(j.address||jobName(j))}
-    ${j.insurer?"<br>"+esc(j.insurer):""}${j.claim?" · Claim "+esc(j.claim):""}</div></div>
- </div>
- <table class="inv"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
-  <tbody>${rows.join("")}</tbody></table>
- ${links.length?`<div class="inv-links"><div class="inv-lab" style="border:0;margin-bottom:4pt">Documentation</div>
-   ${links.join(" &nbsp;·&nbsp; ")}</div>`:""}
- ${(me.zelle||me.payInfo)?`<div class="inv-pay"><h4>How to pay</h4>
-  ${me.zelle?`<div style="display:flex;align-items:center;gap:10pt;margin-bottom:${me.payInfo?"8pt":"0"}">
-   <span style="display:inline-block;border:1.5pt solid #6D1ED4;color:#6D1ED4!important;border-radius:5pt;
-    padding:3pt 8pt;font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:-.02em">Zelle&reg;</span>
-   <span style="font:bold 13pt Helvetica,Arial,sans-serif">${esc(me.zelle)}</span></div>`:""}
-  ${me.payInfo?`<p>${esc(me.payInfo)}</p>`:""}</div>`:""}
- ${(me.yelp||me.fb)?`<div class="inv-review">
-  Happy with the work? A quick review helps more than you'd think.
-  ${me.yelp?" "+link(me.yelp,"Yelp"):""}${me.fb?" · "+link(me.fb,"Facebook"):""}</div>`:""}
- <div class="inv-foot">
-  <span>Thank you for your business.</span>
-  <span class="inv-pow">Powered by Chairman Command Center</span>
+
+  <aside class="inv-rail">
+   <div class="rail-kicker">Invoice</div>
+   <div class="rail-no">${esc(no)}</div>
+   <div class="rail-date">${dateStr}${me.terms?" · "+esc(me.terms):""}</div>
+   <div class="rail-due"><span>Amount due</span><b>${money(f.over||f.due)}</b></div>
+   ${railLab("Property")}
+   <div class="rail-v">${esc(j.address||jobName(j))}${j.loss?"<br>"+esc(j.loss):""}</div>
+   ${(j.insurer||j.claim)?railLab("Claim")+`<div class="rail-v">${esc(j.insurer||"")}${j.claim?"<br>"+esc(j.claim):""}</div>`:""}
+   ${links.length?railLab("Documentation")+`<div class="rail-v rail-links">${links.join("<br>")}</div>`:""}
+  </aside>
  </div>`;
 }
 function printInvoice(id){
@@ -6972,6 +6989,18 @@ function settings(){const m=D.me;
  sheet("Settings",`
   <label><span class="t">Your name</span><input class="in" id="sn" value="${esc(m.name||"")}"></label>
   <label><span class="t">Business name</span><input class="in" id="sb" value="${esc(m.biz||"")}"></label>
+  <div class="tog" style="align-items:center">
+   <div class="row" style="gap:12px;align-items:center">
+    <span style="width:52px;height:52px;flex:none;display:grid;place-items:center;border:1px solid var(--rule2);border-radius:10px;background:#fff;overflow:hidden">
+     ${m.logo?`<img src="${esc(m.logo)}" alt="" style="max-width:44px;max-height:44px">`
+      :`<span style="transform:scale(.42);transform-origin:center">${CHAIRMAN_MARK}</span>`}</span>
+    <div><div class="t" style="margin:0">Invoice logo</div>
+     <div class="xs dim">${m.logo?"Your file — used on every invoice"
+      :"Using the drawn mark. Upload a <b>solid dark</b> PNG — white-on-white won't show on paper."}</div></div></div>
+   <div class="row" style="gap:6px;flex:none">
+    <button type="button" class="opt2" onclick="pickLogo()">Upload</button>
+    ${m.logo?`<button type="button" class="opt2" onclick="resetLogo()">Clear</button>`:""}</div>
+  </div>
   <label><span class="t">Your phone</span><input class="in" id="sp" value="${esc(m.phone||"")}"></label>
   <label><span class="t">Your email</span><input class="in" id="se" value="${esc(m.email||"")}"></label>
   <label><span class="t">Your rate % <em>used on every invoice</em></span>
