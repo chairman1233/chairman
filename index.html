@@ -304,7 +304,15 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
   color:#888!important;margin-top:4pt}
  .hfor{text-align:center;padding:13pt 0 10pt}
  .hkick{font:9pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#888!important}
- .hclient{font:normal 27pt Georgia,serif;margin:6pt 0 4pt;letter-spacing:0}
+ /* the client's name sits in warm grey — present, but not shouting like the mark */
+ .hclient{font:normal 27pt Georgia,serif;margin:6pt 0 4pt;letter-spacing:0;color:#6E6E6E!important}
+ /* section heads centre over their own block */
+ #printarea table.inv th:first-child{text-align:center}
+ #printarea table.inv th.r{text-align:center}
+ .hpay{text-align:center}
+ .hpay .inv-lab{text-align:center}
+ /* his number is the one thing on the page that gets colour */
+ .paynum{color:#C4581F!important;font:bold 14pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.01em}
  .hsub{font:11.5pt/1.5 Inter,Helvetica,Arial,sans-serif;color:#444!important}
  .hsub2{font:10pt Inter,Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt}
  .hgrid{display:flex;gap:22pt;margin-top:11pt;align-items:stretch;page-break-inside:avoid}
@@ -750,7 +758,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-114 · square kept, one page";
+const BUILD="C-115 · hexagon only, centered, orange number";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5058,9 +5066,8 @@ async function cleanPrintLogo(){
  try{
   const img=await loadImg(printLogo());
   const s=Math.min(img.naturalWidth,img.naturalHeight);
-  /* keep the square frame — it's part of the mark. Crop just outside it,
-     then the white-erase below leaves frame + hexagon on clear ground. */
-  const cs=s*0.76, sx=(img.naturalWidth-cs)/2, sy=(img.naturalHeight-cs)/2;
+  /* crop inside the square frame so only the hexagon survives */
+  const cs=s*0.56, sx=(img.naturalWidth-cs)/2, sy=(img.naturalHeight-cs)/2;
   const c=document.createElement("canvas");c.width=c.height=640;
   const x=c.getContext("2d");
   x.drawImage(img,sx,sy,cs,cs,0,0,640,640);
@@ -5141,7 +5148,7 @@ function invoiceHTML(j){
 
   <div class="hgrid">
    <div class="hpay"><div class="inv-lab" style="border:0">How to pay</div>
-    ${me.zelle?`<div style="font:bold 12pt Helvetica,Arial,sans-serif;margin-top:4pt">Zelle · ${esc(me.zelle)}</div>`:""}
+    ${me.zelle?`<div style="margin-top:5pt">Zelle · <span class="paynum">${esc(me.zelle)}</span></div>`:""}
     ${me.payInfo?`<div style="font:10.5pt/1.5 Helvetica,Arial,sans-serif;margin-top:4pt;white-space:pre-wrap">${esc(me.payInfo)}</div>`:""}
     <div style="font:10pt Helvetica,Arial,sans-serif;color:#555!important;margin-top:5pt">Invoice ${esc(no)} · ${dateStr}${me.terms?" · "+esc(me.terms):""}</div></div>
    ${links.length?`<div><div class="inv-lab" style="border:0">Documentation</div>
