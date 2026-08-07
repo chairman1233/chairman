@@ -294,20 +294,20 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  #printarea *{color:#000!important}
  .inv-head{display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:.75pt solid #d5d5d5;padding-bottom:16pt;margin-bottom:22pt}
- .inv-logo{width:46pt;height:auto}
- .inv-mark{width:40pt;height:43pt;flex:none}
- .inv-wordmark{font:bold 17pt Georgia,serif;letter-spacing:.17em;line-height:1}
- .inv-biz{font:9.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;
-  color:#666!important;margin-top:3pt}
- .inv-sm{font:9.5pt/1.5 Helvetica,Arial,sans-serif;color:#444!important}
- .inv-title{font:11pt Helvetica,Arial,sans-serif;letter-spacing:.22em;text-transform:uppercase;
-  color:#666!important;line-height:1}
- .inv-no{font:9.5pt/1.5 Helvetica,Arial,sans-serif;margin-top:5pt;color:#444!important}
- .inv-due{margin-top:9pt;border-top:.75pt solid #d5d5d5;padding-top:7pt}
- .inv-due span{display:block;font:bold 7.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;
-  text-transform:uppercase;color:#666!important}
- .inv-due b{font:bold 21pt Georgia,serif;letter-spacing:-.01em}
- .inv-links{margin-top:16pt;font:10pt Helvetica,Arial,sans-serif}
+ .inv-logo{width:62pt;height:auto}
+ .inv-mark{width:56pt;height:60pt;flex:none}
+ .inv-wordmark{font:bold 25pt Georgia,serif;letter-spacing:.16em;line-height:1}
+ .inv-biz{font:10.5pt Helvetica,Arial,sans-serif;letter-spacing:.15em;text-transform:uppercase;
+  color:#555!important;margin-top:4pt}
+ .inv-sm{font:10.5pt/1.5 Helvetica,Arial,sans-serif;color:#333!important}
+ .inv-title{font:15pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;
+  color:#555!important;line-height:1}
+ .inv-no{font:11pt/1.5 Helvetica,Arial,sans-serif;margin-top:7pt;color:#333!important}
+ .inv-due{margin-top:11pt;border-top:1pt solid #cfcfcf;padding-top:9pt}
+ .inv-due span{display:block;font:bold 9pt Helvetica,Arial,sans-serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#555!important}
+ .inv-due b{font:bold 32pt Georgia,serif;letter-spacing:-.015em;line-height:1.05}
+ .inv-links{margin-top:18pt;font:11pt Helvetica,Arial,sans-serif}
  .inv-review{margin-top:16pt;padding:9pt 0;border-top:.75pt solid #e2e2e2;
   font:10pt Helvetica,Arial,sans-serif;color:#444!important}
  .inv-grid{display:flex;gap:34pt;margin-bottom:22pt}
@@ -315,17 +315,22 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  .inv-lab{font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;
   color:#555!important;margin-bottom:5pt;border-bottom:1px solid #ccc;padding-bottom:3pt}
  table.inv{width:100%;border-collapse:collapse;margin:8pt 0 0}
- table.inv th{font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;
-  text-align:left;border-bottom:1.5px solid #000;padding:6pt 0}
+ table.inv th{font:bold 9.5pt Helvetica,Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;
+  text-align:left;border-bottom:1.5px solid #000;padding:8pt 0}
  table.inv th.r,table.inv td.r{text-align:right}
- table.inv td{padding:9pt 0;border-bottom:1px solid #ddd;vertical-align:top}
- table.inv tr.tot td{border-bottom:none;border-top:2px solid #000;padding-top:12pt;
-  font:bold 15pt Georgia,serif}
+ table.inv td{padding:11pt 0;border-bottom:1px solid #ddd;vertical-align:top;font-size:12.5pt}
+ table.inv tr.tot td{border-bottom:none;border-top:2px solid #000;padding-top:14pt;
+  font:bold 19pt Georgia,serif}
+ .inv-lab{font-size:9pt}
+ .inv-grid{font-size:12pt}
  .inv-pay{margin-top:26pt;border:1.5px solid #000;padding:14pt}
- .inv-pay h4{font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;margin:0 0 8pt}
- .inv-pay p{margin:0;white-space:pre-wrap;font:11pt/1.6 Helvetica,Arial,sans-serif}
+ .inv-pay h4{font:bold 9.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;margin:0 0 8pt}
+ .inv-pay p{margin:0;white-space:pre-wrap;font:11.5pt/1.6 Helvetica,Arial,sans-serif}
+ /* the fine print is the ONLY thing on the page that should be small */
  .inv-foot{margin-top:26pt;padding-top:12pt;border-top:1px solid #ccc;
-  font:9.5pt Helvetica,Arial,sans-serif;color:#555!important;text-align:center}
+  font:10pt Helvetica,Arial,sans-serif;color:#555!important;
+  display:flex;justify-content:space-between;align-items:baseline;gap:16pt}
+ .inv-pow{font-size:8pt;color:#999!important;letter-spacing:.04em}
 }
 
 /* ---- month calendar: one continuous bar per job, spanning its days ---- */
@@ -717,7 +722,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-107 · priority, CompanyCam, cleaner invoice";
+const BUILD="C-108 · invoice type sized to print";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
