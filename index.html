@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="Chairman">
 <title>Chairman</title>
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230D0D0C'/%3E%3Ctext x='50' y='70' font-size='62' font-family='Times New Roman,serif' text-anchor='middle' fill='%23F4F3EF'%3EC%3C/text%3E%3C/svg%3E">
@@ -294,21 +296,29 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  #printarea *{color:#000!important}
  /* ---- Layout H: centered mark, client-first ---- */
  .inv-h{max-width:7.2in;margin:0 auto}
- .hd{text-align:center;padding-bottom:22pt;border-bottom:.75pt solid #d5d5d5}
- .hlogo{width:88pt;height:auto}
- .hname{font:bold 16pt Georgia,serif;letter-spacing:.26em;margin-top:10pt}
- .htag{font:9pt Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
+ .hd{text-align:center;padding-bottom:16pt;border-bottom:.75pt solid #d5d5d5}
+ /* The JPG carries its own off-white tile, frame and shadow. The crop window
+    cuts the frame off; multiply melts the leftover tile into the paper so only
+    the black mark prints. */
+ .hlogoWrap{width:72pt;height:72pt;margin:0 auto;overflow:hidden}
+ .hlogo{width:178%;height:178%;margin-left:-39%;margin-top:-39%;object-fit:cover;
+  mix-blend-mode:multiply}
+ .hname{font:bold 16pt Georgia,serif;letter-spacing:.26em;margin-top:9pt}
+ .htag{font:8.5pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
   color:#888!important;margin-top:5pt}
- .hfor{text-align:center;padding:24pt 0 20pt}
- .hkick{font:9.5pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#888!important}
- .hclient{font:bold 30pt Georgia,serif;margin:8pt 0 5pt;letter-spacing:-.005em}
- .hsub{font:11.5pt/1.5 Helvetica,Arial,sans-serif;color:#444!important}
- .hsub2{font:10.5pt Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt}
- .hgrid{display:flex;gap:22pt;margin-top:20pt;align-items:stretch}
+ .hfor{text-align:center;padding:17pt 0 14pt}
+ .hkick{font:9.5pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#888!important}
+ .hclient{font:normal 30pt Georgia,serif;margin:7pt 0 5pt;letter-spacing:0}
+ .hsub{font:11.5pt/1.5 Inter,Helvetica,Arial,sans-serif;color:#444!important}
+ .hsub2{font:10pt Inter,Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt}
+ .hgrid{display:flex;gap:22pt;margin-top:14pt;align-items:stretch;page-break-inside:avoid}
  .hgrid>div{flex:1}
- .hpay{border:1.5pt solid #000;padding:12pt 14pt}
- .hfoot{text-align:center;border-top:.75pt solid #d5d5d5;margin-top:24pt;padding-top:11pt;
-  font:10pt Helvetica,Arial,sans-serif;color:#555!important}
+ .hpay{border:1.5pt solid #000;padding:11pt 13pt}
+ .hfoot{text-align:center;border-top:.75pt solid #d5d5d5;margin-top:14pt;padding-top:10pt;
+  font:10pt Inter,Helvetica,Arial,sans-serif;color:#555!important;page-break-inside:avoid}
+ /* the labels everywhere pick up the modern sans, not Arial */
+ #printarea table.inv th,#printarea .inv-lab,#printarea .inv-pow,#printarea .inv-review,
+ #printarea .inv-sm{font-family:Inter,Helvetica,Arial,sans-serif}
  .inv-head{display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:.75pt solid #d5d5d5;padding-bottom:16pt;margin-bottom:22pt}
  .inv-logo{width:74pt;height:auto}
@@ -741,7 +751,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-111 · your mark, centered, client-first";
+const BUILD="C-112 · the mark prints clean";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5065,11 +5075,12 @@ function invoiceHTML(j){
     ${B.isC&&j.owner?"Property owner: "+esc(j.owner)+"<br>":""}
     Estimate total: ${money(j.total)}
     ${f.kind==="aftersubs"&&f.subs?"<br>Subcontractors paid: "+money(f.subs)+" — balance "+money(f.base):""}
-   </div></td><td class="r">${money(f.feeOnly)}</td></tr>`);
+   </div></td><td class="r">${f.kind==="retainer"&&!f.feeOnly?"—":money(f.feeOnly)}</td></tr>`);
  extraList(j).forEach(x=>rows.push(`<tr><td>${esc(x.label)}</td><td class="r">${money(x.amount)}</td></tr>`));
  if(f.adv)rows.push(`<tr><td>Less payment received in advance</td><td class="r">− ${money(f.adv)}</td></tr>`);
  rows.push(f.kind==="retainer"&&f.due===0
-  ?`<tr class="tot"><td>Covered by retainer</td><td class="r" style="font-size:14pt">nothing to pay</td></tr>`
+  ?`<tr class="tot"><td colspan="2" style="font:normal 13pt Georgia,serif;text-align:center;color:#333!important">
+     Covered by your retainer — nothing to pay on this one.</td></tr>`
   :`<tr class="tot"><td>${f.over?"Credit — overpaid":"Amount due"}</td>
    <td class="r">${money(f.over||f.due)}</td></tr>`);
  /* Live links survive Print-to-PDF in Chrome, so the adjuster can tap straight
@@ -5085,7 +5096,7 @@ function invoiceHTML(j){
  return `
  <div class="inv-h">
   <div class="hd">
-   <img class="hlogo" src="${esc(printLogo())}" alt="">
+   <div class="hlogoWrap"><img class="hlogo" src="${esc(printLogo())}" alt=""></div>
    <div class="hname">CHAIRMAN REMODELING</div>
    <div class="htag">Insurance estimating · Houston, Texas</div>
   </div>
