@@ -297,12 +297,8 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  /* ---- Layout H: centered mark, client-first ---- */
  .inv-h{max-width:7.2in;margin:0 auto}
  .hd{text-align:center;padding-bottom:16pt;border-bottom:.75pt solid #d5d5d5}
- /* The JPG carries its own off-white tile, frame and shadow. The crop window
-    cuts the frame off; multiply melts the leftover tile into the paper so only
-    the black mark prints. */
- .hlogoWrap{width:72pt;height:72pt;margin:0 auto;overflow:hidden}
- .hlogo{width:178%;height:178%;margin-left:-39%;margin-top:-39%;object-fit:cover;
-  mix-blend-mode:multiply}
+ /* the logo arrives pre-cleaned as a transparent PNG — nothing clever here */
+ .hlogo{width:80pt;height:auto}
  .hname{font:bold 16pt Georgia,serif;letter-spacing:.26em;margin-top:9pt}
  .htag{font:8.5pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
   color:#888!important;margin-top:5pt}
@@ -751,7 +747,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-112 · the mark prints clean";
+const BUILD="C-113 · the mark prints, guaranteed";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5049,6 +5045,32 @@ function invText(j){
 /* Benny's actual black mark, shipped with the app — logo-print.jpg in the repo.
    An uploaded logo in Settings still wins; this is the default under it. */
 const LOGO_PRINT="logo-print.jpg";
+/* The JPG carries a frame, a shadow and an off-white tile baked into its
+   pixels. CSS tricks (blend modes) die in the print engine, so the file is
+   processed for real: crop to the mark, erase everything near-white, hand the
+   layout a clean transparent PNG. Runs once, cached in memory. */
+let _logoClean=null;
+async function cleanPrintLogo(){
+ if(_logoClean)return _logoClean;
+ try{
+  const img=await loadImg(printLogo());
+  const s=Math.min(img.naturalWidth,img.naturalHeight);
+  const cs=s*0.56, sx=(img.naturalWidth-cs)/2, sy=(img.naturalHeight-cs)/2;
+  const c=document.createElement("canvas");c.width=c.height=640;
+  const x=c.getContext("2d");
+  x.drawImage(img,sx,sy,cs,cs,0,0,640,640);
+  const d=x.getImageData(0,0,640,640);
+  for(let i=0;i<d.data.length;i+=4){
+   const lum=(d.data[i]+d.data[i+1]+d.data[i+2])/3;
+   if(lum>200)d.data[i+3]=0;                                  /* tile → gone */
+   else if(lum>120)d.data[i+3]=Math.round(255*(200-lum)/80);  /* shadow → fades */
+  }
+  x.putImageData(d,0,0);
+  _logoClean=c.toDataURL("image/png");
+ }catch(e){_logoClean=printLogo();}   /* worst case: the raw file, not nothing */
+ return _logoClean;
+}
+let _logoForPrint="";
 /* The mark, drawn as vector so it prints sharp at any size and needs no asset:
    a hexagon with a C notched out of it. Falls back to an uploaded logo if set. */
 const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 124 136" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -5096,7 +5118,7 @@ function invoiceHTML(j){
  return `
  <div class="inv-h">
   <div class="hd">
-   <div class="hlogoWrap"><img class="hlogo" src="${esc(printLogo())}" alt=""></div>
+   <img class="hlogo" src="${esc(_logoForPrint||printLogo())}" alt="">
    <div class="hname">CHAIRMAN REMODELING</div>
    <div class="htag">Insurance estimating · Houston, Texas</div>
   </div>
@@ -5130,13 +5152,14 @@ function invoiceHTML(j){
   </div>
  </div>`;
 }
-function printInvoice(id){
+async function printInvoice(id){
  const j=job(id);
  if(!j.invNo){j.invNo="INV-"+D.invNo;D.invNo++;j.invDate=today();
   if(j.status==="Complete")j.status="Invoiced";save();}
+ _logoForPrint=await cleanPrintLogo();   /* the mark, frame cropped, tile erased */
  document.getElementById("printarea").innerHTML=invoiceHTML(j);
  close_();
- setTimeout(()=>{window.print();render();},80);
+ setTimeout(()=>{window.print();render();},120);
 }
 function previewPDF(id){const j=job(id);
  sheet("Invoice preview",`
