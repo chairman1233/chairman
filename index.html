@@ -296,22 +296,25 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  #printarea *{color:#000!important}
  /* ---- Layout H: centered mark, client-first ---- */
  .inv-h{max-width:7.2in;margin:0 auto}
- .hd{text-align:center;padding-bottom:16pt;border-bottom:.75pt solid #d5d5d5}
+ .hd{text-align:center;padding-bottom:12pt;border-bottom:.75pt solid #d5d5d5}
  /* the logo arrives pre-cleaned as a transparent PNG — nothing clever here */
- .hlogo{width:80pt;height:auto}
- .hname{font:bold 16pt Georgia,serif;letter-spacing:.26em;margin-top:9pt}
+ .hlogo{width:68pt;height:auto}
+ .hname{font:bold 15pt Georgia,serif;letter-spacing:.26em;margin-top:7pt}
  .htag{font:8.5pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
-  color:#888!important;margin-top:5pt}
- .hfor{text-align:center;padding:17pt 0 14pt}
- .hkick{font:9.5pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#888!important}
- .hclient{font:normal 30pt Georgia,serif;margin:7pt 0 5pt;letter-spacing:0}
+  color:#888!important;margin-top:4pt}
+ .hfor{text-align:center;padding:13pt 0 10pt}
+ .hkick{font:9pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#888!important}
+ .hclient{font:normal 27pt Georgia,serif;margin:6pt 0 4pt;letter-spacing:0}
  .hsub{font:11.5pt/1.5 Inter,Helvetica,Arial,sans-serif;color:#444!important}
  .hsub2{font:10pt Inter,Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt}
- .hgrid{display:flex;gap:22pt;margin-top:14pt;align-items:stretch;page-break-inside:avoid}
+ .hgrid{display:flex;gap:22pt;margin-top:11pt;align-items:stretch;page-break-inside:avoid}
  .hgrid>div{flex:1}
- .hpay{border:1.5pt solid #000;padding:11pt 13pt}
- .hfoot{text-align:center;border-top:.75pt solid #d5d5d5;margin-top:14pt;padding-top:10pt;
-  font:10pt Inter,Helvetica,Arial,sans-serif;color:#555!important;page-break-inside:avoid}
+ .hpay{border:1.5pt solid #000;padding:10pt 12pt}
+ .hfoot{text-align:center;border-top:.75pt solid #d5d5d5;margin-top:10pt;padding-top:8pt;
+  font:9.5pt Inter,Helvetica,Arial,sans-serif;color:#555!important;page-break-inside:avoid}
+ #printarea .inv-review{margin-top:10pt;padding:7pt 0;page-break-inside:avoid}
+ #printarea table.inv td{padding:9pt 0}
+ #printarea table.inv tr.tot td{padding-top:11pt}
  /* the labels everywhere pick up the modern sans, not Arial */
  #printarea table.inv th,#printarea .inv-lab,#printarea .inv-pow,#printarea .inv-review,
  #printarea .inv-sm{font-family:Inter,Helvetica,Arial,sans-serif}
@@ -747,7 +750,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-113 · the mark prints, guaranteed";
+const BUILD="C-114 · square kept, one page";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5055,7 +5058,9 @@ async function cleanPrintLogo(){
  try{
   const img=await loadImg(printLogo());
   const s=Math.min(img.naturalWidth,img.naturalHeight);
-  const cs=s*0.56, sx=(img.naturalWidth-cs)/2, sy=(img.naturalHeight-cs)/2;
+  /* keep the square frame — it's part of the mark. Crop just outside it,
+     then the white-erase below leaves frame + hexagon on clear ground. */
+  const cs=s*0.76, sx=(img.naturalWidth-cs)/2, sy=(img.naturalHeight-cs)/2;
   const c=document.createElement("canvas");c.width=c.height=640;
   const x=c.getContext("2d");
   x.drawImage(img,sx,sy,cs,cs,0,0,640,640);
