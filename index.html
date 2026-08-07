@@ -293,10 +293,11 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  #printarea{display:block!important;font:12pt/1.45 Georgia,'Times New Roman',serif;color:#000}
  #printarea *{color:#000!important}
  /* ---- Option C: main column + claim rail ---- */
- .inv-c{display:flex;gap:0;align-items:stretch;min-height:8.5in}
- .inv-main{flex:1;padding-right:26pt}
- .inv-brand{display:flex;align-items:center;gap:13pt;margin-bottom:26pt}
- .inv-rail{width:170pt;flex:none;background:#f4f3f0!important;padding:22pt 18pt;
+ /* No min-height — a short invoice was rendering a half-page slab of grey. */
+ .inv-c{display:flex;gap:0;align-items:flex-start}
+ .inv-main{flex:1;padding-right:30pt;min-width:0}
+ .inv-brand{display:flex;align-items:center;gap:15pt;margin-bottom:30pt}
+ .inv-rail{width:196pt;flex:none;background:#f4f3f0!important;padding:24pt 20pt 26pt;
   -webkit-print-color-adjust:exact;print-color-adjust:exact}
  .rail-kicker{font:11pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#666!important}
  .rail-no{font:bold 19pt Georgia,serif;margin:4pt 0 2pt}
@@ -312,11 +313,11 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  .inv-billto{font:12.5pt/1.5 Helvetica,Arial,sans-serif;margin-bottom:6pt}
  .inv-head{display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:.75pt solid #d5d5d5;padding-bottom:16pt;margin-bottom:22pt}
- .inv-logo{width:62pt;height:auto}
- .inv-mark{width:56pt;height:61pt;flex:none}
- .inv-wordmark{font:bold 25pt Georgia,serif;letter-spacing:.16em;line-height:1}
- .inv-biz{font:10.5pt Helvetica,Arial,sans-serif;letter-spacing:.15em;text-transform:uppercase;
-  color:#555!important;margin-top:4pt}
+ .inv-logo{width:74pt;height:auto}
+ .inv-mark{width:66pt;height:72pt;flex:none}
+ .inv-wordmark{font:bold 27pt Georgia,serif;letter-spacing:.15em;line-height:1}
+ .inv-biz{font:10pt Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
+  color:#777!important;margin-top:5pt}
  .inv-sm{font:10.5pt/1.5 Helvetica,Arial,sans-serif;color:#333!important}
  .inv-title{font:15pt Helvetica,Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;
   color:#555!important;line-height:1}
@@ -339,6 +340,8 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  table.inv td{padding:11pt 0;border-bottom:1px solid #ddd;vertical-align:top;font-size:12.5pt}
  table.inv tr.tot td{border-bottom:none;border-top:2px solid #000;padding-top:14pt;
   font:bold 19pt Georgia,serif}
+ .rail-sub{font:9.5pt/1.4 Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt;
+  text-transform:none;letter-spacing:0}
  .inv-lab{font-size:9pt}
  .inv-grid{font-size:12pt}
  .inv-pay{margin-top:26pt;border:1.5px solid #000;padding:14pt}
@@ -740,7 +743,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-109 · invoice option C";
+const BUILD="C-110 · invoice C, name once";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5065,7 +5068,9 @@ function invoiceHTML(j){
    </div></td><td class="r">${money(f.feeOnly)}</td></tr>`);
  extraList(j).forEach(x=>rows.push(`<tr><td>${esc(x.label)}</td><td class="r">${money(x.amount)}</td></tr>`));
  if(f.adv)rows.push(`<tr><td>Less payment received in advance</td><td class="r">− ${money(f.adv)}</td></tr>`);
- rows.push(`<tr class="tot"><td>${f.over?"Credit — overpaid":"Amount due"}</td>
+ rows.push(f.kind==="retainer"&&f.due===0
+  ?`<tr class="tot"><td>Covered by retainer</td><td class="r" style="font-size:14pt">nothing to pay</td></tr>`
+  :`<tr class="tot"><td>${f.over?"Credit — overpaid":"Amount due"}</td>
    <td class="r">${money(f.over||f.due)}</td></tr>`);
  /* Live links survive Print-to-PDF in Chrome, so the adjuster can tap straight
     through to the scan and the photos instead of retyping a URL. */
@@ -5076,13 +5081,20 @@ function invoiceHTML(j){
  /* Option C — claim facts, links and payment live in a rail so the money
     column stays clean. Two columns on paper, stacked if it ever wraps. */
  const railLab=t=>`<div class="rail-lab">${t}</div>`;
+ /* "CHAIRMAN" then "Chairman Remodeling" printed the name twice. The wordmark
+    owns the name; the line under it carries only what's left. */
+ const bizTail=(me.biz||"").replace(/^\s*chairman\s*/i,"").trim();
+ /* A retainer job legitimately bills nothing — printing "$0.00" as the headline
+    number reads as a broken invoice rather than a covered one. */
+ const covered=f.kind==="retainer"&&f.due===0;
+ const dueBig=covered?"Covered":money(f.over||f.due);
  return `
  <div class="inv-c">
   <div class="inv-main">
    <div class="inv-brand">
     ${myLogo()?`<img class="inv-logo" src="${esc(myLogo())}" alt="">`:CHAIRMAN_MARK}
     <div><div class="inv-wordmark">CHAIRMAN</div>
-     <div class="inv-biz">${esc(me.biz||"Remodeling Group LLC")}</div></div>
+     ${bizTail?`<div class="inv-biz">${esc(bizTail)}</div>`:""}</div>
    </div>
    <div class="inv-lab">Bill to</div>
    <div class="inv-billto"><b>${esc(B.name)}</b>${j.contractorContact&&B.isC?"<br>Attn: "+esc(j.contractorContact):""}
@@ -5106,7 +5118,9 @@ function invoiceHTML(j){
    <div class="rail-kicker">Invoice</div>
    <div class="rail-no">${esc(no)}</div>
    <div class="rail-date">${dateStr}${me.terms?" · "+esc(me.terms):""}</div>
-   <div class="rail-due"><span>Amount due</span><b>${money(f.over||f.due)}</b></div>
+   <div class="rail-due"><span>${covered?"Status":f.over?"Credit":"Amount due"}</span>
+    <b${covered?' style="font-size:20pt"':""}>${dueBig}</b>
+    ${covered?`<div class="rail-sub">by retainer — nothing to pay</div>`:""}</div>
    ${railLab("Property")}
    <div class="rail-v">${esc(j.address||jobName(j))}${j.loss?"<br>"+esc(j.loss):""}</div>
    ${(j.insurer||j.claim)?railLab("Claim")+`<div class="rail-v">${esc(j.insurer||"")}${j.claim?"<br>"+esc(j.claim):""}</div>`:""}
