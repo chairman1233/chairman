@@ -21,7 +21,8 @@
     hits 21:1, which halates — the letters bloom and the eye keeps refocusing.
     Elevation reads as a LIGHTER surface here, not a shadow. */
  --paper:#121212; --panel:#1C1C1E; --panel2:#26262A; --rule:#33333A; --rule2:#45454D;
- --ink:#EDE9E1; --ink2:#C4BFB6; --ink3:#ABA69E;
+ /* neutral white — the cream is gone */
+ --ink:#F0F0F1; --ink2:#C2C4C7; --ink3:#9A9CA0;
  --inv:#000000; --sig:#F2ECDE;
  /* on black the stage colours can carry more light without shouting */
  /* One warm colour: Claude orange. The old gold went brown in light mode and
@@ -30,7 +31,15 @@
  /* High luminance, LOW chroma. Bright without vibrating: saturated hues on a
     dark surface shimmer at the edges, which is the strain. Light tones read
     brighter than saturated ones anyway. */
- --c-est:#A9D4F5; --c-rdy:#FFAE85; --c-out:#FFAE85; --c-paid:#9FE8C4; --c-lost:#A9AFB5;
+ /* One colour, one meaning. Coral is gone, and ready-to-bill no longer wears
+    the same colour as overdue — money you can collect and money that's late
+    are different problems and now look it. */
+ --c-est:#7FB8F0;    /* steel — being estimated, work in progress   */
+ --c-rdy:#6FD79B;    /* signal — finished, go collect it            */
+ --c-out:#F0B44F;    /* amber — invoice out, waiting on them        */
+ --c-paid:#B6B6B9;   /* graphite — settled, needs nothing from you  */
+ --c-lost:#6A6A6E;   /* dark graphite — closed, gone                */
+ --c-late:#E5544B;   /* crimson — overdue or in dispute. Alarm only */
  --serif:'Playfair Display','Bodoni MT',Didot,'Didot LT STD','Times New Roman',Times,serif;
  /* display face for the big wordmark — sturdy strokes, no hairlines to bloom */
  --display:Georgia,Cambria,Constantia,'Book Antiqua',Palatino,'Times New Roman',serif;
@@ -39,9 +48,10 @@
 /* daytime: sky blue. no red, no clay, nothing that can read pink. */
 body.paper{
  --paper:#EDF4FA; --panel:#FFFFFF; --panel2:#DEEAF4; --rule:#CBDCE9; --rule2:#A6C1D6;
- --ink:#07141D; --ink2:#1C3140; --ink3:#294053; --inv:#FFFFFF; --sig:#0C3B5E;
+ --ink:#141416; --ink2:#3A3C40; --ink3:#5A5C60; --inv:#FFFFFF; --sig:#1B1B1E;
  /* #A9741B was the brown one. Gone — same Claude orange as night mode. */
- --c-est:#0A5FBF; --c-rdy:#C05A2E; --c-out:#C05A2E; --c-paid:#0D6B4A; --c-lost:#4E6A7C;
+ --c-est:#1B6FC4; --c-rdy:#12855A; --c-out:#B5760D; --c-paid:#6A6A6E; --c-lost:#8A8A8E;
+ --c-late:#C2352C;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -732,6 +742,8 @@ body .v-rdy,body .v-rdy *:not(.k):not(.dim):not(.st){color:var(--c-rdy)}
 body .v-out,body .v-out *:not(.k):not(.dim):not(.st){color:var(--c-out)}
 body .v-paid,body .v-paid *:not(.k):not(.dim):not(.st){color:var(--c-paid)}
 body .v-lost,body .v-lost *:not(.k):not(.dim):not(.st){color:var(--c-lost)}
+body .v-late,body .v-late *:not(.k):not(.dim):not(.st){color:var(--c-late)}
+body .st.s-late{color:var(--c-late);border-color:currentColor}
 body .st.s-est{color:var(--c-est)} body .st.s-out{color:var(--c-out)}
 body .st.s-paid{color:var(--c-paid)} body .st.s-lost{color:var(--c-lost)}
 body .st.s-rdy{color:var(--paper)}
@@ -758,7 +770,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-116 · PDFs name themselves";
+const BUILD="C-117 · one colour, one meaning";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3711,7 +3723,7 @@ function jcard(j){const f=fee(j),C=ck(j.status);
     onclick="event.stopPropagation();moveMenu('${j.id}')">⋮</button></div>
   ${(j.priority&&j.priority!=="Moderate")||j.dueDate?`<div class="tags" style="margin:-4px 0 8px">
     ${j.priority&&j.priority!=="Moderate"?`<span class="chip v-${PCOL2[j.priority]}">${esc(j.priority)}</span>`:""}
-    ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
+    ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"late":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
   ${nextOf(j)?`<div class="xs trunc" style="margin:0 0 8px;font-weight:600;color:${nextState(j)==="over"?"var(--c-out)":nextState(j)==="today"?"var(--c-rdy)":"var(--ink3)"}"
     onclick="event.stopPropagation();setNextSheet('${j.id}')">▸ ${esc(j.next.text)} · ${j.next.date===today()?"today":nextState(j)==="over"?"overdue":fmt(j.next.date)}</div>`
    :needsNext(j)?`<div class="xs" style="margin:0 0 8px;color:var(--ink3);cursor:pointer"
@@ -4177,7 +4189,7 @@ R.job=({id})=>{
   ${visitOf(j).state!=="none"?`<span class="chip ${visitOf(j).state==="onsite"?"v-out":"v-est"}">${
     visitOf(j).state==="onsite"?"◉ On site now":"◷ Visit "+(visitOf(j).at?fmt(visitOf(j).at):"scheduled")}</span>`:""}
   <span class="chip v-${PCOL2[j.priority||"Moderate"]}">${esc(j.priority||"Moderate")} priority</span>
-  ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"out":"rdy"}">${j.dueDate<today()?"Overdue "+fmt(j.dueDate):"Due "+fmt(j.dueDate)}</span>`:""}
+  ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"late":"rdy"}">${j.dueDate<today()?"Overdue "+fmt(j.dueDate):"Due "+fmt(j.dueDate)}</span>`:""}
   ${j.disputeStage?`<span class="chip v-out" style="cursor:pointer" onclick="go('disputes')">⚖ ${esc(j.disputeStage)}</span>`:""}
   ${forContractor(j)?`<span class="chip v-est">Contractor job</span>`:""}
   ${j.loss?`<span class="chip v-${C}">${esc(j.loss)}</span>`:""}
@@ -4279,10 +4291,12 @@ R.job=({id})=>{
   <button class="btn" onclick="moveJob('${j.id}','Paid')">✓ Done — close it out</button>`:""}
  ${j.status==="Complete"&&!(onRetainer(j)&&fee(j).due===0)?`<button class="btn" onclick="go('invoice',{id:'${j.id}'})">Build &amp; send invoice</button>
   <button class="btn sec" onclick="moveJob('${j.id}','Estimating')">← Back to estimating</button>`:""}
- ${j.status==="Invoiced"?`<div class="pan" style="margin-top:20px;border-color:var(--c-out)">
-   <div class="lab v-out">◉ Invoice ${esc(j.invNo||"")} —— sent ${fmt(j.invDate)}</div>
-   <div class="num money v-out" style="margin:12px 0 4px">${money(f.due)}</div>
-   <div class="xs v-out" style="letter-spacing:.14em;text-transform:uppercase;opacity:.75">Outstanding ${ago(j.invDate)?"—— "+plural(ago(j.invDate),"day"):"—— today"}</div></div>
+ ${j.status==="Invoiced"?(()=>{const lateK=ago(j.invDate)>=14?"late":"out";return `
+  <div class="pan" style="margin-top:20px;border-color:var(--c-${lateK})">
+   <div class="lab v-${lateK}">◉ Invoice ${esc(j.invNo||"")} —— sent ${fmt(j.invDate)}</div>
+   <div class="num money v-${lateK}" style="margin:12px 0 4px">${money(f.due)}</div>
+   <div class="xs v-${lateK}" style="letter-spacing:.14em;text-transform:uppercase;opacity:.75">${
+    lateK==="late"?"Late":"Outstanding"} ${ago(j.invDate)?"—— "+plural(ago(j.invDate),"day"):"—— today"}</div></div>`;})()
   <button class="btn" onclick="moveJob('${j.id}','Paid')">● Mark paid</button>
   <button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Resend invoice</button>`:""}
  ${j.status==="Paid"&&(D.me.yelp||D.me.fb)?`<button class="btn sec" onclick="askReview('${j.id}')">★ Ask them for a review</button>`:""}
