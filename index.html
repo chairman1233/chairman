@@ -293,12 +293,23 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  #printarea{display:block!important;font:12pt/1.45 Georgia,'Times New Roman',serif;color:#000}
  #printarea *{color:#000!important}
  .inv-head{display:flex;justify-content:space-between;align-items:flex-start;
-  border-bottom:2px solid #000;padding-bottom:14pt;margin-bottom:20pt}
- .inv-logo{width:104pt;height:auto;margin-bottom:8pt}
- .inv-biz{font:bold 15pt Georgia,serif;letter-spacing:.02em}
- .inv-sm{font:9.5pt/1.5 Helvetica,Arial,sans-serif;color:#333!important}
- .inv-title{font:bold 26pt Georgia,serif;letter-spacing:-.01em;text-align:right;line-height:1}
- .inv-no{font:10pt Helvetica,Arial,sans-serif;text-align:right;margin-top:6pt}
+  border-bottom:.75pt solid #d5d5d5;padding-bottom:16pt;margin-bottom:22pt}
+ .inv-logo{width:46pt;height:auto}
+ .inv-mark{width:40pt;height:43pt;flex:none}
+ .inv-wordmark{font:bold 17pt Georgia,serif;letter-spacing:.17em;line-height:1}
+ .inv-biz{font:9.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;
+  color:#666!important;margin-top:3pt}
+ .inv-sm{font:9.5pt/1.5 Helvetica,Arial,sans-serif;color:#444!important}
+ .inv-title{font:11pt Helvetica,Arial,sans-serif;letter-spacing:.22em;text-transform:uppercase;
+  color:#666!important;line-height:1}
+ .inv-no{font:9.5pt/1.5 Helvetica,Arial,sans-serif;margin-top:5pt;color:#444!important}
+ .inv-due{margin-top:9pt;border-top:.75pt solid #d5d5d5;padding-top:7pt}
+ .inv-due span{display:block;font:bold 7.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#666!important}
+ .inv-due b{font:bold 21pt Georgia,serif;letter-spacing:-.01em}
+ .inv-links{margin-top:16pt;font:10pt Helvetica,Arial,sans-serif}
+ .inv-review{margin-top:16pt;padding:9pt 0;border-top:.75pt solid #e2e2e2;
+  font:10pt Helvetica,Arial,sans-serif;color:#444!important}
  .inv-grid{display:flex;gap:34pt;margin-bottom:22pt}
  .inv-grid > div{flex:1}
  .inv-lab{font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;
@@ -706,7 +717,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-106 · four destinations";
+const BUILD="C-107 · priority, CompanyCam, cleaner invoice";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3847,6 +3858,9 @@ function newJob(id){const j=id?job(id):{};
      onclick="pickMp(this,'${t}')">${t}</button>`).join("")}</div></label>
    <label><span class="t">Matterport link</span>
     <input class="in" id="jml" value="${esc(j.mportLink||"")}" placeholder="https://my.matterport.com/show/?m=..."></label>
+   <label><span class="t">CompanyCam link <em>photos for this job</em></span>
+    <input class="in" id="jcc" value="${esc(j.ccLink||"")}" placeholder="https://app.companycam.com/projects/..."
+     autocomplete="off" autocorrect="off" spellcheck="false"></label>
    <label><span class="t">Who contacted / referred you?</span>
     <input class="in" id="jw" value="${esc(j.who||"")}" placeholder="Dana Reyes — State Farm"></label>
    <label><span class="t">Insurance carrier</span><input class="in" id="ji" value="${esc(j.insurer||"")}" placeholder="State Farm"></label>
@@ -4037,7 +4051,9 @@ function saveJob(id){
   priority:_prio,startDate:$("#jsd")?$("#jsd").value:"",dueDate:$("#jdd")?$("#jdd").value:"",
   startTime:$("#jst")?$("#jst").value:"",
   estHours:$("#jeh")?(+$("#jeh").value||0):0,
-  loss:_loss,mport:(link&&_mp==="Not needed")?"Done":_mp,mportLink:link,who:$("#jw").value.trim(),
+  loss:_loss,mport:(link&&_mp==="Not needed")?"Done":_mp,mportLink:link,
+  ccLink:$("#jcc")?(()=>{let v=$("#jcc").value.trim();if(v&&!/^https?:\/\//i.test(v))v="https://"+v;return v;})():(id?job(id).ccLink||"":""),
+  who:$("#jw").value.trim(),
   insurer:$("#ji").value.trim(),claim:$("#jn").value.trim(),total:+$("#jt").value||0,advance:+$("#jv").value||0};
  o.client=o.owner;   // keep the legacy field in step
  if($("#jna")){const _nx=$("#jna").value.trim();
@@ -4163,6 +4179,15 @@ R.job=({id})=>{
    <b class="money ser v-${C}" style="font-size:19px;cursor:pointer" onclick="quickEdit('${j.id}','total','${isProject(j)?"Contract":"Estimate"} total')">${j.total?money0(j.total):"— tap to add —"}</b></div>
   <div class="ln2"><span class="k">Job type</span>
    <b class="v-${C}" style="cursor:pointer" onclick="quickPick('${j.id}','loss','What kind of job?',LOSS)">${esc(j.loss||"— tap to pick —")}</b></div>
+  <div class="ln2"><span class="k">Priority</span>
+   <b class="v-${PCOL2[j.priority||"Moderate"]}" style="cursor:pointer"
+    onclick="quickPick('${j.id}','priority','How urgent is it?',PRIO)">${esc(j.priority||"Moderate")}</b></div>
+  <div class="ln2"><span class="k">CompanyCam</span>
+   ${j.ccLink?`<a href="${esc(j.ccLink)}" target="_blank" rel="noopener" class="v-paid" style="font-size:14px">Open photos →</a>`
+    :`<button class="lnk" onclick="event.stopPropagation();setCC('${j.id}')">+ Add link</button>`}</div>
+  ${j.ccLink?`<div class="upbar" style="margin-top:2px">
+    <button onclick="setCC('${j.id}')">Change link</button>
+    <button onclick="copyText(${JSON.stringify(j.ccLink).replace(/"/g,"&quot;")})">Copy link</button></div>`:""}
   <div class="ln2"><span class="k">Matterport</span>
    <b class="${j.mport==="Done"?"v-paid":j.mport&&j.mport!=="Not needed"?"v-rdy":""}" style="cursor:pointer"
     onclick="quickPick('${j.id}','mport','Matterport / 3D scan',MPORT)">${esc(j.mport||"Not needed")}</b></div>
@@ -4602,6 +4627,19 @@ function jobFilesHTML(j){
   <p class="xs dim" style="margin-top:10px">Photos are auto-shrunk to save space. Contracts, estimates and emails upload as-is.</p>
  </div>`;
 }
+function setCC(id){const j=job(id);
+ sheet("CompanyCam project link",`
+  <label><span class="t">Paste the project or gallery link</span>
+   <input class="in" id="cclink" value="${esc(j.ccLink||"")}" placeholder="https://app.companycam.com/projects/..."
+    autocomplete="off" autocorrect="off" spellcheck="false"></label>
+  <p class="xs dim" style="margin:-10px 0 16px">Opens straight to the job's photos, and rides along on the invoice.</p>
+  <button class="btn" onclick="saveCC('${id}')">Save</button>
+  ${j.ccLink?`<button class="btn warn" onclick="job('${id}').ccLink='';save();close_();render();toast('Removed')">Remove link</button>`:""}`);
+ setTimeout(()=>$("#cclink")&&$("#cclink").focus(),90);}
+function saveCC(id){const j=job(id);
+ let v=$("#cclink").value.trim();
+ if(v&&!/^https?:\/\//i.test(v))v="https://"+v;
+ j.ccLink=v;save();close_();render();toast(v?"CompanyCam linked":"Cleared");}
 function setMport(id){const j=job(id);
  sheet("Matterport / 3D scan link",`
   <label><span class="t">Paste the share link</span>
@@ -4975,6 +5013,12 @@ function invText(j){
 }
 /* ---------- printable / PDF invoice ---------- */
 const LOGO_PRINT="";
+/* The mark, drawn as vector so it prints sharp at any size and needs no asset:
+   a hexagon with a C notched out of it. Falls back to an uploaded logo if set. */
+const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 100 108" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+ <path fill="#111" d="M50 0 96 27v54L50 108 4 81V27L50 0Z"/>
+ <path fill="#fff" d="M50 20 78 36v14H62v-6l-12-7-14 8v22l14 8 12-7v-6h16v14L50 92 22 76V36L50 20Z"/>
+</svg>`;
 const myLogo=()=>D.me.logo||LOGO_DEFAULT;
 const printLogo=()=>D.me.logo||LOGO_PRINT;
 function invoiceHTML(j){
@@ -5000,36 +5044,53 @@ function invoiceHTML(j){
  if(f.adv)rows.push(`<tr><td>Less payment received in advance</td><td class="r">− ${money(f.adv)}</td></tr>`);
  rows.push(`<tr class="tot"><td>${f.over?"Credit — overpaid":"Amount due"}</td>
    <td class="r">${money(f.over||f.due)}</td></tr>`);
+ /* Live links survive Print-to-PDF in Chrome, so the adjuster can tap straight
+    through to the scan and the photos instead of retyping a URL. */
+ const link=(url,label)=>`<a href="${esc(url)}" style="color:#0B5FBF!important;text-decoration:none;border-bottom:.5pt solid #9dbfe6">${esc(label)}</a>`;
+ const links=[];
+ if(j.mportLink)links.push(link(j.mportLink,"3D scan — walk the property"));
+ if(j.ccLink)links.push(link(j.ccLink,"Job photos — CompanyCam"));
  return `
  <div class="inv-head">
-  <div><div style="font:bold 20pt Georgia,serif;letter-spacing:.14em;margin-bottom:6pt">CHAIRMAN</div>
-   <div class="inv-biz">${esc(me.biz||"Chairman Remodeling")}</div>
-   <div class="inv-sm">${esc(me.name||"")}${me.addr?"<br>"+esc(me.addr).replace(/\n/g,"<br>"):""}
-    ${me.phone?"<br>"+esc(me.phone):""}${me.email?"<br>"+esc(me.email):""}</div></div>
-  <div><div class="inv-title">INVOICE</div>
-   <div class="inv-no"><b>${esc(no)}</b><br>${dateStr}
-    ${me.terms?"<br>Terms: "+esc(me.terms):""}</div></div>
+  <div style="display:flex;align-items:center;gap:13pt">
+   ${myLogo()?`<img class="inv-logo" src="${esc(myLogo())}" alt="">`:CHAIRMAN_MARK}
+   <div>
+    <div class="inv-wordmark">CHAIRMAN</div>
+    <div class="inv-biz">${esc(me.biz||"Remodeling Group LLC")}</div>
+    <div class="inv-sm" style="margin-top:3pt">${esc(me.name||"")}${me.addr?" · "+esc(me.addr).replace(/\n/g,", "):""}
+     ${me.phone?"<br>"+link("tel:"+me.phone.replace(/[^0-9+]/g,""),me.phone):""}${me.email?" · "+link("mailto:"+me.email,me.email):""}</div>
+   </div></div>
+  <div style="text-align:right">
+   <div class="inv-title">Invoice</div>
+   <div class="inv-no"><b>${esc(no)}</b><br>${dateStr}${me.terms?"<br>"+esc(me.terms):""}</div>
+   <div class="inv-due"><span>Amount due</span><b>${money(f.over||f.due)}</b></div>
+  </div>
  </div>
  <div class="inv-grid">
   <div><div class="inv-lab">Bill to</div>
    <div><b>${esc(B.name)}</b>${j.contractorContact&&B.isC?"<br>Attn: "+esc(j.contractorContact):""}
-    ${B.email?"<br>"+esc(B.email):""}</div></div>
-  <div><div class="inv-lab">Property / job</div>
-   <div>${esc(j.address||jobName(j))}${j.claim?"<br>Claim #"+esc(j.claim):""}</div></div>
+    ${B.email?"<br>"+link("mailto:"+B.email,B.email):""}</div></div>
+  <div><div class="inv-lab">Property</div>
+   <div>${esc(j.address||jobName(j))}
+    ${j.insurer?"<br>"+esc(j.insurer):""}${j.claim?" · Claim "+esc(j.claim):""}</div></div>
  </div>
  <table class="inv"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
   <tbody>${rows.join("")}</tbody></table>
+ ${links.length?`<div class="inv-links"><div class="inv-lab" style="border:0;margin-bottom:4pt">Documentation</div>
+   ${links.join(" &nbsp;·&nbsp; ")}</div>`:""}
  ${(me.zelle||me.payInfo)?`<div class="inv-pay"><h4>How to pay</h4>
-  ${me.zelle?`<div style="display:flex;align-items:center;gap:12px;margin-bottom:${me.payInfo?"10pt":"0"}">
-   <span style="display:inline-block;border:2px solid #6D1ED4;color:#6D1ED4;border-radius:6px;
-    padding:4pt 9pt;font:bold 15pt Helvetica,Arial,sans-serif;letter-spacing:-.02em">Zelle&reg;</span>
-   <span style="font:bold 14pt Helvetica,Arial,sans-serif">${esc(me.zelle)}</span></div>`:""}
+  ${me.zelle?`<div style="display:flex;align-items:center;gap:10pt;margin-bottom:${me.payInfo?"8pt":"0"}">
+   <span style="display:inline-block;border:1.5pt solid #6D1ED4;color:#6D1ED4!important;border-radius:5pt;
+    padding:3pt 8pt;font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:-.02em">Zelle&reg;</span>
+   <span style="font:bold 13pt Helvetica,Arial,sans-serif">${esc(me.zelle)}</span></div>`:""}
   ${me.payInfo?`<p>${esc(me.payInfo)}</p>`:""}</div>`:""}
- ${(me.yelp||me.fb)?`<div style="margin-top:16pt;border:1px dashed #999;padding:11pt;text-align:center">
-  <div style="font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase">Happy with the work?</div>
-  <div style="font:10.5pt Helvetica,Arial,sans-serif;margin-top:5pt">A quick review helps more than you'd think.
-   ${me.yelp?`<br>Yelp: ${esc(me.yelp)}`:""}${me.fb?`<br>Facebook: ${esc(me.fb)}`:""}</div></div>`:""}
- <div class="inv-foot">Thank you for your business.${me.phone?" · "+esc(me.phone):""}${me.email?" · "+esc(me.email):""}</div>`;
+ ${(me.yelp||me.fb)?`<div class="inv-review">
+  Happy with the work? A quick review helps more than you'd think.
+  ${me.yelp?" "+link(me.yelp,"Yelp"):""}${me.fb?" · "+link(me.fb,"Facebook"):""}</div>`:""}
+ <div class="inv-foot">
+  <span>Thank you for your business.</span>
+  <span class="inv-pow">Powered by Chairman Command Center</span>
+ </div>`;
 }
 function printInvoice(id){
  const j=job(id);
