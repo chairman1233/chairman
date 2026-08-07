@@ -38,7 +38,8 @@
  --c-rdy:#6FD79B;    /* signal — finished, go collect it            */
  --c-out:#F0B44F;    /* amber — invoice out, waiting on them        */
  --c-paid:#B6B6B9;   /* graphite — settled, needs nothing from you  */
- --c-lost:#6A6A6E;   /* dark graphite — closed, gone                */
+ --c-lost:#93939A;   /* graphite — Waiting and Lost both land here, and it
+                        paints card HEADLINES, so it has to stay readable */
  --c-late:#E5544B;   /* crimson — overdue or in dispute. Alarm only */
  --serif:'Playfair Display','Bodoni MT',Didot,'Didot LT STD','Times New Roman',Times,serif;
  /* display face for the big wordmark — sturdy strokes, no hairlines to bloom */
@@ -50,8 +51,10 @@ body.paper{
  --paper:#EDF4FA; --panel:#FFFFFF; --panel2:#DEEAF4; --rule:#CBDCE9; --rule2:#A6C1D6;
  --ink:#141416; --ink2:#3A3C40; --ink3:#5A5C60; --inv:#FFFFFF; --sig:#1B1B1E;
  /* #A9741B was the brown one. Gone — same Claude orange as night mode. */
- --c-est:#1B6FC4; --c-rdy:#12855A; --c-out:#B5760D; --c-paid:#6A6A6E; --c-lost:#8A8A8E;
- --c-late:#C2352C;
+ /* darkened past 4.5:1 against BOTH the tinted ground and white panels —
+    amber is the most common state and was also a button fill at 3.4:1 */
+ --c-est:#155FAB; --c-rdy:#0E6B49; --c-out:#8A5A00; --c-paid:#5A5A5E; --c-lost:#6E6E73;
+ --c-late:#A82A22;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -770,7 +773,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-118 · boots again, late means late";
+const BUILD="C-119 · crimson fires everywhere";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1045,6 +1048,17 @@ function isLate(j){
  const d=ago(j.invDate);
  if(d==null||isNaN(d))return true;
  return d>netDays(j);
+}
+/* THE colour resolver. ck() returns the stage key; this is the only thing that
+   knows a stage can be overridden by a condition. Crimson used to live inside
+   one template on the job page, so it never fired anywhere else on the board,
+   the invoice list or Money. Every renderer calls this now. */
+function ckLive(j){
+ if(!j)return "lost";
+ if(inDispute(j))return "late";                       /* a fight is an alarm */
+ if(j.status==="Invoiced"&&isLate(j))return "late";
+ if(!DONE_ST.includes(j.status)&&j.dueDate&&j.dueDate<today())return "late";
+ return ck(j.status);
 }
 const DSTAGES=["Negotiation","Demand sent","Demand expired","Pre-suit","Mediation","Filed","Trial","Settled"];
 const inDispute=j=>!!(j&&j.disputeStage&&j.disputeStage!=="Settled");
@@ -1406,7 +1420,12 @@ const acctOf=j=>j&&j.accountId?ACCOUNTS().find(a=>a.id===j.accountId):null;
 const acctJobs=aid=>D.jobs.filter(j=>j.accountId===aid);
 /* no gold and nothing muted-warm in here either — those are the tones that
    kept reading as rust */
-const ACCT_COLORS=["#A9D4F5","#9FE0DA","#9FE8C4","#FFAE85","#CDB6F5","#B6C8F5","#F5D98F","#F5AFC6"];
+/* Company identity used to borrow the status hues — a contractor rendered in
+   the same steel as "Estimating", and coral was still shipping here after it
+   was supposedly gone. Companies are now neutral; colour belongs to state. */
+const ACCT_COLORS=["#A8ADB4","#A8ADB4","#A8ADB4","#A8ADB4","#A8ADB4","#A8ADB4","#A8ADB4","#A8ADB4"];
+/* readable on both grounds — the old tints measured 1.56:1 in Paper */
+const ACCT_INK="var(--ink2)";
 function acctColor(a){
  if(!a)return "";
  if(a.color)return a.color;
@@ -3496,19 +3515,19 @@ function nutMeterHTML(){
    <div class="lab">◈ Required monthly revenue</div>
    <button class="lnk" onclick="nutSheet()">Edit</button></div>
   <div class="row between" style="align-items:baseline;margin-top:12px;gap:14px">
-   <div class="num money v-${s.gap?"rdy":"paid"}" style="font-size:36px">${money0(s.gap||s.surplus)}</div>
+   <div class="num money v-${s.gap?"out":"rdy"}" style="font-size:36px">${money0(s.gap||s.surplus)}</div>
    <div class="xs dim" style="text-align:right;line-height:1.5">${s.gap?"still to bring in":"target met — ahead by"}<br>target ${money0(s.target)}${goalsTotal()?`<br><span class="v-est">incl. ${money0(goalsTotal())} in goals</span>`:""}</div></div>
   <div class="nutbar">
-   <i style="width:${pc(s.cash)}%;background:var(--c-paid)"></i>
+   <i style="width:${pc(s.cash)}%;background:var(--c-rdy)"></i>
    <i style="width:${pc(s.fees)}%;background:var(--c-est)"></i>
   </div>
   <div class="nutkey">
-   <span><b style="background:var(--c-paid)"></b>In the account ${money0(s.cash)}</span>
+   <span><b style="background:var(--c-rdy)"></b>In the account ${money0(s.cash)}</span>
    <span><b style="background:var(--c-est)"></b>Fees collected ${money0(s.fees)}</span>
-   ${s.gap?`<span><b style="background:var(--c-rdy)"></b>Short ${money0(s.gap)}</span>`:""}
+   ${s.gap?`<span><b style="background:var(--c-out)"></b>Short ${money0(s.gap)}</span>`:""}
   </div>
   <p class="xs dim" style="margin:13px 0 0">
-   ${s.gap?`${plural(s.daysLeft,"day")} left · about <b class="v-rdy">${money0(s.perDay)}/day</b> to close it.`
+   ${s.gap?`${plural(s.daysLeft,"day")} left · about <b class="v-out">${money0(s.perDay)}/day</b> to close it.`
     :`Anything else you collect this month is profit.`}
    <button class="lnk" style="margin-left:8px" onclick="cashSheet()">Update balance</button></p>
 
@@ -3727,17 +3746,19 @@ function boardHTML(){
  <div class="dz"><div data-zone="Lost">○ Lost</div><div data-zone="Paid">● Won · Paid</div></div>
  <p class="xs dim center" style="margin-top:14px;letter-spacing:.1em">Drag a card sideways — or tap ⋮ on any card</p>`;
 }
-function jcard(j){const f=fee(j),C=ck(j.status);
+function jcard(j){const f=fee(j),C=ckLive(j);
  /* The stripe is the company's colour when it belongs to one, so a glance at
     the board tells him whose work is where. Stage keeps the text colour. */
  const ac=jobColor(j), acct=acctOf(j);
  return `<div class="jc" data-id="${j.id}" style="border-left:3px solid ${ac||"var(--c-"+C+")"}">
   <div class="row between" style="align-items:flex-start;gap:6px">
    <div class="grow"><div class="t trunc v-${C}">${esc(jobName(j))}</div>
-    ${acct?`<div class="xs" style="color:${ac};letter-spacing:.08em;margin:2px 0 3px">${esc(acct.name)}</div>`:""}
+    ${acct?`<div class="xs" style="color:var(--ink2);letter-spacing:.08em;margin:2px 0 3px;font-weight:600">${esc(acct.name)}</div>`:""}
     <div class="s">${j.status==="Waiting"&&j.waitingOn?"⏳ "+esc(j.waitingOn):esc(j.loss?j.loss+" · ":"")+esc(jobSub(j)||j.insurer||"—")}</div></div>
    <button class="ico" style="width:22px;height:22px;font-size:12px;border:0;color:var(--ink3)"
     onclick="event.stopPropagation();moveMenu('${j.id}')">⋮</button></div>
+  ${j.status==="Invoiced"&&isLate(j)?`<div class="tags" style="margin:-4px 0 8px">
+    <span class="chip v-late">Late ${plural(ago(j.invDate)||0,"day")}</span></div>`:""}
   ${(j.priority&&j.priority!=="Moderate")||j.dueDate?`<div class="tags" style="margin:-4px 0 8px">
     ${j.priority&&j.priority!=="Moderate"?`<span class="chip v-${PCOL2[j.priority]}">${esc(j.priority)}</span>`:""}
     ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"late":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
@@ -3749,7 +3770,7 @@ function jcard(j){const f=fee(j),C=ck(j.status);
    <b class="money ser v-${C}" style="font-size:15px">${onRetainer(j)&&f.due===0?"retainer":money(j.status==="Paid"?f.gross:f.due)}</b></div>
   ${flowOf(j)?`<div style="margin-top:8px">${flowBtn(j)}</div>`:""}</div>`;
 }
-function jobRow(j){const f=fee(j),C=ck(j.status);
+function jobRow(j){const f=fee(j),C=ckLive(j);
  return `<div class="pan" onclick="go('job',{id:'${j.id}'})" style="border-left:2px solid var(--c-${C})">
   <div class="row between" style="align-items:flex-start">
    <div class="grow"><div class="ser v-${C}" style="font-size:20px">${esc(jobName(j))}</div>
@@ -5261,17 +5282,20 @@ R.money=()=>{
  <h1 class="disp" style="margin:12px 0 6px">Where<br> You Stand</h1>
  <div class="cols" style="margin-top:20px"><div class="colw">
  ${nutMeterHTML()}
- <div class="pan" style="border-color:var(--c-out)">
-  <div class="lab v-out">◉ Owed to you</div>
-  <div class="num money v-out" style="margin:14px 0 4px">${money(owed)}</div>
-  <div class="xs v-out" style="letter-spacing:.16em;text-transform:uppercase;opacity:.75">${plural(inv.length,"invoice")} out</div></div>
- ${disp.length?`<div class="pan" style="border-color:var(--c-lost);cursor:pointer" onclick="go('disputes')">
-  <div class="lab">⚖ In dispute — kept apart</div>
-  <div class="num money" style="margin:14px 0 4px">${money(dispDue)}</div>
-  <div class="xs dim" style="letter-spacing:.16em;text-transform:uppercase">${plural(disp.length,"case")} · legal, not collections · tap to open</div></div>`:""}
+ ${(()=>{const lateInv=inv.filter(isLate),lateSum=sum(lateInv,j=>fee(j).due);
+   const k=lateInv.length?"late":"out";
+   return `<div class="pan" style="border-color:var(--c-${k})">
+   <div class="lab v-${k}">◉ Owed to you</div>
+   <div class="num money v-${k}" style="margin:14px 0 4px">${money(owed)}</div>
+   <div class="xs v-${k}" style="letter-spacing:.16em;text-transform:uppercase;opacity:.75">${plural(inv.length,"invoice")} out${
+    lateInv.length?` · ${money0(lateSum)} of it late`:""}</div></div>`;})()}
+ ${disp.length?`<div class="pan" style="border-color:var(--c-late);cursor:pointer" onclick="go('disputes')">
+  <div class="lab v-late">⚖ In dispute</div>
+  <div class="num money v-late" style="margin:14px 0 4px">${money(dispDue)}</div>
+  <div class="xs v-late" style="letter-spacing:.16em;text-transform:uppercase;opacity:.8">${plural(disp.length,"case")} · legal, not collections · tap to open</div></div>`:""}
  <div class="strip">
-  <div><span class="k">Unbilled</span><span class="v money v-rdy">${money0(tobill)}</span></div>
-  <div><span class="k">Collected</span><span class="v money v-paid">${money0(got)}</span></div>
+  <div><span class="k">Unbilled</span><span class="v money ${tobill?"v-out":""}">${money0(tobill)}</span></div>
+  <div><span class="k">Collected</span><span class="v money v-rdy">${money0(got)}</span></div>
   <div><span class="k">Jobs</span><span class="v">${D.jobs.length}</span></div></div>
 
  ${ready.length?`${sec("Ready to Bill",plural(ready.length,"job"))}
