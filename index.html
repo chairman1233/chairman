@@ -770,7 +770,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-117 · one colour, one meaning";
+const BUILD="C-118 · boots again, late means late";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1029,6 +1029,23 @@ const sum=(a,f)=>a.reduce((s,j)=>s+f(j),0);
    collection nag — no "chase this invoice" advice on something in mediation —
    and lives on its own screen with a stage, the contested amount, and a
    dated chronology that can be handed to an attorney as-is. */
+/* Late is relative to the terms, not a flat window. A 30-day invoice on day 20
+   is fine; due-on-receipt on day 5 is not. Falls back to 14 when no terms are
+   set. A missing or unparseable invoice date counts as late rather than fresh —
+   silence is the failure mode that costs money. */
+const netDays=j=>{
+ const t=String((j&&j.terms)||(D.me&&D.me.terms)||"").toLowerCase();
+ if(/receipt|due on completion|on completion/.test(t))return 0;
+ const m=t.match(/(\d{1,3})/);
+ return m?+m[1]:14;
+};
+function isLate(j){
+ if(!j||j.status!=="Invoiced")return false;
+ if(!j.invDate)return true;
+ const d=ago(j.invDate);
+ if(d==null||isNaN(d))return true;
+ return d>netDays(j);
+}
 const DSTAGES=["Negotiation","Demand sent","Demand expired","Pre-suit","Mediation","Filed","Trial","Settled"];
 const inDispute=j=>!!(j&&j.disputeStage&&j.disputeStage!=="Settled");
 const disputes=()=>D.jobs.filter(j=>j.disputeStage);
@@ -4291,14 +4308,14 @@ R.job=({id})=>{
   <button class="btn" onclick="moveJob('${j.id}','Paid')">✓ Done — close it out</button>`:""}
  ${j.status==="Complete"&&!(onRetainer(j)&&fee(j).due===0)?`<button class="btn" onclick="go('invoice',{id:'${j.id}'})">Build &amp; send invoice</button>
   <button class="btn sec" onclick="moveJob('${j.id}','Estimating')">← Back to estimating</button>`:""}
- ${j.status==="Invoiced"?(()=>{const lateK=ago(j.invDate)>=14?"late":"out";return `
+ ${j.status==="Invoiced"?(()=>{const lateK=isLate(j)?"late":"out";return `
   <div class="pan" style="margin-top:20px;border-color:var(--c-${lateK})">
    <div class="lab v-${lateK}">◉ Invoice ${esc(j.invNo||"")} —— sent ${fmt(j.invDate)}</div>
    <div class="num money v-${lateK}" style="margin:12px 0 4px">${money(f.due)}</div>
    <div class="xs v-${lateK}" style="letter-spacing:.14em;text-transform:uppercase;opacity:.75">${
-    lateK==="late"?"Late":"Outstanding"} ${ago(j.invDate)?"—— "+plural(ago(j.invDate),"day"):"—— today"}</div></div>`;})()
+    lateK==="late"?"Late":"Outstanding"} ${ago(j.invDate)?"—— "+plural(ago(j.invDate),"day"):"—— today"}</div></div>
   <button class="btn" onclick="moveJob('${j.id}','Paid')">● Mark paid</button>
-  <button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Resend invoice</button>`:""}
+  <button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Resend invoice</button>`;})():""}
  ${j.status==="Paid"&&(D.me.yelp||D.me.fb)?`<button class="btn sec" onclick="askReview('${j.id}')">★ Ask them for a review</button>`:""}
  ${j.status==="Paid"?`<div class="pan" style="margin-top:20px;border-color:var(--c-paid)">
    <div class="lab v-paid">● Paid in full</div>
