@@ -622,6 +622,17 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  font:700 10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .nutkey b{width:9px;height:9px;border-radius:3px;flex:none}
 
+/* collapsible form groups — one row each until you need them */
+.fsec{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;background:none;
+ border:0;border-top:1px solid var(--rule);padding:15px 2px;margin:0}
+.fsec:first-of-type{border-top:0}
+.fsec-l{font:700 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.fsec-h{font:400 12px var(--sans);color:var(--ink3);flex:1;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.fsec-c{color:var(--ink3);font-size:12px;flex:none}
+.fsec:hover .fsec-l{color:var(--ink)}
+.fsec-b{padding:2px 0 10px}
+
 /* company cards share the board's language: same radius, type, spacing */
 .acard{border:1px solid var(--rule);border-radius:14px;background:var(--panel);
  padding:15px 16px;margin-top:11px;cursor:pointer;transition:.12s}
@@ -813,7 +824,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-123 · no chasing money in court";
+const BUILD="C-124 · a job form you can finish";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3991,8 +4002,83 @@ function newJob(id){const j=id?job(id):{};
   <label><span class="t">When</span>
    <input class="in" id="jnd" type="date" value="${esc((j.next&&j.next.date)||today())}"></label>`:""}
 
-  <button type="button" class="btn sec" id="moreTog" onclick="togMoreJob()">More — money, status, insurance, dates… ▾</button>
-  <div id="moreblk" style="display:none;margin-top:18px">
+  ${formSec("money","Money","fee, total, deposit",
+   /* pre-expand only when the job already carries the data */
+   !!(id&&(j.total||j.flat||j.advance||(j.feePct!=null&&j.feePct!==""))),`
+   <label><span class="t">Estimate total <em>blank until the Xactimate's done</em></span>
+    <input class="in" id="jt" type="number" inputmode="decimal" value="${j.total||""}" placeholder="38500"></label>
+   <label><span class="t">Fee basis <em>a company's own deal applies itself</em></span>
+    <div class="segwrap" id="jfmode">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${(j.feeMode||"pct")===k?"on":""}"
+     onclick="pickFeeMode(this,'${k}')">${lab}</button>`).join("")}</div></label>
+   <div id="hourblock" style="display:${(j.feeMode||"pct")==="hourly"?"block":"none"}">
+    <label><span class="t">Hourly rate${(D.me||{}).hourRate?` <em>your standard is ${money0(D.me.hourRate)}/hr</em>`:` <em>set a standard in Settings to skip this</em>`}</span>
+     <input class="in" id="jhr" type="number" step="5" inputmode="decimal"
+      value="${(j.hourRate===0||j.hourRate)?j.hourRate:""}" placeholder="${(D.me||{}).hourRate||85}"></label>
+    <p class="xs dim" style="margin:-10px 0 20px">Billed on exact time logged — no rounding up.
+     ${id?`So far: <b class="money">${dur(jobMin(j))} · ${money(hourlyAmount(j))}</b>`:"The timer and any time you enter by hand both count."}</p></div>
+   <div id="pctblock" style="display:${["flat","retainer","hourly"].includes(j.feeMode||"pct")?"none":"block"}">
+    <label><span class="t">Percentage <em>your standard is ${D.me.rate}%</em></span>
+     <input class="in" id="jfpct" type="number" step="0.1" inputmode="decimal"
+      value="${(j.feePct===0||j.feePct)?j.feePct:""}" placeholder="${D.me.rate}"></label>
+    <div class="upbar" style="margin:-10px 0 20px">
+     ${[2,10,20,30,40,50].map(n=>`<button type="button" onclick="setPct(${n})">${n}%</button>`).join("")}</div></div>
+   <div id="flatblock" style="display:${(j.feeMode||"pct")==="flat"?"block":"none"}">
+    <label><span class="t">Flat fee amount</span>
+     <input class="in" id="jflat" type="number" inputmode="decimal" value="${j.flat||""}" placeholder="500"></label></div>
+   <p class="xs dim" id="feehint" style="margin:-8px 0 16px">${(j.feeMode||"pct")==="aftersubs"
+    ?"Your percentage of what's left after the subs are paid."
+    :(j.feeMode==="flat")?"A fixed amount, whatever the estimate comes to."
+    :(j.feeMode==="retainer")?"Covered by the contractor's retainer — nothing gets invoiced. Extras still bill on top."
+    :"Your percentage of the estimate total."}</p>
+   <label><span class="t">Paid in advance</span>
+    <input class="in" id="jv" type="number" inputmode="decimal" value="${j.advance||""}" placeholder="0"></label>`)}
+
+  ${formSec("scope","Scope","job type, Matterport, priority",
+   !!(id&&(j.loss||j.claim||j.insurer||(j.mport&&j.mport!=="Not needed"))),`
+   <label><span class="t">What kind of job?</span>
+    <div class="segwrap" id="jloss">${LOSS.map(t=>`<button type="button" class="opt2 ${t===_loss?"on":""}"
+     onclick="pickLoss(this,'${t}')">${t}</button>`).join("")}</div></label>
+   <label><span class="t">Priority</span>
+    <div class="segwrap" id="jprio">${PRIO.map(pr=>`<button type="button" class="opt2 ${(j.priority||"Moderate")===pr?"on":""}"
+     onclick="pickPrio(this,'${pr}')">${pr}</button>`).join("")}</div></label>
+   <label><span class="t">Insurance carrier</span><input class="in" id="ji" value="${esc(j.insurer||"")}" placeholder="State Farm"></label>
+   <label><span class="t">Claim #</span><input class="in" id="jn" value="${esc(j.claim||"")}"></label>
+   <label><span class="t">Matterport / 3D scan</span>
+    <div class="segwrap" id="jmp">${MPORT.map(t=>`<button type="button" class="opt2 ${t===_mp?"on":""}"
+     onclick="pickMp(this,'${t}')">${t}</button>`).join("")}</div></label>
+   <label><span class="t">Matterport link</span>
+    <input class="in" id="jml" value="${esc(j.mportLink||"")}" placeholder="https://my.matterport.com/show/?m=..."></label>
+   <label><span class="t">CompanyCam link <em>photos for this job</em></span>
+    <input class="in" id="jcc" value="${esc(j.ccLink||"")}" placeholder="https://app.companycam.com/projects/..."
+     autocomplete="off" autocorrect="off" spellcheck="false"></label>`)}
+
+  ${formSec("dates","Dates","start, due, how long",!!(id&&(j.startDate||j.dueDate||j.estHours)),`
+   <label><span class="t">Start date</span>
+    <input class="in" id="jsd" type="date" value="${j.startDate||""}" onchange="autoDue()"></label>
+   <label><span class="t">Due date <em>auto-set ${LEADDAYS} days out</em></span>
+    <input class="in" id="jdd" type="date" value="${j.dueDate||""}"></label>
+   <label><span class="t">Start time</span>
+    <input class="in" id="jst" type="time" value="${j.startTime||""}"></label>
+   <label><span class="t">How long will it take? <em>hours</em></span>
+    <input class="in" id="jeh" type="number" step="0.5" inputmode="decimal" value="${j.estHours||""}" placeholder="3"></label>`)}
+
+  ${formSec("billing","Billing &amp; contacts","who gets the invoice, emails",
+   !!(id&&(j.contractorContact||j.contractorEmail||j.ownerEmail||j.contractorPhone)),`
+   ${forContractor(j)?`<label><span class="t">Send the invoice to</span>
+    <div class="segwrap" id="jbill">
+     <button type="button" class="opt2 ${(j.billTo||"Contractor")==="Contractor"?"on":""}" onclick="pickBill(this,'Contractor')">The contractor</button>
+     <button type="button" class="opt2 ${j.billTo==="Owner"?"on":""}" onclick="pickBill(this,'Owner')">The homeowner</button>
+    </div></label>`:`<div id="jbill" style="display:none"></div>`}
+   <label><span class="t">Their contact person <em>optional</em></span>
+    <input class="in" id="jcp" value="${esc(j.contractorContact||"")}" placeholder="Mike, PM"></label>
+   <label><span class="t">Contractor email</span>
+    <input class="in" id="jce" type="email" value="${esc(j.contractorEmail||"")}" placeholder="mike@abcrestoration.com"></label>
+   <label><span class="t">Contractor phone</span>
+    <input class="in" id="jcph" type="tel" inputmode="tel" value="${esc(j.contractorPhone||"")}" placeholder="713-555-0142"></label>
+   <label><span class="t">Owner email <em>optional</em></span>
+    <input class="in" id="je" type="email" value="${esc(j.ownerEmail||j.email||"")}" placeholder="name@email.com"></label>`)}
+
+  ${formSec("more","More","status, referral",!!(id&&(j.who||j.status==="Waiting")),`
   ${(!id||["Waiting","Estimating"].includes(j.status||"Estimating"))?`
   <label><span class="t">Where does it stand?</span>
    <div class="segwrap" id="jstat">
@@ -4006,78 +4092,28 @@ function newJob(id){const j=id?job(id):{};
     ${["Mitigation in progress","Matterport not done","Adjuster scope","Docs from contractor","Waiting on approval"]
      .map(x=>`<button type="button" onclick="document.getElementById('jwait').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>
   </div>`:""}
-  <label><span class="t">Estimate total <em>blank until the Xactimate's done</em></span>
-   <input class="in" id="jt" type="number" inputmode="decimal" value="${j.total||""}" placeholder="38500"></label>
-
-  <div class="lab" style="margin:6px 0 12px">＄ How you get paid <span class="dim" style="letter-spacing:0;text-transform:none">— company deals apply themselves</span></div>
-  <label><span class="t">Fee basis</span>
-   <div class="segwrap" id="jfmode">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${(j.feeMode||"pct")===k?"on":""}"
-    onclick="pickFeeMode(this,'${k}')">${lab}</button>`).join("")}</div></label>
-  <div id="hourblock" style="display:${(j.feeMode||"pct")==="hourly"?"block":"none"}">
-   <label><span class="t">Hourly rate${(D.me||{}).hourRate?` <em>your standard is ${money0(D.me.hourRate)}/hr</em>`:` <em>set a standard in Settings to skip this</em>`}</span>
-    <input class="in" id="jhr" type="number" step="5" inputmode="decimal"
-     value="${(j.hourRate===0||j.hourRate)?j.hourRate:""}" placeholder="${(D.me||{}).hourRate||85}"></label>
-   <p class="xs dim" style="margin:-10px 0 20px">Billed on exact time logged — no rounding up.
-    ${id?`So far: <b class="money">${dur(jobMin(j))} · ${money(hourlyAmount(j))}</b>`:"The timer and any time you enter by hand both count."}</p></div>
-  <div id="pctblock" style="display:${["flat","retainer","hourly"].includes(j.feeMode||"pct")?"none":"block"}">
-   <label><span class="t">Percentage <em>your standard is ${D.me.rate}%</em></span>
-    <input class="in" id="jfpct" type="number" step="0.1" inputmode="decimal"
-     value="${(j.feePct===0||j.feePct)?j.feePct:""}" placeholder="${D.me.rate}"></label>
-   <div class="upbar" style="margin:-10px 0 20px">
-    ${[2,10,20,30,40,50].map(n=>`<button type="button" onclick="setPct(${n})">${n}%</button>`).join("")}</div></div>
-  <div id="flatblock" style="display:${(j.feeMode||"pct")==="flat"?"block":"none"}">
-   <label><span class="t">Flat fee amount</span>
-    <input class="in" id="jflat" type="number" inputmode="decimal" value="${j.flat||""}" placeholder="500"></label></div>
-  <p class="xs dim" id="feehint" style="margin:-8px 0 20px">${(j.feeMode||"pct")==="aftersubs"
-   ?"Your percentage of what's left after the subs are paid."
-   :(j.feeMode==="flat")?"A fixed amount, whatever the estimate comes to."
-   :(j.feeMode==="retainer")?"Covered by the contractor's retainer — nothing gets invoiced. Extras still bill on top."
-   :"Your percentage of the estimate total."}</p>
-   <label><span class="t">Their contact person <em>optional</em></span>
-    <input class="in" id="jcp" value="${esc(j.contractorContact||"")}" placeholder="Mike, PM"></label>
-   <label><span class="t">Contractor email</span>
-    <input class="in" id="jce" type="email" value="${esc(j.contractorEmail||"")}" placeholder="mike@abcrestoration.com"></label>
-   <label><span class="t">Contractor phone</span>
-    <input class="in" id="jcph" type="tel" inputmode="tel" value="${esc(j.contractorPhone||"")}" placeholder="713-555-0142"></label>
-   <label><span class="t">Owner email <em>optional</em></span>
-    <input class="in" id="je" type="email" value="${esc(j.ownerEmail||j.email||"")}" placeholder="name@email.com"></label>
-   ${forContractor(j)?`<label><span class="t">Send the invoice to</span>
-    <div class="segwrap" id="jbill">
-     <button type="button" class="opt2 ${(j.billTo||"Contractor")==="Contractor"?"on":""}" onclick="pickBill(this,'Contractor')">The contractor</button>
-     <button type="button" class="opt2 ${j.billTo==="Owner"?"on":""}" onclick="pickBill(this,'Owner')">The homeowner</button>
-    </div></label>`:`<div id="jbill" style="display:none"></div>`}
-   <label><span class="t">What kind of job?</span>
-    <div class="segwrap" id="jloss">${LOSS.map(t=>`<button type="button" class="opt2 ${t===_loss?"on":""}"
-     onclick="pickLoss(this,'${t}')">${t}</button>`).join("")}</div></label>
-   <label><span class="t">Matterport / 3D scan</span>
-    <div class="segwrap" id="jmp">${MPORT.map(t=>`<button type="button" class="opt2 ${t===_mp?"on":""}"
-     onclick="pickMp(this,'${t}')">${t}</button>`).join("")}</div></label>
-   <label><span class="t">Matterport link</span>
-    <input class="in" id="jml" value="${esc(j.mportLink||"")}" placeholder="https://my.matterport.com/show/?m=..."></label>
-   <label><span class="t">CompanyCam link <em>photos for this job</em></span>
-    <input class="in" id="jcc" value="${esc(j.ccLink||"")}" placeholder="https://app.companycam.com/projects/..."
-     autocomplete="off" autocorrect="off" spellcheck="false"></label>
    <label><span class="t">Who contacted / referred you?</span>
-    <input class="in" id="jw" value="${esc(j.who||"")}" placeholder="Dana Reyes — State Farm"></label>
-   <label><span class="t">Insurance carrier</span><input class="in" id="ji" value="${esc(j.insurer||"")}" placeholder="State Farm"></label>
-   <label><span class="t">Claim #</span><input class="in" id="jn" value="${esc(j.claim||"")}"></label>
-   <label><span class="t">Priority</span>
-    <div class="segwrap" id="jprio">${PRIO.map(pr=>`<button type="button" class="opt2 ${(j.priority||"Moderate")===pr?"on":""}"
-     onclick="pickPrio(this,'${pr}')">${pr}</button>`).join("")}</div></label>
-   <label><span class="t">Start date</span>
-    <input class="in" id="jsd" type="date" value="${j.startDate||""}" onchange="autoDue()"></label>
-   <label><span class="t">Due date <em>auto-set ${LEADDAYS} days out</em></span>
-    <input class="in" id="jdd" type="date" value="${j.dueDate||""}"></label>
-   <label><span class="t">Start time</span>
-    <input class="in" id="jst" type="time" value="${j.startTime||""}"></label>
-   <label><span class="t">How long will it take? <em>hours</em></span>
-    <input class="in" id="jeh" type="number" step="0.5" inputmode="decimal" value="${j.estHours||""}" placeholder="3"></label>
-   <label><span class="t">Paid in advance</span>
-    <input class="in" id="jv" type="number" inputmode="decimal" value="${j.advance||""}" placeholder="0"></label>
-  </div>
-  <button class="btn" onclick="saveJob('${id||""}')">Save</button>
+    <input class="in" id="jw" value="${esc(j.who||"")}" placeholder="Dana Reyes — State Farm"></label>`)}
+
+  <button class="btn" style="margin-top:20px" onclick="saveJob('${id||""}')">${id?"Save":"Create job"}</button>
   ${id?`<button class="btn warn" onclick="delJob('${id}')">Delete job</button>`:""}`);
  setTimeout(()=>$("#jc")?.focus(),90);}
+/* Collapsible group. Closed by default; opens when the job already carries
+   data for it, so editing doesn't hide what's there. */
+function formSec(id,label,hint,open,body){
+ return `<button type="button" class="fsec" id="hdr_${id}" onclick="togSec('${id}')">
+   <span class="fsec-l">${label}</span>
+   <span class="fsec-h">${hint}</span>
+   <span class="fsec-c" id="car_${id}">${open?"▴":"▾"}</span></button>
+  <div class="fsec-b" id="sec_${id}" style="display:${open?"block":"none"}">${body}</div>`;
+}
+function togSec(id){
+ const b=document.getElementById("sec_"+id),c=document.getElementById("car_"+id);
+ if(!b)return;
+ const isOpen=b.style.display!=="none";
+ b.style.display=isOpen?"none":"block";
+ if(c)c.textContent=isOpen?"▾":"▴";
+}
 /* Choosing a company fills its defaults in — editable per job, and never
    written back to the company record. */
 function pickAcctOnJob(id){
@@ -4166,10 +4202,9 @@ let _stat="Estimating",_wt="Estimate";
 function pickWT(el,t){_wt=t;[...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));}
 function pickStat(el,st2){_stat=st2;[...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));
  const wb=$("#waitblk");if(wb)wb.style.display=st2==="Waiting"?"block":"none";}
-function togMoreJob(){const m=$("#moreblk"),t=$("#moreTog");if(!m)return;
- const open=m.style.display!=="none";
- m.style.display=open?"none":"block";
- if(t)t.textContent=open?"More details — insurance, dates, Matterport… ▾":"Fewer details ▴";}
+/* the single "More" block became five named groups — kept so any older call
+   site doesn't throw */
+function togMoreJob(){["money","scope","dates","billing","more"].forEach(togSec);}
 function setStartTime(t){const el=$("#jst");if(el)el.value=t;}
 const j2_wait=id=>{const x=id?job(id):null;return x?x.waitingOn||"":"";};
 /* Read the toggle from the buttons themselves. The module-level _for could
@@ -4224,7 +4259,12 @@ function saveJob(id){
  const bad=validateJob(forWho);
  if(bad.length){
   const first=document.querySelector(".in.bad");
-  if(first){first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();}
+  /* a flagged field inside a closed group would otherwise be invisible */
+  if(first){
+   const grp=first.closest(".fsec-b");
+   if(grp&&grp.style.display==="none")togSec(grp.id.replace(/^sec_/,""));
+   first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();
+  }
   toast(bad.includes("name")?"Give it a name first":"Check the highlighted fields");
   return;
  }
