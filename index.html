@@ -631,7 +631,10 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
    column drifted and the headings sat over the wrong data. */
 .qhead,.qrow{display:grid;grid-template-columns:128px minmax(150px,1.2fr) minmax(140px,1.3fr) 96px 330px;
  gap:12px;align-items:center;padding:9px 13px}
+/* the same 3px left border the rows carry for their lead accent, or the
+   headings sit 3px left of the data they label */
 .qhead{background:var(--panel2);border-bottom:1px solid var(--rule);
+ border-left:3px solid transparent;
  font:700 9.5px var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
 .qrow{border-bottom:1px solid var(--rule);border-left:3px solid transparent;position:relative}
 .qrow:last-child{border-bottom:0}
@@ -916,7 +919,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-129 · queue columns line up";
+const BUILD="C-130 · queue columns line up";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
