@@ -626,7 +626,10 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
    One row per job, every control on the row. Dense enough that a full day is
    visible without scrolling, which is the whole point of a queue. */
 .qtab{border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:var(--panel)}
-.qhead,.qrow{display:grid;grid-template-columns:132px minmax(150px,1.25fr) minmax(140px,1.35fr) 104px auto;
+/* the action column is a FIXED width, not auto. With auto it measured the
+   header's word "Do it" in one row and five buttons in the next, so every
+   column drifted and the headings sat over the wrong data. */
+.qhead,.qrow{display:grid;grid-template-columns:128px minmax(150px,1.2fr) minmax(140px,1.3fr) 96px 330px;
  gap:12px;align-items:center;padding:9px 13px}
 .qhead{background:var(--panel2);border-bottom:1px solid var(--rule);
  font:700 9.5px var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
@@ -655,8 +658,8 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .qc-a{display:flex;gap:5px;align-items:center;justify-content:flex-end}
 .qgo{background:var(--qg,var(--panel2));border:1px solid var(--qg,var(--rule2));
  color:var(--qg,var(--ink2));border-radius:999px;padding:7px 13px;white-space:nowrap;
- font:700 10.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;max-width:20ch;
- overflow:hidden;text-overflow:ellipsis}
+ font:700 10.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;
+ flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .qgo[style*="--qg"]{color:var(--paper)}
 .qgo:hover{filter:brightness(1.12)}
 .qi{width:31px;height:31px;flex:none;display:flex;align-items:center;justify-content:center;
@@ -665,6 +668,10 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .qi:hover:not(:disabled){color:var(--ink);border-color:var(--ink3);background:var(--panel2)}
 .qi:disabled{opacity:.28;cursor:not-allowed}
 .qi.on{color:var(--c-late);border-color:var(--c-late)}
+@media(max-width:1180px){
+ .qhead,.qrow{grid-template-columns:120px minmax(120px,1fr) minmax(110px,1fr) 88px 250px;gap:9px}
+ .qgo{padding:7px 9px;font-size:10px}
+}
 @media(max-width:860px){
  .qhead{display:none}
  .qrow{grid-template-columns:1fr auto;gap:7px 10px;padding:12px 13px}
@@ -909,7 +916,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-128 · the queue is a table you can work";
+const BUILD="C-129 · queue columns line up";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
