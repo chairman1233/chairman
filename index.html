@@ -851,7 +851,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-125 · the job page opens on the move";
+const BUILD="C-126 · sticky bars land where they should";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1846,15 +1846,18 @@ function applyZoom(){
  const inner=zoomTarget();
  if(!inner)return;
  inner.style.zoom=base===1?"":String(base);
- if(D.fitAll===false)return;
+ if(D.fitAll===false){syncHdrH();return;}
  requestAnimationFrame(()=>{
   const cur=parseFloat(inner.style.zoom)||base;
   const need=inner.scrollHeight||0;
   const have=(window.innerHeight||0)-(inner.getBoundingClientRect().top||0)-8;
-  if(!need||have<=0)return;
-  if(need*cur<=have+2)return;                     /* already fits at this size */
-  const z=Math.max(FIT_MIN*base,Math.min(base,have/need));
-  inner.style.zoom=String(z);
+  if(need&&have>0&&need*cur>have+2){
+   const z=Math.max(FIT_MIN*base,Math.min(base,have/need));
+   inner.style.zoom=String(z);
+  }
+  /* the sticky offsets are expressed in this element's scaled space, so they
+     are only correct once the final zoom is settled — which is right here */
+  syncHdrH();
  });
 }
 function setZoom(z){D.zoom=z;save();applyZoom();
@@ -3502,14 +3505,21 @@ function hdDateTick(){
  el.innerHTML=`<b>${n.toLocaleDateString("en-US",{weekday:"long"})}</b> · ${n.toLocaleDateString("en-US",{month:"long",day:"numeric"})} · ${h12(hm(n))}`;
 }
 setInterval(hdDateTick,30000);
+/* The header lives OUTSIDE #vz; every sticky bar lives inside it. "Fit all"
+   shrinks #vz to as little as 0.8, and a sticky `top` inside a zoomed element
+   resolves in that element's own scaled space — so `top:68px` renders 54px down
+   the screen and 14px of the bar hides under the header, eating taps on it.
+   This is the C-84 failure again, arriving through zoom instead of layout.
+   So --hdr is published in INNER space: screen height divided by the zoom.
+   --jbar uses offsetHeight, which is already inner space. */
 function syncHdrH(){
  const h=document.querySelector("header");
  const px=h?Math.round(h.getBoundingClientRect().height):68;
- document.documentElement.style.setProperty("--hdr",(px||68)+"px");
- /* the action bar stacks under the job bar, so it needs its height too */
+ const vz=document.getElementById("vz");
+ const z=vz?(parseFloat(getComputedStyle(vz).zoom)||1):1;
+ document.documentElement.style.setProperty("--hdr",Math.ceil((px||68)/z)+"px");
  const jb=document.querySelector(".jbar");
- document.documentElement.style.setProperty("--jbar",
-  jb?Math.round(jb.getBoundingClientRect().height)+"px":"0px");
+ document.documentElement.style.setProperty("--jbar",jb?jb.offsetHeight+"px":"0px");
 }
 function render(){
  if(cloudCfg()&&!signedIn()&&!D.cloudSkip){
@@ -4394,6 +4404,10 @@ function jobActionBar(j){
 let _jdtManual=null;        // null = follow the gaps; true/false = he overrode it
 let _jdtFor="";             // which job that override belongs to
 function detailGaps(j){
+ /* A gap is only a gap while it still blocks something. Once the invoice is
+    out, a missing phone number is trivia — nagging about it there just pins
+    the drawer open on every job in collections. */
+ if(["Invoiced","Paid","Lost"].includes(j.status))return [];
  const g=[];
  if(!j.total&&!onRetainer(j)&&!isProject(j))g.push("no estimate total");
  if(!j.loss)g.push("no job type");
