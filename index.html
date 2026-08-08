@@ -939,7 +939,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-133 · no invented moves on disputed jobs";
+const BUILD="C-134 · every error shows itself";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4615,16 +4615,24 @@ function saveJob(id){
  const forWho=forFromDOM();
  const bad=validateJob(forWho);
  if(bad.length){
-  const first=document.querySelector(".in.bad");
-  /* a flagged field inside a closed row editor would otherwise be invisible,
-     which reads as "Save is broken" */
-  if(first){
-   const row=first.closest(".frw-e");
-   if(row&&row.style.display==="none")fEdit(row.id.slice(3));
-   const grp=first.closest(".fsec-b");
+  /* Reveal EVERY flagged field, not just the first. Opening only the first
+     means a bad value in a collapsed row stays invisible behind a visible
+     one, and he fixes the name, saves, and gets a second complaint out of
+     nowhere. Rows are cheap — show all the damage at once. */
+  const bads=[...document.querySelectorAll(".in.bad")];
+  bads.forEach(el=>{
+   const row=el.closest(".frw-e");
+   if(row&&row.style.display==="none"){
+    row.style.display="block";
+    const k=row.id.slice(3);
+    const c=document.getElementById("fc_"+k);if(c)c.textContent="⌄";
+    const h=document.getElementById("fh_"+k);if(h)h.classList.add("open");
+   }
+   const grp=el.closest(".fsec-b");
    if(grp&&grp.style.display==="none")togSec(grp.id.replace(/^sec_/,""));
-   setTimeout(()=>{first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();},60);
-  }
+  });
+  const first=bads[0];
+  if(first)setTimeout(()=>{first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();},60);
   toast(bad.includes("name")?"Give it a name first":"Check the highlighted fields");
   return;
  }
