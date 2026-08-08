@@ -813,7 +813,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-122 · one card anatomy";
+const BUILD="C-123 · no chasing money in court";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4530,6 +4530,13 @@ function flowOf(j){
  const f=fee(j);
  if(j.status==="Lost")return null;
  if(j.status==="Paid")return null;
+ /* THE FOURTH EXCLUSION. C-98 stopped the AI nags, the next-move engine and the
+    Money totals from treating disputed jobs as collectable — but flowOf was
+    never told, so the board's own buttons still read "Chase it — 105 days out"
+    on a job sitting at Pre-suit. Never offer a collection action on a job in
+    litigation; the only honest move is to open the case. */
+ if(inDispute(j))return {l:"Open the case — "+esc(j.disputeStage||"in dispute"),c:"late",
+   fn:"go('disputes')"};
  if(j.status==="Waiting")return {l:"Ready to estimate",c:"est",fn:"moveJob('"+j.id+"','Estimating')"};
  if(j.status==="Invoiced"){
   const d=ago(j.invDate);
