@@ -21,13 +21,18 @@ for (const m of src.matchAll(/id="([A-Za-z_][\w-]*)"/g)) {
 /* Ids that legitimately appear twice in the SOURCE because they sit on the two
    branches of one ternary — only ever one of them reaches the DOM. Each entry
    is [id, expectedCount]. Anything else at >1 is a real collision. */
-const TERNARY_PAIRS = { jbill: 2 };   // billTo segwrap vs. its hidden placeholder
+const TERNARY_PAIRS = {
+  jbill:   2,   // billTo segwrap vs. its hidden placeholder
+  jstat:   2,   // "where it stands" row vs. its placeholder on closed-stage jobs
+  waitblk: 2,   // ditto
+  jwait:   2,   // ditto — the placeholder keeps a hidden input so saveJob still reads it
+};
 
 const dupes = Object.entries(counts)
   .filter(([id, n]) => n > 1 && n !== TERNARY_PAIRS[id]);
 
-const sections = (src.match(/\$\{formSec\(/g) || []).length;
-console.log("collapsible sections: " + sections);
+console.log("dense rows: " + (src.match(/\$\{fRow\(/g) || []).length
+  + "  (legacy collapsible sections: " + (src.match(/\$\{formSec\(/g) || []).length + ")");
 
 /* every field saveJob() reads must exist exactly once */
 const reads = [...src.matchAll(/\$\("#([A-Za-z_][\w-]*)"\)/g)].map(m => m[1]);

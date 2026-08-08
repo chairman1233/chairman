@@ -686,6 +686,26 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  .qgo{flex:1;min-width:140px;text-align:center}
 }
 
+/* ---- the form's secondary fields, as rows ------------------------------
+   Label left, current value right, editor underneath. Scanning the state of a
+   job and editing it are the same surface. */
+.frws{border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin:18px 0 0}
+.frw{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;
+ border-bottom:1px solid var(--rule);background:var(--panel)}
+.frw:hover{background:var(--panel2)}
+.frw.open{background:var(--panel2)}
+.frw-k{font:700 10.5px var(--sans);letter-spacing:.08em;text-transform:uppercase;
+ color:var(--ink3);flex:none;width:132px}
+.frw-v{flex:1;min-width:0;font:400 13.5px var(--sans);color:var(--ink);text-align:right;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frw-em{color:var(--ink3)}
+.frw-c{flex:none;color:var(--ink3);font-size:12px;width:12px;text-align:center}
+.frw-e{padding:14px 13px 4px;background:var(--panel2);border-bottom:1px solid var(--rule)}
+.frw-e .in{margin-bottom:14px}
+.frw-e label{display:block}
+.frws > :last-child{border-bottom:0}
+@media(max-width:520px){.frw-k{width:104px;font-size:10px}.frw-v{font-size:13px}}
+
 /* collapsible form groups — one row each until you need them */
 .fsec{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;background:none;
  border:0;border-top:1px solid var(--rule);padding:15px 2px;margin:0}
@@ -919,7 +939,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-130 · queue columns line up";
+const BUILD="C-131 · the form is rows now too";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4251,111 +4271,186 @@ function newJob(id){const j=id?job(id):{};
   <!-- suggestions float over the form; they used to push every field below
        them down while he was still typing -->
   <div style="position:relative;margin:-14px 0 14px"><div id="addrHits" class="addrpop"></div></div>
-  ${(!id||ACTIVE_ST.includes(j.status||"Estimating"))?`
-  <label><span class="t">Next move <em>one action — the board manages it from here</em></span>
-   <input class="in" id="jna" value="${esc((j.next&&j.next.text)||"")}" placeholder="Call to schedule the site visit"
-    autocomplete="off" autocorrect="off" spellcheck="false"></label>
-  <div class="upbar" style="margin:-10px 0 16px">
-   ${NEXT_PRESETS.slice(0,5).map(x=>`<button type="button" onclick="document.getElementById('jna').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>
-  <label><span class="t">When</span>
-   <input class="in" id="jnd" type="date" value="${esc((j.next&&j.next.date)||today())}"></label>`:""}
 
-  ${formSec("money","Money","fee, total, deposit",
-   /* pre-expand only when the job already carries the data */
-   !!(id&&(j.total||j.flat||j.advance||(j.feePct!=null&&j.feePct!==""))),`
-   <label><span class="t">Estimate total <em>blank until the Xactimate's done</em></span>
-    <input class="in" id="jt" type="number" inputmode="decimal" value="${j.total||""}" placeholder="38500"></label>
-   <label><span class="t">Fee basis <em>a company's own deal applies itself</em></span>
-    <div class="segwrap" id="jfmode">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${(j.feeMode||"pct")===k?"on":""}"
-     onclick="pickFeeMode(this,'${k}')">${lab}</button>`).join("")}</div></label>
-   <div id="hourblock" style="display:${(j.feeMode||"pct")==="hourly"?"block":"none"}">
-    <label><span class="t">Hourly rate${(D.me||{}).hourRate?` <em>your standard is ${money0(D.me.hourRate)}/hr</em>`:` <em>set a standard in Settings to skip this</em>`}</span>
-     <input class="in" id="jhr" type="number" step="5" inputmode="decimal"
-      value="${(j.hourRate===0||j.hourRate)?j.hourRate:""}" placeholder="${(D.me||{}).hourRate||85}"></label>
-    <p class="xs dim" style="margin:-10px 0 20px">Billed on exact time logged — no rounding up.
-     ${id?`So far: <b class="money">${dur(jobMin(j))} · ${money(hourlyAmount(j))}</b>`:"The timer and any time you enter by hand both count."}</p></div>
-   <div id="pctblock" style="display:${["flat","retainer","hourly"].includes(j.feeMode||"pct")?"none":"block"}">
-    <label><span class="t">Percentage <em>your standard is ${D.me.rate}%</em></span>
-     <input class="in" id="jfpct" type="number" step="0.1" inputmode="decimal"
-      value="${(j.feePct===0||j.feePct)?j.feePct:""}" placeholder="${D.me.rate}"></label>
-    <div class="upbar" style="margin:-10px 0 20px">
-     ${[2,10,20,30,40,50].map(n=>`<button type="button" onclick="setPct(${n})">${n}%</button>`).join("")}</div></div>
-   <div id="flatblock" style="display:${(j.feeMode||"pct")==="flat"?"block":"none"}">
-    <label><span class="t">Flat fee amount</span>
-     <input class="in" id="jflat" type="number" inputmode="decimal" value="${j.flat||""}" placeholder="500"></label></div>
-   <p class="xs dim" id="feehint" style="margin:-8px 0 16px">${(j.feeMode||"pct")==="aftersubs"
+  <div class="frws">
+  ${(!id||ACTIVE_ST.includes(j.status||"Estimating"))?fRow("next","Next move",`
+   <input class="in" id="jna" value="${esc((j.next&&j.next.text)||NEXT_PRESETS[0])}"
+    placeholder="Call to schedule the site visit" oninput="fSync('next')"
+    autocomplete="off" autocorrect="off" spellcheck="false">
+   <div class="upbar" style="margin:-8px 0 14px">
+    ${NEXT_PRESETS.slice(0,5).map(x=>`<button type="button" onclick="document.getElementById('jna').value=${JSON.stringify(x).replace(/"/g,"&quot;")};fSync('next')">${x}</button>`).join("")}</div>
+   <label><span class="t">When</span>
+    <input class="in" id="jnd" type="date" value="${esc((j.next&&j.next.date)||today())}" onchange="fSync('next')"></label>`)
+  :`<span id="jna_off"></span>`}
+
+  ${fRow("total","Estimate total",`
+   <input class="in" id="jt" type="number" inputmode="decimal" value="${j.total||""}"
+    placeholder="38500" oninput="fSync('total');fSync('fee')">
+   <p class="xs dim" style="margin:-8px 0 2px">Leave it blank until the Xactimate's done.</p>`)}
+
+  ${fRow("fee","Fee",`
+   <div class="segwrap" id="jfmode">${FEEMODES.map(([k,lab])=>`<button type="button" class="opt2 ${(j.feeMode||"pct")===k?"on":""}"
+    onclick="pickFeeMode(this,'${k}');fSync('fee')">${lab}</button>`).join("")}</div>
+   <div id="hourblock" style="display:${(j.feeMode||"pct")==="hourly"?"block":"none"};margin-top:12px">
+    <input class="in" id="jhr" type="number" step="5" inputmode="decimal" oninput="fSync('fee')"
+     value="${(j.hourRate===0||j.hourRate)?j.hourRate:""}" placeholder="${(D.me||{}).hourRate||85}">
+    <p class="xs dim" style="margin:-8px 0 2px">Your hourly rate. Billed on exact time logged.</p></div>
+   <div id="pctblock" style="display:${["flat","retainer","hourly"].includes(j.feeMode||"pct")?"none":"block"};margin-top:12px">
+    <input class="in" id="jfpct" type="number" step="0.1" inputmode="decimal" oninput="fSync('fee')"
+     value="${(j.feePct===0||j.feePct)?j.feePct:""}" placeholder="${D.me.rate}">
+    <div class="upbar" style="margin:-8px 0 2px">
+     ${[2,10,20,30,40,50].map(n=>`<button type="button" onclick="setPct(${n});fSync('fee')">${n}%</button>`).join("")}</div></div>
+   <div id="flatblock" style="display:${(j.feeMode||"pct")==="flat"?"block":"none"};margin-top:12px">
+    <input class="in" id="jflat" type="number" inputmode="decimal" value="${j.flat||""}"
+     placeholder="500" oninput="fSync('fee')"></div>
+   <p class="xs dim" id="feehint" style="margin:10px 0 2px">${(j.feeMode||"pct")==="aftersubs"
     ?"Your percentage of what's left after the subs are paid."
     :(j.feeMode==="flat")?"A fixed amount, whatever the estimate comes to."
     :(j.feeMode==="retainer")?"Covered by the contractor's retainer — nothing gets invoiced. Extras still bill on top."
     :"Your percentage of the estimate total."}</p>
-   <label><span class="t">Paid in advance</span>
-    <input class="in" id="jv" type="number" inputmode="decimal" value="${j.advance||""}" placeholder="0"></label>`)}
+   <p class="xs dim" style="margin:6px 0 2px">A company's own deal applies itself.</p>`)}
 
-  ${formSec("scope","Scope","job type, Matterport, priority",
-   !!(id&&(j.loss||j.claim||j.insurer||(j.mport&&j.mport!=="Not needed"))),`
-   <label><span class="t">What kind of job?</span>
-    <div class="segwrap" id="jloss">${LOSS.map(t=>`<button type="button" class="opt2 ${t===_loss?"on":""}"
-     onclick="pickLoss(this,'${t}')">${t}</button>`).join("")}</div></label>
-   <label><span class="t">Priority</span>
-    <div class="segwrap" id="jprio">${PRIO.map(pr=>`<button type="button" class="opt2 ${(j.priority||"Moderate")===pr?"on":""}"
-     onclick="pickPrio(this,'${pr}')">${pr}</button>`).join("")}</div></label>
-   <label><span class="t">Insurance carrier</span><input class="in" id="ji" value="${esc(j.insurer||"")}" placeholder="State Farm"></label>
-   <label><span class="t">Claim #</span><input class="in" id="jn" value="${esc(j.claim||"")}"></label>
-   <label><span class="t">Matterport / 3D scan</span>
-    <div class="segwrap" id="jmp">${MPORT.map(t=>`<button type="button" class="opt2 ${t===_mp?"on":""}"
-     onclick="pickMp(this,'${t}')">${t}</button>`).join("")}</div></label>
-   <label><span class="t">Matterport link</span>
-    <input class="in" id="jml" value="${esc(j.mportLink||"")}" placeholder="https://my.matterport.com/show/?m=..."></label>
-   <label><span class="t">CompanyCam link <em>photos for this job</em></span>
-    <input class="in" id="jcc" value="${esc(j.ccLink||"")}" placeholder="https://app.companycam.com/projects/..."
-     autocomplete="off" autocorrect="off" spellcheck="false"></label>`)}
+  ${fRow("loss","Job type",`
+   <div class="segwrap" id="jloss">${LOSS.map(t=>`<button type="button" class="opt2 ${t===_loss?"on":""}"
+    onclick="pickLoss(this,'${t}');fSync('loss');fSync('fee')">${t}</button>`).join("")}</div>`)}
 
-  ${formSec("dates","Dates","start, due, how long",!!(id&&(j.startDate||j.dueDate||j.estHours)),`
+  ${fRow("prio","Priority",`
+   <div class="segwrap" id="jprio">${PRIO.map(pr=>`<button type="button" class="opt2 ${(j.priority||"Moderate")===pr?"on":""}"
+    onclick="pickPrio(this,'${pr}');fSync('prio')">${pr}</button>`).join("")}</div>`)}
+
+  ${fRow("dates","Start / due",`
    <label><span class="t">Start date</span>
-    <input class="in" id="jsd" type="date" value="${j.startDate||""}" onchange="autoDue()"></label>
+    <input class="in" id="jsd" type="date" value="${j.startDate||""}" onchange="autoDue();fSync('dates')"></label>
    <label><span class="t">Due date <em>auto-set ${LEADDAYS} days out</em></span>
-    <input class="in" id="jdd" type="date" value="${j.dueDate||""}"></label>
+    <input class="in" id="jdd" type="date" value="${j.dueDate||""}" onchange="fSync('dates')"></label>
    <label><span class="t">Start time</span>
     <input class="in" id="jst" type="time" value="${j.startTime||""}"></label>
    <label><span class="t">How long will it take? <em>hours</em></span>
     <input class="in" id="jeh" type="number" step="0.5" inputmode="decimal" value="${j.estHours||""}" placeholder="3"></label>`)}
 
-  ${formSec("billing","Billing &amp; contacts","who gets the invoice, emails",
-   !!(id&&(j.contractorContact||j.contractorEmail||j.ownerEmail||j.contractorPhone)),`
+  ${fRow("mport","Matterport",`
+   <div class="segwrap" id="jmp">${MPORT.map(t=>`<button type="button" class="opt2 ${t===_mp?"on":""}"
+    onclick="pickMp(this,'${t}');fSync('mport')">${t}</button>`).join("")}</div>
+   <label style="margin-top:12px"><span class="t">Scan link</span>
+    <input class="in" id="jml" value="${esc(j.mportLink||"")}" oninput="fSync('mport')"
+     placeholder="https://my.matterport.com/show/?m=..."></label>`)}
+
+  ${fRow("cc","CompanyCam",`
+   <input class="in" id="jcc" value="${esc(j.ccLink||"")}" oninput="fSync('cc')"
+    placeholder="https://app.companycam.com/projects/..."
+    autocomplete="off" autocorrect="off" spellcheck="false">
+   <p class="xs dim" style="margin:-8px 0 2px">The photo project for this job.</p>`)}
+
+  ${fRow("carrier","Carrier",`
+   <input class="in" id="ji" value="${esc(j.insurer||"")}" placeholder="State Farm" oninput="fSync('carrier')">`)}
+
+  ${fRow("claim","Claim #",`
+   <input class="in" id="jn" value="${esc(j.claim||"")}" oninput="fSync('claim')">`)}
+
+  ${fRow("bill","Billing",`
    ${forContractor(j)?`<label><span class="t">Send the invoice to</span>
     <div class="segwrap" id="jbill">
-     <button type="button" class="opt2 ${(j.billTo||"Contractor")==="Contractor"?"on":""}" onclick="pickBill(this,'Contractor')">The contractor</button>
-     <button type="button" class="opt2 ${j.billTo==="Owner"?"on":""}" onclick="pickBill(this,'Owner')">The homeowner</button>
+     <button type="button" class="opt2 ${(j.billTo||"Contractor")==="Contractor"?"on":""}" onclick="pickBill(this,'Contractor');fSync('bill')">The contractor</button>
+     <button type="button" class="opt2 ${j.billTo==="Owner"?"on":""}" onclick="pickBill(this,'Owner');fSync('bill')">The homeowner</button>
     </div></label>`:`<div id="jbill" style="display:none"></div>`}
    <label><span class="t">Their contact person <em>optional</em></span>
     <input class="in" id="jcp" value="${esc(j.contractorContact||"")}" placeholder="Mike, PM"></label>
    <label><span class="t">Contractor email</span>
-    <input class="in" id="jce" type="email" value="${esc(j.contractorEmail||"")}" placeholder="mike@abcrestoration.com"></label>
+    <input class="in" id="jce" type="email" value="${esc(j.contractorEmail||"")}" placeholder="mike@abcrestoration.com" oninput="fSync('bill')"></label>
    <label><span class="t">Contractor phone</span>
     <input class="in" id="jcph" type="tel" inputmode="tel" value="${esc(j.contractorPhone||"")}" placeholder="713-555-0142"></label>
    <label><span class="t">Owner email <em>optional</em></span>
-    <input class="in" id="je" type="email" value="${esc(j.ownerEmail||j.email||"")}" placeholder="name@email.com"></label>`)}
+    <input class="in" id="je" type="email" value="${esc(j.ownerEmail||j.email||"")}" placeholder="name@email.com" oninput="fSync('bill')"></label>`)}
 
-  ${formSec("more","More","status, referral",!!(id&&(j.who||j.status==="Waiting")),`
-  ${(!id||["Waiting","Estimating"].includes(j.status||"Estimating"))?`
-  <label><span class="t">Where does it stand?</span>
+  ${fRow("adv","Paid in advance",`
+   <input class="in" id="jv" type="number" inputmode="decimal" value="${j.advance||""}" placeholder="0" oninput="fSync('adv')">`)}
+
+  ${fRow("who","Referred by",`
+   <input class="in" id="jw" value="${esc(j.who||"")}" placeholder="Dana Reyes — State Farm" oninput="fSync('who')">`)}
+
+  ${(!id||["Waiting","Estimating"].includes(j.status||"Estimating"))?fRow("stat","Where it stands",`
    <div class="segwrap" id="jstat">
-    <button type="button" class="opt2 ${(j.status||"Estimating")!=="Waiting"?"on":""}" onclick="pickStat(this,'Estimating')">Ready to go</button>
-    <button type="button" class="opt2 ${j.status==="Waiting"?"on":""}" onclick="pickStat(this,'Waiting')">Not yet — waiting</button>
-   </div></label>
-  <div id="waitblk" style="display:${j.status==="Waiting"?"block":"none"}">
-   <label><span class="t">Waiting on what?</span>
-    <input class="in" id="jwait" value="${esc(j.waitingOn||"")}" placeholder="Mitigation still running — Bobby's crew"></label>
-   <div class="upbar" style="margin:-10px 0 20px">
-    ${["Mitigation in progress","Matterport not done","Adjuster scope","Docs from contractor","Waiting on approval"]
-     .map(x=>`<button type="button" onclick="document.getElementById('jwait').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>
-  </div>`:""}
-   <label><span class="t">Who contacted / referred you?</span>
-    <input class="in" id="jw" value="${esc(j.who||"")}" placeholder="Dana Reyes — State Farm"></label>`)}
+    <button type="button" class="opt2 ${(j.status||"Estimating")!=="Waiting"?"on":""}" onclick="pickStat(this,'Estimating');fSync('stat')">Ready to go</button>
+    <button type="button" class="opt2 ${j.status==="Waiting"?"on":""}" onclick="pickStat(this,'Waiting');fSync('stat')">Not yet — waiting</button>
+   </div>
+   <div id="waitblk" style="display:${j.status==="Waiting"?"block":"none"};margin-top:12px">
+    <label><span class="t">Waiting on what?</span>
+     <input class="in" id="jwait" value="${esc(j.waitingOn||"")}" oninput="fSync('stat')"
+      placeholder="Mitigation still running — Bobby's crew"></label>
+    <div class="upbar" style="margin:-8px 0 2px">
+     ${["Mitigation in progress","Matterport not done","Adjuster scope","Docs from contractor","Waiting on approval"]
+      .map(x=>`<button type="button" onclick="document.getElementById('jwait').value=${JSON.stringify(x).replace(/"/g,"&quot;")};fSync('stat')">${x}</button>`).join("")}</div>
+   </div>`):`<div id="jstat" style="display:none"></div><div id="waitblk" style="display:none"><input id="jwait" type="hidden" value="${esc(j.waitingOn||"")}"></div>`}
+  </div>
 
   <button class="btn" style="margin-top:20px" onclick="saveJob('${id||""}')">${id?"Save":"Create job"}</button>
   ${id?`<button class="btn warn" onclick="delJob('${id}')">Delete job</button>`:""}`);
  setTimeout(()=>$("#jc")?.focus(),90);}
+/* ---- the form as dense rows ---------------------------------------------
+   Each secondary field is one row: label on the left, current value on the
+   right. Tapping a row opens its editor directly underneath it, in place.
+   The real inputs LIVE inside those editors — collapsed, never duplicated —
+   so saveJob() keeps reading exactly the ids it always read. */
+const fv=(sel,fallback)=>{const e=$(sel);return e?e.value:(fallback==null?"":String(fallback));};
+const _dash='<span class="frw-em">—</span>';
+function feeRowLabel(){
+ const m=_fmode||"pct";
+ if(m==="flat"){const v=fv("#jflat");return v&&+v?"Flat "+money0(+v):"Flat fee";}
+ if(m==="retainer")return "On retainer";
+ if(m==="hourly"){const v=fv("#jhr")||(D.me||{}).hourRate;return v?money0(+v)+"/hr":"Hourly";}
+ const p=fv("#jfpct");
+ return (p!==""?p:D.me.rate)+"%"+(m==="aftersubs"?" after subs":"");
+}
+const FROWV={
+ next:  ()=>{const t=fv("#jna"),d=fv("#jnd");
+   return t?esc(t)+(d?` <span class="frw-em">· ${d===today()?"today":fmt(d)}</span>`:""):_dash;},
+ loss:  ()=>esc(_loss||"")||_dash,
+ prio:  ()=>esc(_prio||"Moderate"),
+ fee:   ()=>esc(feeRowLabel()),
+ total: ()=>{const v=fv("#jt");return v&&+v?money0(+v):_dash;},
+ adv:   ()=>{const v=fv("#jv");return v&&+v?money0(+v):_dash;},
+ dates: ()=>{const s=fv("#jsd"),d=fv("#jdd");
+   return s||d?esc((s?fmt(s):"—")+" → "+(d?fmt(d):"—")):_dash;},
+ mport: ()=>{const l=fv("#jml");return esc(_mp||"Not needed")+(l?" · link":"");},
+ cc:    ()=>fv("#jcc")?"Linked":_dash,
+ carrier:()=>esc(fv("#ji"))||_dash,
+ claim: ()=>esc(fv("#jn"))||_dash,
+ bill:  ()=>{const e=fv("#jce")||fv("#je");
+   return esc((_for==="Contractor"?(_bill==="Owner"?"The homeowner":"The contractor"):"The homeowner")+(e?" · "+e:""));},
+ who:   ()=>esc(fv("#jw"))||_dash,
+ stat:  ()=>{const w=fv("#jwait");return _stat==="Waiting"?("Waiting"+(w?" — "+esc(w):"")):"Ready to go";}
+};
+function fSync(k){
+ const el=document.getElementById("fv_"+k);
+ if(el&&FROWV[k])el.innerHTML=FROWV[k]();
+}
+function fSyncAll(){Object.keys(FROWV).forEach(fSync);}
+/* one row plus its collapsed editor */
+function fRow(k,label,body){
+ return `<div class="frw" onclick="fEdit('${k}')" id="fh_${k}">
+   <span class="frw-k">${label}</span>
+   <span class="frw-v" id="fv_${k}">${FROWV[k]?FROWV[k]():_dash}</span>
+   <span class="frw-c" id="fc_${k}">›</span></div>
+  <div class="frw-e" id="fe_${k}" style="display:none">${body}</div>`;
+}
+function fEdit(k){
+ const me=document.getElementById("fe_"+k);
+ if(!me)return;
+ const opening=me.style.display==="none";
+ /* one open at a time — the point of the row list is that it stays short */
+ document.querySelectorAll(".frw-e").forEach(e=>{
+  e.style.display="none";
+  const c=document.getElementById("fc_"+e.id.slice(3));if(c)c.textContent="›";
+  const h=document.getElementById("fh_"+e.id.slice(3));if(h)h.classList.remove("open");
+ });
+ if(opening){
+  me.style.display="block";
+  const c=document.getElementById("fc_"+k);if(c)c.textContent="⌄";
+  const h=document.getElementById("fh_"+k);if(h)h.classList.add("open");
+  const f=me.querySelector("input:not([type=hidden]),select");
+  if(f&&/text|number|tel|email|date|time/.test(f.type||"text"))setTimeout(()=>f.focus(),60);
+ }
+}
 /* Collapsible group. Closed by default; opens when the job already carries
    data for it, so editing doesn't hide what's there. */
 function formSec(id,label,hint,open,body){
@@ -4517,11 +4612,14 @@ function saveJob(id){
  const bad=validateJob(forWho);
  if(bad.length){
   const first=document.querySelector(".in.bad");
-  /* a flagged field inside a closed group would otherwise be invisible */
+  /* a flagged field inside a closed row editor would otherwise be invisible,
+     which reads as "Save is broken" */
   if(first){
+   const row=first.closest(".frw-e");
+   if(row&&row.style.display==="none")fEdit(row.id.slice(3));
    const grp=first.closest(".fsec-b");
    if(grp&&grp.style.display==="none")togSec(grp.id.replace(/^sec_/,""));
-   first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();
+   setTimeout(()=>{first.scrollIntoView({block:"center",behavior:"smooth"});first.focus();},60);
   }
   toast(bad.includes("name")?"Give it a name first":"Check the highlighted fields");
   return;
