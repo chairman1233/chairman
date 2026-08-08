@@ -939,7 +939,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-132 · rows show what's actually in them";
+const BUILD="C-133 · no invented moves on disputed jobs";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4273,8 +4273,8 @@ function newJob(id){const j=id?job(id):{};
   <div style="position:relative;margin:-14px 0 14px"><div id="addrHits" class="addrpop"></div></div>
 
   <div class="frws">
-  ${(!id||ACTIVE_ST.includes(j.status||"Estimating"))?fRow("next","Next move",`
-   <input class="in" id="jna" value="${esc((j.next&&j.next.text)||NEXT_PRESETS[0])}"
+  ${(!id||(ACTIVE_ST.includes(j.status||"Estimating")&&!inDispute(j)))?fRow("next","Next move",`
+   <input class="in" id="jna" value="${esc((j.next&&j.next.text)||(id?"":NEXT_PRESETS[0]))}"
     placeholder="Call to schedule the site visit" oninput="fSync('next')"
     autocomplete="off" autocorrect="off" spellcheck="false">
    <div class="upbar" style="margin:-8px 0 14px">
