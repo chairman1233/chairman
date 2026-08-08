@@ -939,7 +939,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-131 · the form is rows now too";
+const BUILD="C-132 · rows show what's actually in them";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4385,7 +4385,11 @@ function newJob(id){const j=id?job(id):{};
 
   <button class="btn" style="margin-top:20px" onclick="saveJob('${id||""}')">${id?"Save":"Create job"}</button>
   ${id?`<button class="btn warn" onclick="delJob('${id}')">Delete job</button>`:""}`);
- setTimeout(()=>$("#jc")?.focus(),90);}
+ /* The row labels are built in the same pass as the inputs they read, so at
+    that instant nothing is mounted and every row renders "—". Sync once the
+    DOM exists — otherwise editing a job shows a form full of blanks over
+    values that are actually there. */
+ setTimeout(()=>{fSyncAll();$("#jc")?.focus();},90);}
 /* ---- the form as dense rows ---------------------------------------------
    Each secondary field is one row: label on the left, current value on the
    right. Tapping a row opens its editor directly underneath it, in place.
