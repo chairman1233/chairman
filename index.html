@@ -939,7 +939,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-134 · every error shows itself";
+const BUILD="C-135 · the estimates folder files itself";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1497,6 +1497,7 @@ function navBadge(section){
   case "invoices": return byStage("Invoiced").length+billable().length;
   case "accounts": return ACCOUNTS().filter(a=>acctStats(a.id).open).length;
   case "disputes": return openDisputes().length;
+  case "docs":     return (D.estQ||[]).length;
   default:         return 0;
  }
 }
@@ -1996,6 +1997,307 @@ function fileTile(f){
  return `<span class="ftile" style="--tint:${t}">${FICON[f.cat]||"▤"}${
   sg?`<i class="sgn" title="Signed">✓</i>`:""}</span>`;
 }
+/* ================= THE ESTIMATES FOLDER =================================
+   He finishes in Xactimate and exports to one folder on the desktop. Chairman
+   points at that folder, notices what's new, and works out which job each PDF
+   belongs to.
+
+   A browser cannot watch a folder in the background — there is no daemon and
+   no permission for one. What it CAN do is hold a directory handle across
+   sessions and read it whenever the app is open. So this catches up on open
+   rather than firing the instant a file lands. Stated plainly because
+   pretending otherwise would just look broken later.
+
+   Matching is ADDRESS-first. His exports are named for the property
+   (10935_PECAN_DR_FINAL_DRAFT_CON.pdf, 521_WINBURN_..., "1209 Wisdom Drive,
+   Deer Park, TX - Final Estimate.pdf"), only sometimes for the client
+   (GARY_BYRD, GIBSON). Nothing attaches itself: matches wait in a queue. */
+const ESTDIR_KEY="_estimates_dir";
+let _estHandle=null, _estScanning=false;
+
+const estSeen=()=>{if(!D.estSeen)D.estSeen={};return D.estSeen;};
+const estQ=()=>{if(!D.estQ)D.estQ=[];return D.estQ;};
+
+/* Xactimate's export suffixes carry the document TYPE, not the property. Strip
+   them before matching or every file looks like every other file. */
+const EST_NOISE=/(_?CON$)|(_?FINAL[_ ]?DRAFT)|(_?CUSTOMER[_ ]?TOTAL[_ ]?AMOUNT)|(_?COMPONENTS)|(-?\s*FINAL ESTIMATE)|(#\d+)|(\(GUEST\))|(\(RECON\))|(\(UPDATE[D]?\))|(^RECON-)|(^NEW_)|(_?UPDATED?)|(_?SUPPLEMENT)/gi;
+function estDocKind(n){
+ if(/CUSTOMER[_ ]?TOTAL[_ ]?AMOUNT/i.test(n))return "Totals";
+ if(/COMPONENTS/i.test(n))return "Components";
+ if(/SUPPLEMENT/i.test(n))return "Supplement";
+ if(/CONTENTS/i.test(n))return "Contents";
+ return "Estimate";
+}
+function estNorm(name){
+ let s=String(name||"").replace(/\.[a-z0-9]+$/i,"");
+ s=s.replace(EST_NOISE," ");
+ s=s.replace(/[_,]+/g," ").replace(/\s+/g," ").trim().toUpperCase();
+ return s;
+}
+/* "DR", "STREET", "LANE" etc. are in every address and identify nothing */
+const EST_STOP=new Set(["DR","DRIVE","ST","STREET","LN","LANE","RD","ROAD","AVE","AVENUE",
+ "CT","COURT","BLVD","WAY","CIR","CIRCLE","PL","PLACE","TRL","TRAIL","N","S","E","W",
+ "TX","TEXAS","HOUSTON","LA","PORTE","DEER","PARK","PASADENA","THE","AND"]);
+const estWords=s=>String(s||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ")
+ .split(/\s+/).filter(w=>w&&w.length>1&&!EST_STOP.has(w)&&!/^\d+$/.test(w));
+const estNum=s=>{const m=String(s||"").match(/\b(\d{3,6})\b/);return m?m[1]:"";};
+
+function estScore(fileName,j){
+ const f=estNorm(fileName);
+ const addr=String(j.address||""), who=[j.owner,j.contractor].filter(Boolean).join(" ");
+ let score=0; const why=[];
+ /* a street number is the single most reliable token he produces */
+ const fn=estNum(f), an=estNum(addr);
+ if(fn&&an&&fn===an){score+=60;why.push("street no. "+fn);}
+ const fw=estWords(f), aw=estWords(addr), ww=estWords(who);
+ const hitA=fw.filter(w=>aw.some(x=>estFuzzy(w,x)));
+ const hitW=fw.filter(w=>ww.some(x=>estFuzzy(w,x)));
+ if(hitA.length){score+=28*Math.min(2,hitA.length);why.push("address: "+hitA.slice(0,2).join(" "));}
+ if(hitW.length){score+=30*Math.min(2,hitW.length);why.push("name: "+hitW.slice(0,2).join(" "));}
+ /* a number that matches nothing is a signal AGAINST, not just absence */
+ if(fn&&an&&fn!==an&&!hitW.length)score-=25;
+ return {score,why:why.join(" · ")};
+}
+/* Two words differing by one letter, for the spelling drift between what he
+   typed into a job and what Xactimate exported. His board says "Tomkawa" and
+   the file says "TONKAWA". Length 5+ only — on short words a single letter is
+   the difference between two real streets. */
+function estFuzzy(a,b){
+ if(a===b)return true;
+ if(Math.abs(a.length-b.length)>1||a.length<5||b.length<5)return false;
+ let i=0,k=0,edits=0;
+ while(i<a.length&&k<b.length){
+  if(a[i]===b[k]){i++;k++;continue;}
+  if(++edits>1)return false;
+  if(a.length===b.length){i++;k++;}
+  else if(a.length>b.length)i++;
+  else k++;
+ }
+ return edits+(a.length-i)+(b.length-k)<=1;
+}
+function estMatch(fileName){
+ const live=D.jobs.filter(j=>!["Lost"].includes(j.status));
+ const scored=live.map(j=>{const s=estScore(fileName,j);return {j,score:s.score,why:s.why};})
+  .sort((a,b)=>b.score-a.score);
+ const best=scored[0];
+ if(!best||best.score<=0)return null;
+ if(best.score>=40)return best;
+ /* A single distinctive street name — BONNER, WINBURN, OAKWILD — scores 28,
+    under the confident threshold. But if it lands on exactly ONE job and
+    nothing else scores at all, ambiguity isn't the problem; a weak absolute
+    number is. Offer it as a low-confidence suggestion. Nothing auto-files, so
+    the worst case is he taps ✕ once. */
+ const second=scored.find(x=>x.j.id!==best.j.id&&x.score>0);
+ if(best.score>=26&&!second)return Object.assign({},best,{why:best.why+" · only job it fits"});
+ return null;
+}
+
+/* ---- the folder handle, kept across sessions ---- */
+async function estLink(){
+ if(!window.showDirectoryPicker){
+  return sheet("Not in this browser",`<p class="sm mut">Linking a folder needs Chrome or Edge on a computer.
+   Safari and iPhone can't do it — on those, keep using Upload on the job.</p>
+   <button class="btn" onclick="close_()">Alright</button>`);
+ }
+ try{
+  const h=await window.showDirectoryPicker({id:"chairman-estimates",mode:"read"});
+  _estHandle=h;
+  await idbPut({id:ESTDIR_KEY,handle:h,name:h.name});
+  D.estDir={name:h.name,linkedAt:new Date().toISOString()};
+  save();toast("Linked "+h.name);
+  estScan(true);
+ }catch(e){ /* he cancelled the picker — not an error */ }
+}
+async function estUnlink(){
+ _estHandle=null; await idbDel(ESTDIR_KEY);
+ delete D.estDir; save(); render(); toast("Folder unlinked");
+}
+async function estHandle(){
+ if(_estHandle)return _estHandle;
+ const rec=await idbGet(ESTDIR_KEY);
+ if(!rec||!rec.handle)return null;
+ _estHandle=rec.handle;
+ return _estHandle;
+}
+/* Chrome drops the grant between sessions; asking again needs a real click,
+   which is why the scan button exists rather than a silent boot-time scan. */
+async function estPermit(h,ask){
+ if(!h||!h.queryPermission)return true;
+ const opt={mode:"read"};
+ if((await h.queryPermission(opt))==="granted")return true;
+ if(!ask)return false;
+ return (await h.requestPermission(opt))==="granted";
+}
+async function estWalk(dir,out,depth,path){
+ if(depth>3||out.length>800)return;
+ for await(const [name,h] of dir.entries()){
+  if(name.startsWith(".")||name.startsWith("_"))continue;
+  if(h.kind==="directory"){await estWalk(h,out,depth+1,path+name+"/");}
+  else if(/\.pdf$/i.test(name)){out.push({h,name,path:path+name});}
+ }
+}
+async function estScan(fresh){
+ if(_estScanning)return;
+ const h=await estHandle();
+ if(!h){estPanelMsg("No folder linked yet.");return;}
+ _estScanning=true; estPanelMsg("Scanning…");
+ try{
+  if(!await estPermit(h,true)){estPanelMsg("Chrome needs permission again — click Scan.");return;}
+  const found=[]; await estWalk(h,found,0,"");
+  const seen=estSeen(); const q=estQ();
+  let added=0,skipped=0;
+  for(const it of found){
+   let file; try{file=await it.h.getFile();}catch(e){continue;}
+   const key=it.path+"|"+file.size+"|"+Math.round(file.lastModified/1000);
+   if(seen[key]){skipped++;continue;}
+   if(q.some(x=>x.key===key))continue;
+   const m=estMatch(it.name);
+   q.push({key,id:uid(),name:it.name,path:it.path,size:file.size,
+    mtime:new Date(file.lastModified).toISOString(),
+    kind:estDocKind(it.name),
+    jobId:m?m.j.id:"", score:m?m.score:0, why:m?m.why:""});
+   added++;
+  }
+  /* newest first — what he just exported is what he's looking for */
+  q.sort((a,b)=>String(b.mtime).localeCompare(String(a.mtime)));
+  D.estScanAt=new Date().toISOString();
+  save();render();
+  toast(added?added+" new file"+(added>1?"s":"")+" to review":"Nothing new — "+skipped+" already handled");
+ }catch(e){
+  estPanelMsg("Couldn't read the folder: "+(e.message||e));
+ }finally{_estScanning=false;}
+}
+function estPanelMsg(t){const el=document.getElementById("estmsg");if(el)el.textContent=t;else toast(t);}
+
+/* ---- acting on a queued match ---- */
+function estAssign(qid){
+ const it=estQ().find(x=>x.id===qid);if(!it)return;
+ const opts=D.jobs.filter(j=>j.status!=="Lost")
+  .map(j=>`<button class="btn ${j.id===it.jobId?"":"sec"}" onclick="estSetJob('${qid}','${j.id}')">
+    ${esc(jobName(j))}${j.address?` <span class="dim" style="font-weight:400">· ${esc(shortAddr(j.address))}</span>`:""}</button>`).join("");
+ sheet("Which job? — "+it.name,`<p class="sm dim" style="margin:0 0 14px">${esc(it.kind)} · ${kb(it.size)}</p>${opts}`);
+}
+function estSetJob(qid,jid){
+ const it=estQ().find(x=>x.id===qid);if(!it)return;
+ it.jobId=jid; it.why="you picked it"; it.score=100;
+ save();close_();render();
+}
+function estSkip(qid){
+ const i=estQ().findIndex(x=>x.id===qid);if(i<0)return;
+ estSeen()[estQ()[i].key]={skip:true,at:new Date().toISOString()};
+ estQ().splice(i,1);save();render();toast("Skipped — won't ask again");
+}
+async function estAccept(qid){
+ const it=estQ().find(x=>x.id===qid);
+ if(!it)return;
+ if(!it.jobId)return estAssign(qid);
+ const h=await estHandle(); if(!h)return toast("Folder isn't linked");
+ toast("Filing "+it.name+"…");
+ try{
+  const fh=await estFileAt(h,it.path);
+  if(!fh)throw new Error("File moved or was renamed");
+  const file=await fh.getFile();
+  const data=await readAsDataURL(file);
+  const fid=uid();
+  await idbPut({id:fid,data,name:it.name,type:file.type||"application/pdf"});
+  const cl=await cloudUpload(fid,data,it.name);
+  D.files.unshift({id:uid(),fileId:fid,jobId:it.jobId,cat:"Estimate",name:it.name,
+   type:file.type||"application/pdf",cloud:cl||"",size:file.size,w:0,h:0,
+   created:new Date().toISOString(),fromFolder:it.path});
+  estSeen()[it.key]={jobId:it.jobId,at:new Date().toISOString()};
+  const i=estQ().findIndex(x=>x.id===qid); if(i>=0)estQ().splice(i,1);
+  save();render();
+  const j=job(it.jobId);
+  toast("Filed under "+jobName(j));
+  /* the totals sheet is where the number lives — offer it, never write it */
+  if(it.kind==="Totals"&&j&&!j.total)estOfferTotal(it.jobId,file);
+ }catch(e){toast("Couldn't file it: "+(e.message||e));}
+}
+async function estFileAt(dir,path){
+ const parts=path.split("/").filter(Boolean);
+ let cur=dir;
+ for(let i=0;i<parts.length-1;i++){
+  try{cur=await cur.getDirectoryHandle(parts[i]);}catch(e){return null;}
+ }
+ try{return await cur.getFileHandle(parts[parts.length-1]);}catch(e){return null;}
+}
+/* Read the totals PDF and PROPOSE the number. It never writes money on its
+   own — a misread digit here changes what he invoices. */
+async function estOfferTotal(jobId,file){
+ if(!aiReady()||!canReadDocs())return;
+ const j=job(jobId);if(!j)return;
+ sheet("Read the total? — "+jobName(j),`
+  <p class="sm dim" style="margin:0 0 16px">This looks like the customer totals sheet.
+   I can read the estimate total off it and show you the number before anything changes.</p>
+  <button class="btn" onclick="estDoTotal('${jobId}')">Read it</button>
+  <button class="btn sec" onclick="close_()">Not now</button>`);
+ _estPendingFile=file;
+}
+let _estPendingFile=null;
+async function estDoTotal(jobId){
+ const f=_estPendingFile; if(!f)return close_();
+ const j=job(jobId);
+ sheet("Reading "+f.name,`<div class="pan"><div class="lab">◷ Reading the totals sheet…</div></div><div id="aiout"></div>`);
+ const out=$("#aiout");
+ try{
+  const raw=await callAIFile(DOC_SYS(),
+   `This document belongs to the job named "${jobName(j)}". Read the ESTIMATE TOTAL (the replacement cost value / customer total). Report the number.`,f);
+  const {clean,actions}=parseActions(raw);
+  _aiActions=actions.map(a=>Object.assign({},a,{job:a.job||jobName(j)}));
+  _aiDone={};
+  out.innerHTML=`<div class="pan" style="border-color:var(--c-rdy)">
+   <div class="lab v-rdy">✦ What I found</div>
+   <div class="note bd" style="margin-top:12px">${esc(clean)}</div>
+   <div id="aiacts"></div>
+   <p class="xs dim" style="margin-top:10px">Nothing is saved until you tap the action above.</p></div>`;
+  renderActions();
+ }catch(err){
+  out.innerHTML=`<div class="pan" style="border-color:var(--c-out)"><div class="lab v-out">◉ Couldn't read it</div>
+   <p class="sm" style="margin:10px 0 0">${esc(err.message||String(err))}</p></div>`;
+ }finally{_estPendingFile=null;}
+}
+async function estAcceptAll(){
+ const ready=estQ().filter(x=>x.jobId&&x.score>=60);
+ if(!ready.length)return toast("Nothing matched confidently enough");
+ for(const it of ready)await estAccept(it.id);
+}
+/* ---- the review panel ---- */
+function estPanelHTML(){
+ const q=estQ(), linked=!!D.estDir;
+ const sup=!!window.showDirectoryPicker;
+ return `<div class="pan" style="border-color:var(--c-${q.length?"out":"est"})">
+  <div class="row between" style="align-items:baseline">
+   <div class="lab v-${q.length?"out":"est"}">⬓ Estimates folder</div>
+   <span class="xs dim" id="estmsg">${linked
+     ?esc(D.estDir.name)+(D.estScanAt?" · scanned "+relTime(D.estScanAt):"")
+     :"not linked"}</span></div>
+  ${!sup?`<p class="sm dim" style="margin:12px 0 0">This browser can't link a folder — Chrome or Edge on a computer only.</p>`
+   :!linked?`<p class="sm dim" style="margin:12px 0 14px">Point Chairman at the folder you export Xactimate PDFs into.
+     It'll work out which job each one belongs to and hold them here until you say yes.</p>
+    <button class="btn" onclick="estLink()">Choose the folder</button>`
+   :`<div class="upbar" style="margin-top:12px">
+     <button onclick="estScan()">Scan now</button>
+     ${q.filter(x=>x.jobId&&x.score>=60).length?`<button onclick="estAcceptAll()">File all ${q.filter(x=>x.jobId&&x.score>=60).length} confident</button>`:""}
+     <button onclick="estUnlink()">Unlink</button></div>
+    <p class="xs dim" style="margin:10px 0 0">Chairman reads the folder while it's open — it catches up when you come back, it can't watch in the background.</p>`}
+  ${q.length?`<div class="qtab" style="margin-top:16px">
+   ${q.map(it=>{const j=it.jobId?job(it.jobId):null;
+     const conf=it.score>=90?"rdy":it.score>=60?"out":"late";
+     return `<div class="qrow" style="--qt:var(--c-${conf})">
+      <div class="qc-s"><span class="qb v-${conf}">${esc(it.kind.toUpperCase())}</span>
+       <span class="qwhy">${it.mtime?esc(fmt(it.mtime.slice(0,10))):""} · ${kb(it.size)}</span></div>
+      <div class="qc-j"><b>${esc(it.name)}</b><span class="qsub">${esc(it.path)}</span></div>
+      <div class="qc-n" onclick="estAssign('${it.id}')">${j?`→ <b>${esc(jobName(j))}</b>`:`<span class="frw-em">no match — pick a job</span>`}
+       ${it.why?`<span class="qsub">${esc(it.why)}</span>`:""}</div>
+      <button class="qc-d" onclick="estAssign('${it.id}')">${j?"Change":"Pick"}</button>
+      <div class="qc-a">
+       <button class="qgo" style="--qg:var(--c-rdy)" onclick="estAccept('${it.id}')"${j?"":" disabled"}>File it</button>
+       <button class="qi" onclick="estSkip('${it.id}')" title="Never ask about this file again">✕</button>
+      </div></div>`;}).join("")}
+  </div>`:linked?`<p class="sm dim" style="margin:14px 0 0">Nothing waiting. Export from Xactimate, then hit Scan.</p>`:""}
+ </div>`;
+}
+
 function pickFiles(jobId,cat){
  const i=document.createElement("input");i.type="file";i.multiple=true;
  if(cat==="Photo")i.accept="image/*";
@@ -7691,6 +7993,7 @@ R.docs=()=>{
  const logFiles=(D.log||[]).flatMap(x=>(x.files||[]).map(f=>({...f,logWho:x.who})));
  return `<div class="topbar"><div class="grow"><h1>Documents</h1>
    <div class="sub2">${plural(files.length+logFiles.length,"file")} across jobs and the daybook</div></div></div>
+ ${estPanelHTML()}
  ${Object.keys(byJob).length||logFiles.length?`<div class="cols">
   ${Object.entries(byJob).map(([jid,fs2])=>{const j=job(jid);
    return `<div class="colw"><div class="sechead" style="margin-top:0">

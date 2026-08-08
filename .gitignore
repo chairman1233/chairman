@@ -1,5 +1,6 @@
 # pre-push gate output — regenerated on every run, never worth committing
 parse-out.txt
 form-out.txt
+match-out.txt
 dupe-out.txt
 node_modules/
