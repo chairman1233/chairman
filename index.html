@@ -689,7 +689,11 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .jbar-s{font:700 10.5px var(--sans);color:var(--ink3);overflow:hidden;letter-spacing:.13em;
  text-transform:uppercase;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}
 .jbar-a{display:flex;gap:7px;flex:none;align-items:center}
-.jbar-a .btn{margin:0}
+.jbar-a .btn{margin:0;white-space:nowrap}
+.jbar-b{flex:none;background:none;border:1px solid var(--rule2);border-radius:999px;
+ width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+ color:var(--ink3);font-size:15px;line-height:1;padding:0}
+.jbar-b:hover{color:var(--ink);border-color:var(--ink3)}
 @media(max-width:520px){.jbar-n{font-size:14px}.jbar-s{display:none}}
 
 /* one-line disclosure for the job's reference block */
@@ -851,7 +855,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-126 · sticky bars land where they should";
+const BUILD="C-127 · job bar, tidied";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4441,7 +4445,7 @@ R.job=({id})=>{
     painted its own page in the colour of its raw stage. ckLive is the resolver. */
  const C=ckLive(j);
  return `<div class="jbar">
-  <button class="lnk" style="flex:none" onclick="go('jobs')" title="Back to the pipeline">←</button>
+  <button class="jbar-b" onclick="go('jobs')" title="Back to the pipeline" aria-label="Back to the pipeline">←</button>
   <div class="jbar-id">
    <div class="jbar-n v-${C}">${esc(jobName(j))}</div>
    <div class="jbar-s">${esc(j.address||j.status)}</div>
