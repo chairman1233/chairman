@@ -622,6 +622,60 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  font:700 10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .nutkey b{width:9px;height:9px;border-radius:3px;flex:none}
 
+/* ---- the queue as a table, not a stack of cards -------------------------
+   One row per job, every control on the row. Dense enough that a full day is
+   visible without scrolling, which is the whole point of a queue. */
+.qtab{border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:var(--panel)}
+.qhead,.qrow{display:grid;grid-template-columns:132px minmax(150px,1.25fr) minmax(140px,1.35fr) 104px auto;
+ gap:12px;align-items:center;padding:9px 13px}
+.qhead{background:var(--panel2);border-bottom:1px solid var(--rule);
+ font:700 9.5px var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
+.qrow{border-bottom:1px solid var(--rule);border-left:3px solid transparent;position:relative}
+.qrow:last-child{border-bottom:0}
+.qrow:hover{background:var(--panel2)}
+.qrow.lead{border-left-color:var(--qt);background:color-mix(in srgb,var(--qt) 7%,var(--panel))}
+.qrow.lead:hover{background:color-mix(in srgb,var(--qt) 12%,var(--panel))}
+.qrow.rush{border-left-color:var(--c-late)}
+.qb{display:inline-block;font:700 9px var(--sans);letter-spacing:.09em;padding:3px 7px;
+ border:1px solid currentColor;border-radius:999px;white-space:nowrap}
+.qwhy{display:block;font:400 10.5px var(--sans);color:var(--ink3);margin-top:3px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qc-j{min-width:0;cursor:pointer}
+.qc-j b{display:block;font:600 14.5px var(--sans);color:var(--ink);
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qc-j:hover b{text-decoration:underline;text-underline-offset:3px}
+.qsub{display:block;font:400 11.5px var(--sans);color:var(--ink3);margin-top:2px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qc-n{min-width:0;font:400 13px var(--sans);color:var(--ink2);cursor:pointer;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qc-n:hover{color:var(--ink)}
+.qc-d{background:none;border:1px solid var(--rule2);border-radius:8px;padding:6px 8px;
+ font:600 11.5px var(--sans);color:var(--ink2);white-space:nowrap;text-align:center}
+.qc-d:hover{border-color:var(--ink3);color:var(--ink)}
+.qc-a{display:flex;gap:5px;align-items:center;justify-content:flex-end}
+.qgo{background:var(--qg,var(--panel2));border:1px solid var(--qg,var(--rule2));
+ color:var(--qg,var(--ink2));border-radius:999px;padding:7px 13px;white-space:nowrap;
+ font:700 10.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;max-width:20ch;
+ overflow:hidden;text-overflow:ellipsis}
+.qgo[style*="--qg"]{color:var(--paper)}
+.qgo:hover{filter:brightness(1.12)}
+.qi{width:31px;height:31px;flex:none;display:flex;align-items:center;justify-content:center;
+ background:none;border:1px solid var(--rule2);border-radius:8px;color:var(--ink3);
+ font-size:13px;line-height:1;padding:0}
+.qi:hover:not(:disabled){color:var(--ink);border-color:var(--ink3);background:var(--panel2)}
+.qi:disabled{opacity:.28;cursor:not-allowed}
+.qi.on{color:var(--c-late);border-color:var(--c-late)}
+@media(max-width:860px){
+ .qhead{display:none}
+ .qrow{grid-template-columns:1fr auto;gap:7px 10px;padding:12px 13px}
+ .qc-s{grid-column:1;order:1}
+ .qc-d{grid-column:2;order:2;justify-self:end}
+ .qc-j{grid-column:1/-1;order:3}
+ .qc-n{grid-column:1/-1;order:4}
+ .qc-a{grid-column:1/-1;order:5;justify-content:flex-start;flex-wrap:wrap;margin-top:3px}
+ .qgo{flex:1;min-width:140px;text-align:center}
+}
+
 /* collapsible form groups — one row each until you need them */
 .fsec{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;background:none;
  border:0;border-top:1px solid var(--rule);padding:15px 2px;margin:0}
@@ -855,7 +909,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-127 · job bar, tidied";
+const BUILD="C-128 · the queue is a table you can work";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1193,6 +1247,114 @@ function doneNext(id){const j=job(id);if(!j||!nextOf(j))return;
    The user should never have to hold the day in working memory. */
 let _skips=[];
 function skipNext(id){_skips.push(id);render();}
+
+/* ---- act on a job without opening it -------------------------------------
+   A client calls to push a visit, rush a job, or cancel. Each of those was a
+   navigation plus a form. From the queue row they are one tap. */
+function qSched(id){
+ const j=job(id);if(!j)return;
+ const n=nextOf(j);
+ sheet("When — "+jobName(j),`
+  <div class="upbar" style="margin:0 0 16px">
+   <button type="button" onclick="qSetDate('${id}',0)">Today</button>
+   <button type="button" onclick="qSetDate('${id}',1)">Tomorrow</button>
+   <button type="button" onclick="qPush('${id}',1)">Push 1 day</button>
+   <button type="button" onclick="qSetDate('${id}',7)">Next week</button></div>
+  <label><span class="t">Or pick the day</span>
+   <input class="in" id="qsdate" type="date" value="${esc(n?n.date:today())}"></label>
+  <label><span class="t">Time <em>optional — shows on the calendar</em></span>
+   <input class="in" id="qstime" type="time" value="${esc(j.startTime||"")}"></label>
+  ${n?`<p class="xs dim" style="margin:-6px 0 16px">Moving: <b>${esc(n.text)}</b></p>`
+     :`<label><span class="t">What's the move?</span>
+   <input class="in" id="qstext" value="" placeholder="Call to schedule the site visit" autocomplete="off"></label>
+  <div class="upbar" style="margin:-10px 0 16px">
+   ${NEXT_PRESETS.slice(0,5).map(x=>`<button type="button" onclick="document.getElementById('qstext').value=${JSON.stringify(x).replace(/"/g,"&quot;")}">${x}</button>`).join("")}</div>`}
+  <button class="btn" onclick="qSaveDate('${id}')">Set it</button>`);
+}
+function qSetDate(id,plus){const t=new Date();t.setDate(t.getDate()+plus);qWrite(id,isoDay(t));}
+function qPush(id,plus){
+ const j=job(id);const n=nextOf(j);
+ const base=n&&n.date>=today()?n.date:today();
+ const t=new Date(base+"T12:00:00");t.setDate(t.getDate()+plus);
+ qWrite(id,isoDay(t));
+}
+function qSaveDate(id){
+ const d=$("#qsdate")?$("#qsdate").value:"";
+ const tm=$("#qstime")?$("#qstime").value:"";
+ const tx=$("#qstext")?$("#qstext").value.trim():"";
+ if(!d){toast("Pick a day");return;}
+ qWrite(id,d,tm,tx);
+}
+function qWrite(id,date,time,text){
+ const j=job(id);if(!j)return;
+ const n=nextOf(j);
+ const t=(text||"")||(n?n.text:"")||"Call to schedule the visit";
+ j.next={text:t,date:date};
+ if(time)j.startTime=time;
+ /* Scheduling the job and dating the next move were two separate facts, so
+    quickSchedule could move a job to Monday while the queue still called it
+    overdue from last Thursday. One date now drives both. */
+ if(j.startDate&&j.startDate<date&&!DONE_ST.includes(j.status))j.startDate=date;
+ if(!j.startDate)j.startDate=date;
+ if(j.dueDate&&j.dueDate<date)j.dueDate=addDays(date,LEADDAYS);
+ save();close_();render();
+ toast(date===today()?"Set for today":"Set for "+fmt(date));
+}
+function toggleRush(id){
+ const j=job(id);if(!j)return;
+ j.rush=!j.rush;
+ if(j.rush){j._prePrio=j.priority||"Moderate";j.priority="Urgent";}
+ else if(j._prePrio){j.priority=j._prePrio;delete j._prePrio;}
+ save();render();
+ toast(j.rush?"Rushed — top of the queue":"Rush cleared");
+}
+function qMenu(id){
+ const j=job(id);if(!j)return;
+ sheet(jobName(j),`
+  <button class="btn sec" onclick="close_();go('job',{id:'${id}'})">Open the job</button>
+  <button class="btn sec" onclick="close_();qSched('${id}')">Change the date</button>
+  <button class="btn sec" onclick="close_();setNextSheet('${id}')">Rewrite the next move</button>
+  <button class="btn sec" onclick="close_();toggleRush('${id}')">${j.rush?"Clear the rush":"Mark it rush"}</button>
+  <button class="btn sec" onclick="close_();skipNext('${id}')">Skip it for today</button>
+  <hr class="rule" style="margin:22px 0">
+  <button class="btn warn" onclick="close_();cancelSheet('${id}')">Cancel this job</button>`);
+}
+/* Cancel with a fee. A cancellation you're owed for is not a loss — it is a
+   smaller job that is already finished, so it goes to Complete with the fee
+   locked flat and follows the normal invoice path. Lost jobs are excluded from
+   every money total, so parking a fee on one would delete the money. */
+function cancelSheet(id){
+ const j=job(id);if(!j)return;
+ const def=(D.me&&D.me.cancelFee)||"";
+ sheet("Cancel — "+jobName(j),`
+  <p class="sm dim" style="margin:0 0 18px">If they owe you for the work already done, put the amount here
+   and it stays billable. Leave it empty and the job is written off.</p>
+  <label><span class="t">Cancellation fee</span>
+   <input class="in" id="cxfee" type="number" inputmode="decimal" value="${esc(def)}" placeholder="0"></label>
+  <label><span class="t">What happened? <em>optional</em></span>
+   <input class="in" id="cxnote" value="" placeholder="Client pulled the claim" autocomplete="off"></label>
+  <button class="btn" onclick="doCancel('${id}')">Cancel the job</button>
+  <button class="btn sec" onclick="close_()">Never mind</button>`);
+}
+function doCancel(id){
+ const j=job(id);if(!j)return;
+ const fe=+($("#cxfee")?$("#cxfee").value:0)||0;
+ const note=($("#cxnote")?$("#cxnote").value.trim():"");
+ j.cancelled=today(); j.cancelNote=note; j.next=null; j.rush=false;
+ D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),
+  text:"[Cancelled] "+(note||"no reason given")+(fe?" — fee "+money(fe):" — no fee")});
+ if(fe>0){
+  j.cancelFee=fe;
+  j.feeMode="flat"; j.flat=fe; j.feeLocked=true;   /* no company deal recalculates this */
+  j.status="Complete"; if(!j.readyDate)j.readyDate=today();
+  save();close_();render();
+  toast("Cancelled — "+money(fe)+" still billable");
+ }else{
+  j.status="Lost";
+  save();close_();render();
+  toast("Cancelled and written off");
+ }
+}
 /* ---- lead intake: paste, parse, one tap -----------------------------------
    Leads arrive as forwarded texts and emails; retyping them is where errors
    get in. Deterministic client-side parse — instant, offline, no key needed.
@@ -1329,17 +1491,47 @@ function renderNav(){
  el.innerHTML=navGroups().map(([k,ic,lab])=>`<button data-v="${k}" class="${home===k?"on":""}"
    onclick="go('${k}')"><span class="g">${ic}</span>${lab}</button>`).join("");
 }
+/* A job you cannot act on cannot be late. "Waiting" means the site isn't ready
+   — mitigation still running, no Matterport, no adjuster scope. Calling that
+   "2 days overdue — start the estimate" is the queue lying to you about work
+   that is not yours to do yet. It still belongs on the list, just never in red. */
+const qActionable=j=>!!j&&j.status!=="Waiting";
+const daysLate=d=>Math.max(1,Math.round((dayFromISO(today())-dayFromISO(d))/86400000));
+const isRush=j=>!!(j&&(j.rush||j.priority==="Urgent"));
+
+/* rush first, then genuinely late, then today's, then jobs with no move at all,
+   then blocked ones, then work already booked for a later day */
+const QORDER={rush:0,over:1,today:2,none:3,wait:4,later:5};
+
 function queueItems(){
  const items=[];
- const active=D.jobs.filter(needsNext);
- const dated=active.filter(nextOf);
- dated.filter(j=>j.next.date<today()).sort((a,b)=>a.next.date.localeCompare(b.next.date))
-  .forEach(j=>items.push({j,kind:"over",label:j.next.text,
-   why:plural(Math.max(1,Math.round((dayFromISO(today())-dayFromISO(j.next.date))/86400000)),"day")+" overdue"}));
- dated.filter(j=>j.next.date===today())
-  .forEach(j=>items.push({j,kind:"today",label:j.next.text,why:"due today"}));
- active.filter(j=>!nextOf(j)).forEach(j=>{const fl=flowOf(j);
-  items.push({j,kind:"none",label:"Set the next move",why:"no next move set",flow:fl||null});});
+ D.jobs.filter(needsNext).forEach(j=>{
+  const n=nextOf(j);
+  let kind,why,label;
+  if(!n){
+   kind="none"; why="no next move set"; label="Set the next move";
+  }else{
+   label=n.text;
+   if(!qActionable(j)){
+    kind="wait"; why=j.waitingOn?("waiting — "+j.waitingOn):"waiting — not ready yet";
+   }else if(n.date<today()){
+    kind="over"; why=plural(daysLate(n.date),"day")+" overdue";
+   }else if(n.date===today()){
+    kind="today"; why="due today";
+   }else{
+    kind="later"; why="booked "+fmt(n.date);
+   }
+  }
+  /* rush overrides the bucket for sorting but keeps its own reason visible */
+  const sortKind=(isRush(j)&&kind!=="later")?"rush":kind;
+  items.push({j,kind,sortKind,why,label,date:n?n.date:null,rush:isRush(j)});
+ });
+ items.sort((a,b)=>{
+  const d=QORDER[a.sortKind]-QORDER[b.sortKind];
+  if(d)return d;
+  if(a.date&&b.date&&a.date!==b.date)return a.date.localeCompare(b.date);
+  return jobName(a.j).localeCompare(jobName(b.j));
+ });
  return items.filter(x=>!_skips.includes(x.j.id));
 }
 function copilotLine(q){
@@ -1368,42 +1560,53 @@ function queueRowBtn(x){
    onclick="event.stopPropagation();${fl.fn}">${esc(fl.l)}</button>`
   :`<button class="btn sec s" style="margin:0" onclick="event.stopPropagation();focusOn('${x.j.id}')">▶ Start</button>`;
 }
+const QK={over:{c:"late",t:"OVERDUE"},today:{c:"out",t:"TODAY"},none:{c:"est",t:"NO MOVE"},
+ wait:{c:"lost",t:"WAITING"},later:{c:"paid",t:"BOOKED"},rush:{c:"late",t:"RUSH"}};
+function qBadge(x){
+ const k=x.rush&&x.kind!=="later"?"rush":x.kind;
+ const s=QK[k]||QK.none;
+ return `<span class="qb v-${s.c}">${x.rush&&x.kind!=="later"?"⚡ ":""}${s.t}</span>`;
+}
+function qRowHTML(x,first){
+ const j=x.j,fl=flowOf(j);
+ const who=[shortAddr(j.address),forContractor(j)?(acctOf(j)||{}).name||j.contractor:null]
+  .filter(Boolean).join(" · ");
+ const k=x.rush&&x.kind!=="later"?"rush":x.kind;
+ const tone=(QK[k]||QK.none).c;
+ return `<div class="qrow${first?" lead":""}${x.rush?" rush":""}" style="--qt:var(--c-${tone})">
+  <div class="qc-s">${qBadge(x)}<span class="qwhy">${esc(x.why)}</span></div>
+  <div class="qc-j" onclick="go('job',{id:'${j.id}'})" title="Open the job">
+   <b>${esc(jobName(j))}</b>${who?`<span class="qsub">${esc(who)}</span>`:""}</div>
+  <div class="qc-n" onclick="setNextSheet('${j.id}')" title="Rewrite the next move">${esc(x.label)}</div>
+  <button class="qc-d" onclick="qSched('${j.id}')" title="Change the date">${
+    x.date?fmt(x.date):"— set —"}</button>
+  <div class="qc-a">
+   ${fl?`<button class="qgo" style="--qg:var(--c-${fl.c})" onclick="${fl.fn}">${esc(fl.l)}</button>`
+      :x.kind==="none"?`<button class="qgo" onclick="setNextSheet('${j.id}')">＋ Set move</button>`
+      :`<button class="qgo" onclick="focusOn('${j.id}')">▶ Start</button>`}
+   <button class="qi" onclick="qSched('${j.id}')" title="Schedule">◷</button>
+   <button class="qi${x.rush?" on":""}" onclick="toggleRush('${j.id}')" title="${x.rush?"Clear rush":"Mark rush"}">⚡</button>
+   <button class="qi" onclick="doneNext('${j.id}')" title="Move done — set the next one"${nextOf(j)?"":" disabled"}>✓</button>
+   <button class="qi" onclick="qMenu('${j.id}')" title="More">···</button>
+  </div>
+ </div>`;
+}
 function copilotHTML(){
- const q=queueItems(),top=q[0];
- const tint=k=>k==="over"?"var(--c-late)":k==="today"?"var(--c-out)":"var(--c-est)";
- if(!top)return `<div class="cop">✦ <b>Co-pilot</b><span class="trunc"> · ${esc(copilotLine(q))}</span></div>
+ const q=queueItems();
+ if(!q.length)return `<div class="cop">✦ <b>Co-pilot</b><span class="trunc"> · ${esc(copilotLine(q))}</span></div>
   <div class="pan" style="border-color:var(--c-rdy)"><div class="lab v-rdy">✓ Nothing needs you</div>
    <p class="sm dim" style="margin:8px 0 0">Every active job has a dated next move and none are due. That's the whole game.</p></div>`;
+ const hot=q.filter(x=>["rush","over","today"].includes(x.sortKind)).length;
  return `<div class="cop">✦ <b>Co-pilot</b><span class="trunc"> · ${esc(copilotLine(q))}</span></div>
  <div class="row between" style="margin:0 0 8px;align-items:baseline">
-  <div class="lab">◉ Needs you</div><span class="xs dim">${plural(q.length,"job")}</span></div>
-
- <div class="upnext" style="--tint:${tint(top.kind)}">
-  <div class="xs" style="letter-spacing:.08em;text-transform:uppercase;color:${tint(top.kind)};font-weight:700">${esc(top.why)}</div>
-  <div class="ser" style="font-size:clamp(23px,3.6vw,31px);margin:8px 0 2px;line-height:1.12;cursor:pointer"
-   onclick="go('job',{id:'${top.j.id}'})">${esc(jobName(top.j))}</div>
-  <div class="sm dim">${esc([top.j.loss,shortAddr(top.j.address)].filter(Boolean).join(" · ")||"—")}</div>
-  <div style="font-weight:600;margin-top:10px">▸ ${esc(top.label)}</div>
-  <div class="row" style="gap:9px;margin-top:16px;flex-wrap:wrap">
-   ${(()=>{const fl=flowOf(top.j);
-     if(top.kind==="none")return `<button class="btn" style="margin:0;max-width:320px" onclick="setNextSheet('${top.j.id}')">＋ Set the next move</button>`;
-     return fl?`<button class="btn" style="margin:0;max-width:320px;background:var(--c-${fl.c});border-color:var(--c-${fl.c});color:var(--paper)"
-       onclick="${fl.fn}">${esc(fl.l)} →</button>`
-      :`<button class="btn" style="margin:0;max-width:320px" onclick="focusOn('${top.j.id}')">▶ ${esc(top.label)}</button>`;})()}
-   <button class="btn sec s" style="margin:0" onclick="focusOn('${top.j.id}')">▶ Focus</button>
-   <button class="btn sec s" style="margin:0" onclick="doneNext('${top.j.id}')">✓ Done</button>
-   <button class="lnk" style="border:0;color:var(--ink3)" onclick="skipNext('${top.j.id}')">skip ↷</button>
-  </div></div>
-
- ${q.length>1?`<div class="pan" style="margin-top:9px;padding:2px 16px">
-  ${q.slice(1).map(x=>`<div class="li" style="padding:12px 0;gap:11px">
-    <span style="flex:none;font-size:9px;color:${tint(x.kind)}">●</span>
-    <div class="grow trunc" style="cursor:pointer" onclick="go('job',{id:'${x.j.id}'})">
-     <b>${esc(jobName(x.j))}</b>${x.j.address?` <span class="xs dim">${esc(shortAddr(x.j.address))}</span>`:""}
-     <div class="xs" style="color:${tint(x.kind)};margin-top:2px">${esc(x.label)}</div></div>
-    ${queueRowBtn(x)}
-   </div>`).join("")}
- </div>`:""}`;
+  <div class="lab">◉ Needs you</div>
+  <span class="xs dim">${plural(q.length,"job")}${hot?` · <b class="v-late">${hot} hot</b>`:""}</span></div>
+ <div class="qtab">
+  <div class="qhead">
+   <div class="qc-s">Status</div><div class="qc-j">Job</div><div class="qc-n">Next move</div>
+   <div class="qc-d">When</div><div class="qc-a">Do it</div></div>
+  ${q.map((x,i)=>qRowHTML(x,i===0)).join("")}
+ </div>`;
 }
 
 /* ---- focus mode: one job, one timer, one action, nothing else ---- */
