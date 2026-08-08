@@ -222,7 +222,24 @@ select.in{padding:12px 0}
 .jc{border:1px solid var(--rule);background:var(--panel);padding:12px;margin-bottom:9px;
  touch-action:pan-y;cursor:grab}
 .jc:active{cursor:grabbing}
-.jc .t{font:400 15px/1.25 var(--serif);margin-bottom:4px}
+.jc .t{font:400 15px/1.25 var(--serif);margin-bottom:3px}
+/* one anatomy: name → who → next move → money + badges → button */
+.jctx{font:600 11.5px var(--sans);color:var(--ink2);letter-spacing:.01em;margin-bottom:7px}
+.jnext{font:600 12.5px var(--sans);line-height:1.35;margin-bottom:9px;cursor:pointer}
+.jfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+ border-top:1px solid var(--rule);padding-top:8px}
+.jfoot b{font:400 17px var(--serif);font-variant-numeric:tabular-nums}
+.jbadges{display:flex;gap:5px;flex-wrap:wrap}
+/* Paid is archive — same anatomy, lower weight */
+.col.quiet{opacity:.62}
+.col.quiet:hover{opacity:1}
+.jc.arch .t{color:var(--ink3)}
+/* an empty stage keeps its drop target but gives the width back */
+.col.empty{width:52px;padding:14px 6px;min-height:120px;opacity:.5}
+.col.empty .emptylab{display:flex;flex-direction:column;align-items:center;gap:9px;
+ font:700 9.5px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.col.empty .emptylab b{writing-mode:vertical-rl;font-weight:700;white-space:nowrap}
+.col.empty.hi{opacity:1;background:var(--panel2)}
 .jc .s{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.02em;margin-bottom:11px;
  text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jc .f{display:flex;justify-content:space-between;align-items:baseline;
@@ -605,6 +622,13 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  font:700 10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .nutkey b{width:9px;height:9px;border-radius:3px;flex:none}
 
+/* company cards share the board's language: same radius, type, spacing */
+.acard{border:1px solid var(--rule);border-radius:14px;background:var(--panel);
+ padding:15px 16px;margin-top:11px;cursor:pointer;transition:.12s}
+.acard:hover{border-color:var(--rule2)}
+.acard.muted{opacity:.5;padding:12px 16px}
+.acard.muted:hover{opacity:1}
+
 /* ---- daybook: one line per entry, weight on the words ---- */
 .dayhd{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
  margin:20px 0 7px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
@@ -789,7 +813,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-121 · a daybook you can scan";
+const BUILD="C-122 · one card anatomy";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3783,37 +3807,53 @@ function setCalView(v){D.calView=v;save();render();}
 function listHTML(){const o=["Estimating","Complete","Invoiced","Paid","Lost"];
  return [...D.jobs].sort((a,b)=>o.indexOf(a.status)-o.indexOf(b.status)).map(jobRow).join("");}
 function boardHTML(){
- return `<div class="bwrap">${STAGES.map(s=>{const js=byStage(s);
-  return `<div class="col" data-zone="${s}"><div class="ch" style="border-color:var(--c-${ck(s)})">
+ /* Empty stages collapse to a thin rail instead of holding a full column of
+    nothing — the active work gets the width. They stay as drop targets. */
+ const cols=STAGES.map(s=>{
+  let js=byStage(s);
+  if(s==="Invoiced")js=js.slice().sort((a,b)=>(ago(b.invDate)||0)-(ago(a.invDate)||0));  /* worst first */
+  if(s==="Paid")js=js.slice().sort((a,b)=>String(b.paidDate||"").localeCompare(String(a.paidDate||"")));
+  return {s,js};
+ });
+ const empties=cols.filter(c=>!c.js.length).length;
+ return `<div class="bwrap">${cols.map(({s,js})=>{
+  if(!js.length)return `<div class="col empty" data-zone="${s}" title="${esc(LBL[s])} — empty">
+    <div class="emptylab"><span>${MK[s]}</span><b>${esc(LBL[s])}</b></div></div>`;
+  return `<div class="col${s==="Paid"?" quiet":""}" data-zone="${s}"><div class="ch" style="border-color:var(--c-${ck(s)})">
    <span class="n v-${ck(s)}">${MK[s]} ${LBL[s]}</span>
-   <span class="c">${js.length} —— ${money0(sum(js,j=>s==="Paid"?fee(j).gross:fee(j).due))}</span></div>
-   ${js.map(jcard).join("")||`<div class="xs dim" style="padding:6px 0;letter-spacing:.2em">——</div>`}</div>`;}).join("")}</div>
+   <span class="c">${js.length} · ${money0(sum(js,j=>s==="Paid"?fee(j).gross:fee(j).due))}</span></div>
+   ${js.map(jcard).join("")}</div>`;}).join("")}</div>
  <div class="dz"><div data-zone="Lost">○ Lost</div><div data-zone="Paid">● Won · Paid</div></div>
- <p class="xs dim center" style="margin-top:14px;letter-spacing:.1em">Drag a card sideways — or tap ⋮ on any card</p>`;
+ <p class="xs dim center" style="margin-top:14px;letter-spacing:.1em">Drag a card sideways — or tap ⋮ on any card${
+  empties?` · ${plural(empties,"empty stage")} collapsed`:""}</p>`;
 }
-function jcard(j){const f=fee(j),C=ckLive(j);
- /* The stripe is the company's colour when it belongs to one, so a glance at
-    the board tells him whose work is where. Stage keeps the text colour. */
- const ac=jobColor(j), acct=acctOf(j);
- return `<div class="jc" data-id="${j.id}" style="border-left:3px solid ${ac||"var(--c-"+C+")"}">
+/* One anatomy, every card, no exceptions:
+   name → who + context → next move → money + badges → one button.
+   Paid is the same structure at lower weight; it's archive, not work. */
+function jcard(j){
+ const f=fee(j),C=ckLive(j),acct=acctOf(j),archived=j.status==="Paid"||j.status==="Lost";
+ const context=[acct?acct.name:j.contractor,
+   j.status==="Waiting"&&j.waitingOn?"⏳ "+j.waitingOn:(j.loss||jobSub(j)||j.insurer||"")]
+  .filter(Boolean).join(" · ");
+ const nx=nextOf(j),nk=nx?(nextState(j)==="over"?"late":nextState(j)==="today"?"out":"est"):null;
+ const badges=[];
+ if(j.status==="Invoiced"&&isLate(j))badges.push(`<span class="chip v-late">Late ${plural(ago(j.invDate)||0,"day")}</span>`);
+ if(j.priority&&j.priority!=="Moderate")badges.push(`<span class="chip v-${PCOL2[j.priority]}">${esc(j.priority)}</span>`);
+ if(j.dueDate&&!DONE_ST.includes(j.status)&&j.dueDate<today()&&j.status!=="Invoiced")
+  badges.push(`<span class="chip v-late">Overdue</span>`);
+ const amount=onRetainer(j)&&f.due===0?"retainer":money0(j.status==="Paid"?f.gross:f.due);
+ return `<div class="jc${archived?" arch":""}" data-id="${j.id}" style="border-left:3px solid var(--c-${C})">
   <div class="row between" style="align-items:flex-start;gap:6px">
-   <div class="grow"><div class="t trunc v-${C}">${esc(jobName(j))}</div>
-    ${acct?`<div class="xs" style="color:var(--ink2);letter-spacing:.08em;margin:2px 0 3px;font-weight:600">${esc(acct.name)}</div>`:""}
-    <div class="s">${j.status==="Waiting"&&j.waitingOn?"⏳ "+esc(j.waitingOn):esc(j.loss?j.loss+" · ":"")+esc(jobSub(j)||j.insurer||"—")}</div></div>
+   <div class="grow" style="min-width:0"><div class="t trunc">${esc(jobName(j))}</div></div>
    <button class="ico" style="width:22px;height:22px;font-size:12px;border:0;color:var(--ink3)"
     onclick="event.stopPropagation();moveMenu('${j.id}')">⋮</button></div>
-  ${j.status==="Invoiced"&&isLate(j)?`<div class="tags" style="margin:-4px 0 8px">
-    <span class="chip v-late">Late ${plural(ago(j.invDate)||0,"day")}</span></div>`:""}
-  ${(j.priority&&j.priority!=="Moderate")||j.dueDate?`<div class="tags" style="margin:-4px 0 8px">
-    ${j.priority&&j.priority!=="Moderate"?`<span class="chip v-${PCOL2[j.priority]}">${esc(j.priority)}</span>`:""}
-    ${j.dueDate&&!DONE_ST.includes(j.status)?`<span class="chip v-${j.dueDate<today()?"late":"lost"}">${j.dueDate<today()?"Overdue":"Due "+fmt(j.dueDate)}</span>`:""}</div>`:""}
-  ${nextOf(j)?`<div class="xs trunc" style="margin:0 0 8px;font-weight:600;color:${nextState(j)==="over"?"var(--c-out)":nextState(j)==="today"?"var(--c-rdy)":"var(--ink3)"}"
-    onclick="event.stopPropagation();setNextSheet('${j.id}')">▸ ${esc(j.next.text)} · ${j.next.date===today()?"today":nextState(j)==="over"?"overdue":fmt(j.next.date)}</div>`
-   :needsNext(j)?`<div class="xs" style="margin:0 0 8px;color:var(--ink3);cursor:pointer"
-    onclick="event.stopPropagation();setNextSheet('${j.id}')">＋ set the next move</div>`:""}
-  <div class="f"><span class="dim money">${j.total?money0(j.total):"—"}</span>
-   <b class="money ser v-${C}" style="font-size:15px">${onRetainer(j)&&f.due===0?"retainer":money(j.status==="Paid"?f.gross:f.due)}</b></div>
-  ${flowOf(j)?`<div style="margin-top:8px">${flowBtn(j)}</div>`:""}</div>`;
+  ${context?`<div class="jctx trunc">${esc(context)}</div>`:""}
+  ${nx?`<div class="jnext trunc v-${nk}" onclick="event.stopPropagation();setNextSheet('${j.id}')">▸ ${esc(nx.text)}</div>`
+   :needsNext(j)?`<div class="jnext dim" style="font-weight:500" onclick="event.stopPropagation();setNextSheet('${j.id}')">＋ set the next move</div>`:""}
+  <div class="jfoot">
+   <b class="money v-${archived?"lost":C}">${amount}</b>
+   ${badges.length?`<span class="jbadges">${badges.join("")}</span>`:""}</div>
+  ${!archived&&flowOf(j)?`<div style="margin-top:9px">${flowBtn(j)}</div>`:""}</div>`;
 }
 function jobRow(j){const f=fee(j),C=ckLive(j);
  return `<div class="pan" onclick="go('job',{id:'${j.id}'})" style="border-left:2px solid var(--c-${C})">
@@ -5786,43 +5826,67 @@ R.accounts=()=>{
  const q=_acctQ.toLowerCase();
  let list=[...ACCOUNTS()];
  if(q)list=list.filter(a=>((a.name||"")+" "+(a.contact||"")+" "+(a.phone||"")).toLowerCase().includes(q));
- list.sort((a,b)=>acctStats(b.id).open-acctStats(a.id).open
-   ||acctStats(b.id).earned-acctStats(a.id).earned
+ /* who owes me money, first */
+ list.sort((a,b)=>acctStats(b.id).outstanding-acctStats(a.id).outstanding
+   ||acctStats(b.id).open-acctStats(a.id).open
    ||(a.name||"").localeCompare(b.name||""));
  const dupes=acctDupes();
- return `<div class="lab">▲ Accounts</div>
- <h1 class="disp" style="margin:12px 0 6px">The<br> Companies</h1>
- <div class="sm dim">${plural(ACCOUNTS().length,"company")} · the people who hire you</div>
- <div class="row" style="margin-top:18px;gap:10px;max-width:720px">
-  <input class="in" style="margin:0" placeholder="Search companies…" value="${esc(_acctQ)}"
-   oninput="_acctQ=this.value;render()" autocomplete="off">
-  <button class="btn s" style="margin:0;flex:none" onclick="acctSheet()">+ New company</button></div>
+ /* Live companies first, dead ones muted at the bottom — four $0 cards were
+    outweighing the one with real money on it. */
+ const isLive=a=>{const s=acctStats(a.id);return s.open>0||s.outstanding>0||s.earned>0;};
+ const live=list.filter(isLive),quiet=list.filter(a=>!isLive(a));
+ return `<div class="topbar"><div class="grow"><h1>Companies</h1>
+   <div class="sub2">${plural(ACCOUNTS().length,"company")} · the people who hire you</div></div>
+  <button class="btn s" style="margin:0" onclick="acctSheet()">+ New company</button></div>
+ <input class="in" id="acctQ" style="max-width:520px" placeholder="Search companies…"
+  value="${esc(_acctQ)}" oninput="acctFilter(this.value)" autocomplete="off">
  ${dupes.length?`<div class="pan" style="margin-top:14px;border-left:2px solid var(--c-rdy)">
    <div class="lab v-rdy" style="margin-bottom:6px">Possible duplicates</div>
    ${dupes.map(g=>`<div class="ins"><div class="grow"><b>${g.map(a=>esc(a.name)).join("  ·  ")}</b>
      <div class="in3">${plural(g.reduce((n,a)=>n+acctJobs(a.id).length,0),"job")} between them</div></div>
      <button class="opt2" style="padding:6px 10px" onclick="askMergeAccts('${g.map(a=>a.id).join(",")}')">Merge</button></div>`).join("")}</div>`:""}
- ${list.length?`<div class="cols" style="margin-top:8px">${list.map(a=>{
-   const st=acctStats(a.id),col=acctColor(a);
-   return `<div class="pan" onclick="go('account',{id:'${a.id}'})" style="border-left:3px solid ${col};cursor:pointer">
-    <div class="row between" style="align-items:flex-start">
-     <div class="grow"><div class="ser" style="font-size:20px">${esc(a.name)}</div>
-      <div class="xs dim" style="letter-spacing:.1em;text-transform:uppercase;margin-top:4px">
-       ${esc(a.contact||"no contact yet")}</div></div>
-     <div style="text-align:right">
-      <div class="ser" style="font-size:20px;color:${col}">${st.open}</div>
-      <div class="xs dim">open</div></div></div>
-    <div class="row" style="gap:18px;margin-top:12px">
-     <div><div class="xs dim">Lifetime</div><b class="money">${money0(st.volume)}</b></div>
-     <div><div class="xs dim">Earned</div><b class="money v-paid">${money0(st.earned)}</b></div>
-     ${st.outstanding?`<div><div class="xs dim">Outstanding</div><b class="money v-out">${money0(st.outstanding)}</b></div>`:""}
-    </div></div>`;}).join("")}</div>`
-  :`<div class="empty" style="margin-top:20px"><div class="g dim">▲</div>
-    <div class="ser" style="font-size:21px">${q?"Nothing matches":"No companies yet"}</div>
-    <p class="sm dim" style="margin-top:8px">${q?"Try another search."
-     :"Add the contractors who hire you. Their details fill themselves in on every job after that."}</p></div>`}
+ <div id="acctList">${acctListHTML(live,quiet,q)}</div>
  <div style="height:16px"></div>`;
 };
+/* the money row only appears when there IS money — otherwise it's three $0s */
+function acctCard(a,muted){
+ const st=acctStats(a.id);
+ const money=[];
+ if(st.outstanding)money.push(`<div><div class="xs dim">Outstanding</div><b class="money v-out" style="font-size:19px">${money0(st.outstanding)}</b></div>`);
+ if(st.earned)money.push(`<div><div class="xs dim">Earned</div><b class="money v-rdy">${money0(st.earned)}</b></div>`);
+ if(st.volume)money.push(`<div><div class="xs dim">Lifetime</div><b class="money">${money0(st.volume)}</b></div>`);
+ return `<div class="acard${muted?" muted":""}" onclick="go('account',{id:'${a.id}'})"
+   style="border-left:3px solid var(--c-${st.outstanding?"out":st.open?"est":"lost"})">
+  <div class="row between" style="align-items:flex-start;gap:10px">
+   <div class="grow" style="min-width:0">
+    <div class="ser" style="font-size:19px" class="trunc">${esc(a.name)}</div>
+    <div class="jctx" style="margin:3px 0 0">${esc(a.contact||"no contact yet")}</div></div>
+   ${st.open?`<div style="text-align:right;flex:none">
+    <div class="ser" style="font-size:19px">${st.open}</div>
+    <div class="xs dim">open</div></div>`:""}</div>
+  ${money.length?`<div class="row" style="gap:20px;margin-top:11px;padding-top:9px;border-top:1px solid var(--rule)">${money.join("")}</div>`:""}
+ </div>`;
+}
+function acctListHTML(live,quiet,q){
+ if(!live.length&&!quiet.length)return `<div class="empty" style="margin-top:20px"><div class="g dim">▲</div>
+   <div class="ser" style="font-size:21px">${q?"Nothing matches":"No companies yet"}</div>
+   <p class="sm dim" style="margin-top:8px">${q?"Try another search."
+    :"Add the contractors who hire you. Their details fill themselves in on every job after that."}</p></div>`;
+ return `${live.length?`<div class="cols" style="margin-top:10px">${live.map(a=>acctCard(a,false)).join("")}</div>`:""}
+  ${quiet.length?`<div class="dayhd" style="margin-top:22px"><span>No activity</span><i>${quiet.length}</i></div>
+   <div class="cols">${quiet.map(a=>acctCard(a,true)).join("")}</div>`:""}`;
+}
+function acctFilter(v){
+ _acctQ=v;
+ const q=v.toLowerCase();
+ let list=[...ACCOUNTS()];
+ if(q)list=list.filter(a=>((a.name||"")+" "+(a.contact||"")+" "+(a.phone||"")).toLowerCase().includes(q));
+ list.sort((a,b)=>acctStats(b.id).outstanding-acctStats(a.id).outstanding
+   ||acctStats(b.id).open-acctStats(a.id).open||(a.name||"").localeCompare(b.name||""));
+ const isLive=a=>{const s=acctStats(a.id);return s.open>0||s.outstanding>0||s.earned>0;};
+ const box=document.getElementById("acctList");
+ if(box)box.innerHTML=acctListHTML(list.filter(isLive),list.filter(a=>!isLive(a)),q);
+}
 R.account=({id})=>{
  const a=ACCOUNTS().find(x=>x.id===id);
  if(!a)return `<div class="empty"><div class="ser" style="font-size:22px">Company not found</div></div>`;
