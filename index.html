@@ -675,7 +675,34 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 /* MUST clear the sticky header. Pinning this at top:0 parks it underneath the
    68px header, where it is invisible but still eats taps on the rows behind it —
    which is exactly how "Estimate total doesn't work" happens. */
-.actbar{position:sticky;top:var(--hdr,68px);z-index:35;display:grid;
+/* The job identity bar sticks directly under the app header, and the action bar
+   stacks under IT — hence --jbar, measured after every render the same way --hdr
+   is. Two stickies claiming the same offset means the lower one slides up and
+   covers the other. */
+.jbar{position:sticky;top:var(--hdr,68px);z-index:36;background:var(--paper);
+ padding:11px 0 10px;margin:0 0 2px;border-bottom:1px solid var(--rule);
+ display:flex;align-items:center;gap:12px}
+.jbar-id{min-width:0;flex:1}
+.jbar-n{font:400 22px/1.1 var(--serif);color:var(--ink);overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
+@media(min-width:900px){.jbar-n{font-size:27px}}
+.jbar-s{font:700 10.5px var(--sans);color:var(--ink3);overflow:hidden;letter-spacing:.13em;
+ text-transform:uppercase;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}
+.jbar-a{display:flex;gap:7px;flex:none;align-items:center}
+.jbar-a .btn{margin:0}
+@media(max-width:520px){.jbar-n{font-size:14px}.jbar-s{display:none}}
+
+/* one-line disclosure for the job's reference block */
+.jdt{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;
+ background:none;border:0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+ padding:15px 2px;margin:18px 0 0}
+.jdt-l{font:700 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.jdt-h{font:400 12px var(--sans);color:var(--ink3);flex:1;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.jdt-c{color:var(--ink3);font-size:12px;flex:none}
+.jdt:hover .jdt-l{color:var(--ink)}
+
+.actbar{position:sticky;top:calc(var(--hdr,68px) + var(--jbar,0px));z-index:35;display:grid;
  grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;
  background:var(--paper);padding:12px 0;margin:16px 0 4px;
  border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
@@ -824,7 +851,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-124 · a job form you can finish";
+const BUILD="C-125 · the job page opens on the move";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -3479,6 +3506,10 @@ function syncHdrH(){
  const h=document.querySelector("header");
  const px=h?Math.round(h.getBoundingClientRect().height):68;
  document.documentElement.style.setProperty("--hdr",(px||68)+"px");
+ /* the action bar stacks under the job bar, so it needs its height too */
+ const jb=document.querySelector(".jbar");
+ document.documentElement.style.setProperty("--jbar",
+  jb?Math.round(jb.getBoundingClientRect().height)+"px":"0px");
 }
 function render(){
  if(cloudCfg()&&!signedIn()&&!D.cloudSkip){
@@ -4354,19 +4385,60 @@ function jobActionBar(j){
   ${act("▤","Bill","var(--c-paid)",`go('invoice',{id:'${j.id}'})`,true)}
  </div>`;
 }
+/* ---------- job detail disclosure ----------
+   The reference block is 25 rows of carrier numbers, links and fee math. It is
+   the right thing to have and the wrong thing to open with — the page you land
+   on should be the next move, not the file. So it folds, EXCEPT when the job is
+   missing something you'd have to open it to fix. A gap opens the drawer for
+   you; a complete job stays shut. */
+let _jdtManual=null;        // null = follow the gaps; true/false = he overrode it
+let _jdtFor="";             // which job that override belongs to
+function detailGaps(j){
+ const g=[];
+ if(!j.total&&!onRetainer(j)&&!isProject(j))g.push("no estimate total");
+ if(!j.loss)g.push("no job type");
+ if(!j.owner)g.push("no client name");
+ if(!j.phone&&!j.contractorPhone)g.push("no phone");
+ if(j.insurer&&!j.claim)g.push("no claim #");
+ return g;
+}
+function detailSummary(j){
+ const f=fee(j);
+ return [ j.loss, j.total?money0(j.total):null,
+  f.feeOnly?"your cut "+money0(f.feeOnly):null,
+  j.insurer, j.claim?"#"+j.claim:null
+ ].filter(Boolean).join(" · ") || "client, money, carrier, links";
+}
+const _jdtOpen=j=>_jdtManual!==null?_jdtManual:detailGaps(j).length>0;
+function togDetails(){
+ const b=document.getElementById("jdtBody"),c=document.getElementById("jdtCar");
+ if(!b)return;
+ const isOpen=b.style.display!=="none";
+ b.style.display=isOpen?"none":"block";
+ _jdtManual=!isOpen;                       // remember it for this job visit
+ if(c)c.textContent=isOpen?"▾":"▴";
+}
 R.job=({id})=>{
+ /* a fresh job means a fresh decision — don't carry his last toggle across */
+ if(_jdtFor!==id){_jdtFor=id;_jdtManual=null;}
  const j=job(id);if(!j)return `<div class="empty"><div class="ser" style="font-size:22px">Job not found</div></div>`;
- D.last=id;save();const f=fee(j);const C=ck(j.status);
- return `<div class="row between" style="margin-bottom:4px">
-  <button class="lnk" onclick="go('jobs')">← Pipeline</button>
-  <span class="grow"></span>
-  ${flowBtn(j,true)}
-  <button class="btn ${j.timerAt?"sec":""} s" style="margin:0${j.timerAt?";border-color:var(--c-rdy);color:var(--c-rdy)":""}"
-   onclick="toggleTimer('${j.id}')">
-   ${j.timerAt?`<span class="live amber"></span>◼ ${dur(jobMin(j))} — stop`:`▶ Start timer${jobMin(j)?" · "+dur(jobMin(j)):""}`}</button>
+ D.last=id;save();const f=fee(j);
+ /* was ck(j.status) — same defect as flowOf carried: a disputed or overdue job
+    painted its own page in the colour of its raw stage. ckLive is the resolver. */
+ const C=ckLive(j);
+ return `<div class="jbar">
+  <button class="lnk" style="flex:none" onclick="go('jobs')" title="Back to the pipeline">←</button>
+  <div class="jbar-id">
+   <div class="jbar-n v-${C}">${esc(jobName(j))}</div>
+   <div class="jbar-s">${esc(j.address||j.status)}</div>
+  </div>
+  <div class="jbar-a">
+   ${flowBtn(j,true)}
+   <button class="btn ${j.timerAt?"sec":""} s" style="margin:0${j.timerAt?";border-color:var(--c-rdy);color:var(--c-rdy)":""}"
+    onclick="toggleTimer('${j.id}')">
+    ${j.timerAt?`<span class="live amber"></span>◼ ${dur(jobMin(j))}`:`▶ Timer${jobMin(j)?" · "+dur(jobMin(j)):""}`}</button>
+  </div>
  </div>
- <h1 class="disp sm v-${C}" style="margin:20px 0 8px">${esc(jobName(j))}</h1>
- <div class="xs v-${C}" style="letter-spacing:.14em;text-transform:uppercase;opacity:.75">${esc(j.address||"—")}</div>
  ${visitStripHTML(j)}
  <div class="tags" style="margin-top:16px">${pill(j.status,j)}
   ${visitOf(j).state!=="none"?`<span class="chip ${visitOf(j).state==="onsite"?"v-out":"v-est"}">${
@@ -4398,7 +4470,12 @@ R.job=({id})=>{
     <button class="opt2" onclick="go('today')">← Back to the queue</button>
    </div></div>`;})()}
  ${jobActionBar(j)}
- <div class="pan" style="margin-top:22px;border-color:var(--c-${C})">
+ ${(()=>{const g=detailGaps(j);return `<button type="button" class="jdt" onclick="togDetails()">
+   <span class="jdt-l">Job details</span>
+   <span class="jdt-h ${g.length?"v-out":""}">${g.length?g.join(" · "):detailSummary(j)}</span>
+   <span class="jdt-c" id="jdtCar">${_jdtOpen(j)?"▴":"▾"}</span></button>`;})()}
+ <div id="jdtBody" style="display:${_jdtOpen(j)?"block":"none"}">
+ <div class="pan" style="margin-top:14px;border-color:var(--c-${C})">
   ${forContractor(j)?`
    <div class="ln2"><span class="k">Estimate for</span><b class="v-${C}">${
      acctOf(j)?`<a href="#" onclick="event.preventDefault();go('account',{id:'${acctOf(j).id}'})"
@@ -4471,6 +4548,7 @@ R.job=({id})=>{
    <button onclick="pickFiles('${j.id}','Contract')">⬆ Signed contract</button></div>
   ${!j.total?`<button class="btn sec" onclick="readDoc('${j.id}')" style="margin-top:12px">✦ Read the estimate &amp; fill this in</button>`:""}
   ${policyBtnHTML(j)}
+ </div>
  </div>
  ${paymentsHTML(j)}
  ${chargeHintHTML(j)}
