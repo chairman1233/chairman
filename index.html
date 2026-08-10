@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-143 · the transition can't outlive itself";
+const BUILD="C-144 · matched against all 527 of his PDFs";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2194,14 +2194,25 @@ function estNorm(name){
 /* "DR", "STREET", "LANE" etc. are in every address and identify nothing */
 const EST_STOP=new Set(["DR","DRIVE","ST","STREET","LN","LANE","RD","ROAD","AVE","AVENUE",
  "CT","COURT","BLVD","WAY","CIR","CIRCLE","PL","PLACE","TRL","TRAIL","N","S","E","W",
- "TX","TEXAS","HOUSTON","LA","PORTE","DEER","PARK","PASADENA","THE","AND"]);
+ "TX","TEXAS","HOUSTON","LA","PORTE","DEER","PARK","PASADENA","THE","AND",
+ /* county and metro names sit in several of his addresses and identify none of
+    them — "HARRIS" alone put a Docusign contract on Lylian's job. MANCILLAS is
+    his own surname and appears on paperwork for every client he has. */
+ "HARRIS","COUNTY","HUMBLE","KATY","BAYTOWN","SPRING","CYPRESS","GALVESTON",
+ "MANCILLAS","CHAIRMAN","ESTIMATE","ESTIMATES","FINAL","DRAFT","COPY","UPDATED",
+ "COMPLETE","DOCUSIGN","SIGNED","PROPOSED","PLAN"]);
 const estWords=s=>String(s||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ")
  .split(/\s+/).filter(w=>w&&w.length>1&&!EST_STOP.has(w)&&!/^\d+$/.test(w));
 const estNum=s=>{const m=String(s||"").match(/\b(\d{3,6})\b/);return m?m[1]:"";};
 
 function estScore(fileName,j){
  const f=estNorm(fileName);
- const addr=String(j.address||""), who=[j.owner,j.contractor].filter(Boolean).join(" ");
+ /* The contractor is NOT identity. Eight of his twelve jobs are Green Dynasty,
+    so "GREEN DYNASTY" scored 60 against nine of them at once and the matcher
+    picked whichever sorted first — a file with Jennifer in the name landed on
+    Carmen. A company name says who hired him, never which property. It is
+    only used when a job has no owner at all and is the only handle there is. */
+ const addr=String(j.address||""), who=j.owner||j.contractor||"";
  let score=0; const why=[];
  /* a street number is the single most reliable token he produces */
  const fn=estNum(f), an=estNum(addr);
@@ -2238,6 +2249,19 @@ function estMatch(fileName){
   .sort((a,b)=>b.score-a.score);
  const best=scored[0];
  if(!best||best.score<=0)return null;
+ /* Two jobs at 105 Glynn Way score identically on every token, because they
+    ARE the same property — the mitigation and the rebuild. Taking the top of a
+    tie put all 47 Rains files on one job and left the $61,264 rebuild with
+    none. A tie is not a match, it's a question: offer it, say so, and hold it
+    below the confidence bar so bulk-filing never touches it. */
+ /* The tie test must sit BELOW the score floor. Run above it and two jobs
+    tying on a worthless score still came back as a match — "Watson, 2923 Eagle
+    Nest Lane" was offered against Cokie Redo on a score of 3. */
+ if(best.score>=26){
+  const tied=scored.filter(x=>x.score===best.score);
+  if(tied.length>1)return {j:best.j,score:Math.min(best.score,45),amb:tied.length,
+    why:tied.length+" jobs fit — pick one: "+tied.map(x=>jobName(x.j)).join(", ")};
+ }
  if(best.score>=40)return best;
  /* A single distinctive street name — BONNER, WINBURN, OAKWILD — scores 28,
     under the confident threshold. But if it lands on exactly ONE job and
@@ -2312,7 +2336,7 @@ async function estScan(fresh){
    q.push({key,id:uid(),name:it.name,path:it.path,size:file.size,
     mtime:new Date(file.lastModified).toISOString(),
     kind:estDocKind(it.name),
-    jobId:m?m.j.id:"", score:m?m.score:0, why:m?m.why:""});
+    jobId:m?m.j.id:"", score:m?m.score:0, why:m?m.why:"", amb:m&&m.amb?m.amb:0});
    added++;
   }
   /* newest first — what he just exported is what he's looking for */
@@ -2336,7 +2360,7 @@ function estAssign(qid){
 }
 function estSetJob(qid,jid){
  const it=estQ().find(x=>x.id===qid);if(!it)return;
- it.jobId=jid; it.why="you picked it"; it.score=100;
+ it.jobId=jid; it.why="you picked it"; it.score=100; it.amb=0;
  save();close_();render();
 }
 function estSkip(qid){
@@ -2414,7 +2438,7 @@ async function estDoTotal(jobId){
  }finally{_estPendingFile=null;}
 }
 async function estAcceptAll(){
- const ready=estQ().filter(x=>x.jobId&&x.score>=60);
+ const ready=estQ().filter(x=>x.jobId&&x.score>=60&&!x.amb);   /* a tie is never "confident" */
  if(!ready.length)return toast("Nothing matched confidently enough");
  for(const it of ready)await estAccept(it.id);
 }
@@ -2434,21 +2458,26 @@ function estPanelHTML(){
     <button class="btn" onclick="estLink()">Choose the folder</button>`
    :`<div class="upbar" style="margin-top:12px">
      <button onclick="estScan()">Scan now</button>
-     ${q.filter(x=>x.jobId&&x.score>=60).length?`<button onclick="estAcceptAll()">File all ${q.filter(x=>x.jobId&&x.score>=60).length} confident</button>`:""}
+     ${q.filter(x=>x.jobId&&x.score>=60&&!x.amb).length?`<button onclick="estAcceptAll()">File all ${q.filter(x=>x.jobId&&x.score>=60&&!x.amb).length} confident</button>`:""}
      <button onclick="estUnlink()">Unlink</button></div>
     <p class="xs dim" style="margin:10px 0 0">Chairman reads the folder while it's open — it catches up when you come back, it can't watch in the background.</p>`}
   ${q.length?`<div class="qtab" style="margin-top:16px">
    ${q.map(it=>{const j=it.jobId?job(it.jobId):null;
-     const conf=it.score>=90?"rdy":it.score>=60?"out":"late";
+     /* an ambiguous match is a question, never a confident answer */
+     const conf=it.amb?"late":it.score>=90?"rdy":it.score>=60?"out":"late";
      return `<div class="qrow" style="--qt:var(--c-${conf})">
       <div class="qc-s"><span class="qb v-${conf}">${esc(it.kind.toUpperCase())}</span>
        <span class="qwhy">${it.mtime?esc(fmt(it.mtime.slice(0,10))):""} · ${kb(it.size)}</span></div>
       <div class="qc-j"><b>${esc(it.name)}</b><span class="qsub">${esc(it.path)}</span></div>
-      <div class="qc-n" onclick="estAssign('${it.id}')">${j?`→ <b>${esc(jobName(j))}</b>`:`<span class="frw-em">no match — pick a job</span>`}
+      <div class="qc-n" onclick="estAssign('${it.id}')">${
+        it.amb?`<span class="v-late">⚠ ${it.amb} jobs fit — pick one</span>`
+        :j?`→ <b>${esc(jobName(j))}</b>`:`<span class="frw-em">no match — pick a job</span>`}
        ${it.why?`<span class="qsub">${esc(it.why)}</span>`:""}</div>
       <button class="qc-d" onclick="estAssign('${it.id}')">${j?"Change":"Pick"}</button>
       <div class="qc-a">
-       <button class="qgo" style="--qg:var(--c-rdy)" onclick="estAccept('${it.id}')"${j?"":" disabled"}>File it</button>
+       <button class="qgo" style="--qg:var(--c-${it.amb?"out":"rdy"})" onclick="${
+         it.amb?`estAssign('${it.id}')`:`estAccept('${it.id}')`}"${j?"":" disabled"}>${
+         it.amb?"Choose":"File it"}</button>
        <button class="qi" onclick="estSkip('${it.id}')" title="Never ask about this file again">✕</button>
       </div></div>`;}).join("")}
   </div>`:linked?`<p class="sm dim" style="margin:14px 0 0">Nothing waiting. Export from Xactimate, then hit Scan.</p>`:""}

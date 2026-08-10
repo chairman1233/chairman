@@ -13,7 +13,9 @@ const start = script.indexOf("const ESTDIR_KEY=");
 const end = script.indexOf("/* ---- the folder handle");
 if (start < 0 || end < 0) { console.error("FAIL — matcher block not found"); process.exit(1); }
 
-const ctx = { D: { jobs: [] }, console };
+/* estMatch names the tied jobs when it can't choose, so it needs jobName */
+const ctx = { D: { jobs: [] }, console,
+  jobName: j => j.owner || j.contractor || "job" };
 vm.createContext(ctx);
 vm.runInContext(script.slice(start, end), ctx);
 
@@ -25,7 +27,8 @@ ctx.D.jobs = [
   { id: "cokie2",  owner: "Cokie Redo",             contractor: "AJ&S Remodeling LLC",       address: "1807 Wooded Acres Dr, Humble, TX 77396", status: "Waiting"  },
   { id: "brenda",  owner: "Brenda Thompson",        contractor: "Green Dynasty Group",       address: "3126 Bonner Street, La Porte, TX 77571", status: "Paid"     },
   { id: "jennifer",owner: "Jennifer McLaughlin",    contractor: "Green Dynasty Group",       address: "1306 Tomkawa, Deer Park, TX 77536",      status: "Paid"     },
-  { id: "lylian",  owner: "Lylian Malacara-Torres", contractor: "Gonz Remodeling & Windows", address: "2506 Cedar, Houston, TX",                status: "Waiting"  },
+  { id: "lylian",  owner: "Lylian Malacara-Torres", contractor: "Gonz Remodeling & Windows", address: "2506, Maverick Park Lane, Morton Ranch, Harris County", status: "Waiting" },
+  { id: "valued",  owner: "",                       contractor: "Valued Renovations",       address: "8403 Red Rooster Lane, Katy, TX 77494",  status: "Estimating" },
 ];
 
 /* every real filename seen in the ESTIMATES folder, with the job it SHOULD
@@ -56,6 +59,30 @@ const CASES = [
   ["1807_WOODED_ACRES_FINAL_DRAFT_CON.pdf",              "cokie"],  // either Cokie job is fine
   ["3126_BONNER_ST_CUSTOMER_TOTAL_AMOUNT_CON.pdf",       "brenda"],
   ["Carmen Hernandez Mitigation Estimate.pdf",           "carmen"],
+
+  /* Found by dry-running all 527 PDFs in his real ESTIMATES folder. */
+
+  /* Eight of twelve jobs are Green Dynasty, so the company name scored 60
+     against nine of them at once and the matcher took whichever sorted first.
+     This file has JENNIFER in the name and was landing on Carmen. */
+  ["Green_Dynasty_Ballpark_Estimate_Jennifer - Final Estimate.pdf", "jennifer"],
+  ["Green Dynasty Group estimate.pdf",                   ""],
+
+  /* A tie was being resolved by sort order, so all 47 Rains files went to the
+     mitigation job and the $61,264 rebuild got none. A tie is a question. */
+  ["Rains - 105 Glynn Way Dr, Houston, TX (Mediation) - Final Estimate.pdf", "AMBIGUOUS"],
+
+  /* The tie test used to sit above the score floor, so two jobs tying on a
+     worthless score still came back as a match. */
+  ["Watson - 2923 Eagle Nest Lane, Humble, TX - Final Estimate.pdf", ""],
+
+  /* HARRIS is a county, and MANCILLAS is his own surname — both appear across
+     unrelated paperwork and identify nothing. */
+  ["Complete_with_Docusign_MANCILLAS-ENMC-Harris.pdf",   ""],
+
+  /* Still works: a job with no owner falls back to the company that hired him,
+     because there it IS the only handle available. */
+  ["Proposed Floor Plan_Valued_Renovations.pdf",         "valued"],
 ];
 
 let wrong = 0, missed = 0, ok = 0;
@@ -68,7 +95,12 @@ for (const [name, want] of CASES) {
   /* NOTE: an earlier version of this check read want.startsWith(got), which is
      true for every empty got — so every miss was scoring as a pass and the
      BONNER / TONKAWA failures were invisible. Check emptiness FIRST. */
-  if (!want) {
+  if (want === "AMBIGUOUS") {
+    /* the right answer is "I can't tell" — it must offer, say so, and stay
+       below the confidence bar so bulk-filing never touches it */
+    verdict = (m && m.amb > 1 && m.score < 60) ? "ok (flagged ambiguous)"
+            : m ? "WRONG" : "missed";
+  } else if (!want) {
     verdict = got ? "WRONG" : "ok (no match)";
   } else if (!got) {
     verdict = "missed";
