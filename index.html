@@ -265,7 +265,14 @@ select.in{padding:12px 0}
 .opt .mk{font-size:13px;flex:none}
 
 /* ---- sheet ---- */
-.ov{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.62);display:flex;
+/* Leaflet numbers its own panes 400 and its zoom controls 1000, so on the Map
+   screen the map drew straight over the settings sheet and he couldn't type
+   his address. #mapbox gets its own stacking context, which traps every
+   Leaflet z-index inside a z-index:0 box — no third-party layer can climb out
+   of it again. The overlay stack is lifted clear as well, keeping its existing
+   internal order: sheet < focus < toast. */
+#mapbox{position:relative;z-index:0;isolation:isolate}
+.ov{position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.62);display:flex;
  align-items:flex-end;justify-content:center;animation:fi .15s}
 body.paper .ov{background:rgba(17,17,16,.4)}
 @keyframes fi{from{opacity:0}to{opacity:1}}
@@ -278,7 +285,7 @@ body.paper .ov{background:rgba(17,17,16,.4)}
  padding-bottom:14px;border-bottom:1px solid var(--ink);margin-bottom:22px}
 
 /* ---- misc ---- */
-.toast{position:fixed;left:50%;bottom:130px;transform:translateX(-50%);z-index:120;
+.toast{position:fixed;left:50%;bottom:130px;transform:translateX(-50%);z-index:900;
  background:var(--sig);color:var(--inv);padding:13px 22px;border-radius:999px;
  font:700 11px var(--sans);letter-spacing:.09em;text-transform:uppercase;animation:fi .16s}
 .empty{text-align:center;padding:60px 20px}
@@ -772,7 +779,7 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .cop b{color:var(--ink)}
 .upnext{border:1px solid var(--tint,var(--rule2));border-left-width:3px;border-radius:14px;
  background:var(--panel);padding:22px;box-shadow:0 12px 34px rgba(0,0,0,.38)}
-#focus{position:fixed;inset:0;z-index:220;background:#0B0B0C;display:flex;flex-direction:column;
+#focus{position:fixed;inset:0;z-index:860;background:#0B0B0C;display:flex;flex-direction:column;
  align-items:center;justify-content:center;text-align:center;padding:26px;color:var(--ink)}
 #focus .fx{position:absolute;top:18px;right:20px;width:38px;height:38px;border:1px solid var(--rule2);
  border-radius:999px;background:none;color:var(--ink3);font-size:14px}
@@ -964,7 +971,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-137 · paid is paid, retainer stays retainer";
+const BUILD="C-138 · the map stops covering your typing";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2931,7 +2938,12 @@ function R_map(){
      It uses the business address in Settings.</p>
     <button class="btn sec" style="margin:0" onclick="setHomeBase()">Use my business address</button></div>`}
  </div><aside class="rail">
-  ${withMiles.length?`<div class="pan" style="margin-top:0"><div class="lab" style="margin-bottom:6px">Nearest first</div>
+  ${withMiles.length?`<div class="pan" style="margin-top:0"><div class="lab" style="margin-bottom:6px">${
+    /* Without a home base every distance is null, so the sort is a no-op and
+       this list is in whatever order the jobs happen to sit in. Calling that
+       "Nearest first" states a fact nothing measured. */
+    h?"Nearest first":"Your jobs"}</div>
+   ${h?"":`<p class="xs dim" style="margin:-2px 0 10px">Not sorted by distance — no home base set yet.</p>`}
    ${withMiles.map(({j,mi})=>`<div class="ins" style="cursor:pointer" onclick="go('job',{id:'${j.id}'})">
     <div class="ii" style="background:var(--panel2);color:var(--c-${ck(j.status)})">◎</div>
     <div class="grow"><b>${esc(jobName(j))}</b><div class="in3">${esc(j.address||"")}</div></div>
