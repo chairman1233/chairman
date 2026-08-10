@@ -6,3 +6,5 @@ money-out.txt
 all-out.txt
 dupe-out.txt
 node_modules/
+ui-out.txt
+jsdom.txt
