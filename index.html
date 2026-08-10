@@ -629,6 +629,26 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  font:700 10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .nutkey b{width:9px;height:9px;border-radius:3px;flex:none}
 
+/* ---- moving between screens -------------------------------------------
+   Swapping innerHTML with nothing in between reads as a close, not a move —
+   the screen blinks out and something else is suddenly there. A short rise
+   and fade says "this arrived" instead.
+
+   160ms on purpose. Long enough to register as motion, short enough that it
+   is finished before his hand is off the mouse; anything slower gets in the
+   way of someone who works fast. Decelerating curve, so it settles rather
+   than stops dead. No scale, no bounce — this runs a hundred times a day and
+   he has told me repeatedly what busy motion does to his eyes. */
+@keyframes vin{from{opacity:0;transform:translate3d(0,7px,0)}
+               to{opacity:1;transform:translate3d(0,0,0)}}
+#vz.vin{animation:vin .16s cubic-bezier(.22,.61,.36,1) both;will-change:opacity,transform}
+/* Anyone who has asked their system for less motion gets the fade only. */
+@media(prefers-reduced-motion:reduce){#vz.vin{animation:vinFade .12s linear both;will-change:auto}}
+@keyframes vinFade{from{opacity:0}to{opacity:1}}
+
+/* The nav item you just left shouldn't snap either. */
+#side button,nav button{transition:background .14s ease,color .14s ease}
+
 /* ---- band one: the money ladder ---------------------------------------- */
 .mband{border:1px solid var(--rule);border-radius:14px;background:var(--panel);
  padding:16px 18px;margin:0 0 16px}
@@ -971,7 +991,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-141 · a gate for the bugs that cost him an hour";
+const BUILD="C-142 · screens arrive instead of blinking";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4136,8 +4156,16 @@ function go(v,p={}){
  /* A restored view or an old link pointing at a destination that no longer
     renders must land somewhere sensible, not on a blank pane. */
  if(!R[v]){const home=NAVOF[v];v=(home&&R[home])?home:"today";}
+ /* Only a real move animates. render() also runs on every save, toast, timer
+    tick and cross-tab adopt — animating those would make the whole app
+    twitch while he's typing. */
+ _viewAnim=(v!==V)||JSON.stringify(p)!==JSON.stringify(P);
  V=v;P=p;
- render();window.scrollTo(0,0);}   /* renderNav() sets the active group from NAVOF */
+ /* Jumping the scroll and repainting in the same frame is most of why it read
+    as a glitch: the page blinked AND lost its place at once. Land at the top
+    first, then paint the new view into it. */
+ window.scrollTo(0,0);
+ render();}                        /* renderNav() sets the active group from NAVOF */
 function renderSide(){
  const el=document.getElementById("side");if(!el)return;
  /* Same four groups as the bottom bar, and every badge comes from navBadge().
@@ -4167,11 +4195,22 @@ function renderSide(){
    #view keeps the margin that clears the sidebar.
    Named paintView, not setView — setView already exists further down for the
    board/list toggle, and a collision here recursed until the stack blew. */
+let _viewAnim=false;
 function paintView(html){
  const pane=document.getElementById("view");
  if(!pane)return;
  pane.style.zoom="";
  pane.innerHTML=`<div id="vz">${html}</div>`;
+ if(!_viewAnim)return;
+ _viewAnim=false;
+ const vz=document.getElementById("vz");
+ if(!vz)return;
+ vz.classList.add("vin");
+ /* The transform is stripped the moment it finishes. A transform left on #vz
+    would make it the containing block for everything inside, which is exactly
+    what the sticky job bar and action bar position against — the animation
+    would quietly break them for as long as it lingered. */
+ vz.addEventListener("animationend",()=>vz.classList.remove("vin"),{once:true});
 }
 /* The header height changes with the safe-area inset and with the breakpoint,
    so it cannot be a constant. Measure it and let CSS position off the result. */
