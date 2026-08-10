@@ -2,5 +2,7 @@
 parse-out.txt
 form-out.txt
 match-out.txt
+money-out.txt
+all-out.txt
 dupe-out.txt
 node_modules/

@@ -622,6 +622,31 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  font:700 10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .nutkey b{width:9px;height:9px;border-radius:3px;flex:none}
 
+/* ---- band one: the money ladder ---------------------------------------- */
+.mband{border:1px solid var(--rule);border-radius:14px;background:var(--panel);
+ padding:16px 18px;margin:0 0 16px}
+.mband-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;cursor:pointer}
+.mband-k{font:700 9.5px var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink3)}
+.mband-n{font:400 clamp(21px,3.1vw,29px)/1.1 var(--serif);margin:6px 0 3px}
+.mband-s{font:400 12px var(--sans);color:var(--ink3)}
+.mband-r{text-align:right;flex:none}
+.mband-c{font:400 clamp(21px,3.1vw,29px)/1.1 var(--serif);color:var(--ink);margin:6px 0 3px}
+.mlad{margin-top:16px;border-top:1px solid var(--rule)}
+.mlad-r{display:grid;grid-template-columns:8px minmax(120px,1.1fr) 74px 108px minmax(0,1fr);
+ gap:11px;align-items:center;padding:9px 0;border-bottom:1px solid var(--rule)}
+.mlad-r:last-child{border-bottom:0}
+.mlad-b{width:8px;height:8px;border-radius:2px;background:var(--mt)}
+.mlad-l{font:600 13px var(--sans);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mlad-n{font:400 11.5px var(--sans);color:var(--ink3);white-space:nowrap}
+.mlad-a{font:400 16px var(--serif);text-align:right;white-space:nowrap}
+.mlad-w{font:400 11.5px var(--sans);color:var(--ink3);overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:700px){
+ .mband-hd{flex-direction:column;gap:10px}.mband-r{text-align:left}
+ .mlad-r{grid-template-columns:8px 1fr auto;gap:9px}
+ .mlad-n,.mlad-w{display:none}
+}
+
 /* ---- the queue as a table, not a stack of cards -------------------------
    One row per job, every control on the row. Dense enough that a full day is
    visible without scrolling, which is the whole point of a queue. */
@@ -939,7 +964,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-135 · the estimates folder files itself";
+const BUILD="C-136 · one money engine, and a screen built on it";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1192,6 +1217,68 @@ function fee(j){
 }
 
 const sum=(a,f)=>a.reduce((s,j)=>s+f(j),0);
+
+/* ================= ONE MONEY ENGINE ====================================
+   fee(j) was never the problem — it's correct and it's the only thing that
+   computes a number. The problem was that six different screens each decided
+   for themselves WHICH jobs count as "out for collection", and three of them
+   forgot to exclude disputes. The Today strip read "$74,085 out for
+   collection" when every dollar of it was in litigation and none of it was
+   chaseable. That is the same class of defect as ckLive and flowOf: a
+   question every screen asks and each one answers on its own.
+
+   So there is now exactly one answer. moneyState(j) puts each job in exactly
+   one bucket; MONEY() adds them up. No screen may filter jobs and sum fees
+   by hand — if a screen wants a number it takes it from here.
+
+   The buckets are ordered by how real the money is:
+     banked     it's in the account
+     late       invoiced, past terms, chase it
+     sent       invoiced, still inside terms
+     unbilled   work is DONE and no invoice exists — the fastest cash there is
+     working    being estimated, not yet earned
+     contested  in dispute; a case, not a receivable
+     covered    retainer work; tracked, never invoiced                        */
+function moneyState(j){
+ if(!j||j.status==="Lost")return "lost";
+ if(inDispute(j))return "contested";        /* beats every other state */
+ if(j.status==="Paid")return "banked";
+ if(j.status==="Invoiced")return isLate(j)?"late":"sent";
+ if(j.status==="Complete")return (onRetainer(j)&&fee(j).due===0)?"covered":"unbilled";
+ return "working";                          /* Waiting + Estimating */
+}
+const MONEY_STATES=["banked","late","sent","unbilled","working","contested","covered"];
+function MONEY(){
+ const b={};
+ MONEY_STATES.forEach(k=>b[k]={jobs:[],n:0,amt:0});
+ b.lost={jobs:[],n:0,amt:0};
+ (D.jobs||[]).forEach(j=>{
+  const s=moneyState(j),f=fee(j);
+  /* banked is what he actually received; everything else is what's still owed */
+  const amt=s==="banked"?f.gross:s==="covered"?f.wouldBe:f.due;
+  b[s].jobs.push(j);b[s].n++;b[s].amt+=amt;
+ });
+ /* Money he can actually go and get. Disputes are deliberately absent — that
+    is the whole point of this function existing. */
+ b.collectable={n:b.late.n+b.sent.n+b.unbilled.n,
+   amt:b.late.amt+b.sent.amt+b.unbilled.amt};
+ b.invoicedOut={n:b.late.n+b.sent.n,amt:b.late.amt+b.sent.amt};
+ return b;
+}
+/* the single sentence about where he stands, used everywhere it's needed */
+function moneyHeadline(){
+ const m=MONEY();
+ if(m.unbilled.amt>0)return {k:"unbilled",amt:m.unbilled.amt,
+   line:money0(m.unbilled.amt)+" earned and never invoiced",
+   sub:"Work is finished. This is the fastest money in the business."};
+ if(m.late.amt>0)return {k:"late",amt:m.late.amt,
+   line:money0(m.late.amt)+" past due",sub:plural(m.late.n,"invoice")+" over terms."};
+ if(m.sent.amt>0)return {k:"sent",amt:m.sent.amt,
+   line:money0(m.sent.amt)+" out, inside terms",sub:"Nothing to chase yet."};
+ if(m.contested.amt>0)return {k:"contested",amt:m.contested.amt,
+   line:money0(m.contested.amt)+" contested",sub:"All of it is a case, none of it is a receivable."};
+ return {k:"clear",amt:0,line:"Nothing owed to you",sub:"Everything billed is collected."};
+}
 
 /* ---- disputes ------------------------------------------------------------
    Money that's gone legal is not a receivable, it's a case. It leaves every
@@ -1779,11 +1866,14 @@ function acctStats(aid){
  const won=js.filter(j=>!["Lost"].includes(j.status));
  const volume=sum(js,j=>+j.total||0);
  const earned=sum(js.filter(j=>j.status==="Paid"),j=>fee(j).gross);
- const outstanding=sum(js.filter(j=>["Complete","Invoiced"].includes(j.status)),j=>fee(j).due);
+ /* a company with a job in litigation was showing that money as outstanding,
+    so its card promised revenue that is actually a lawsuit */
+ const outstanding=sum(js.filter(j=>["late","sent","unbilled"].includes(moneyState(j))),j=>fee(j).due);
+ const contested=sum(js.filter(j=>moneyState(j)==="contested"),j=>fee(j).due);
  const paid=js.filter(j=>j.status==="Paid"&&j.invDate&&j.paidDate);
  const days=paid.length?Math.round(paid.reduce((n,j)=>
    n+Math.max(0,(new Date(j.paidDate)-new Date(j.invDate))/86400000),0)/paid.length):null;
- return {jobs:js,open:open.length,total:js.length,volume,earned,outstanding,
+ return {jobs:js,open:open.length,total:js.length,volume,earned,outstanding,contested,
   days,winRate:js.length?Math.round(won.length/js.length*100):null};
 }
 function backfillAccounts(){
@@ -3874,14 +3964,18 @@ const relDay=iso=>{if(!iso)return"";
  return new Date(iso+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",day:"numeric"});};
 function tickerHTML(){
  const t=today(),cs=clockState(),p=dayPlan();
- const inv=byStage("Invoiced"),ready=billable();
- const owed=sum(inv,j=>fee(j).due),tobill=sum(ready,j=>fee(j).due);
+ const M=MONEY();
  const due=D.jobs.filter(j=>j.status==="Estimating"&&j.dueDate&&j.dueDate<=t);
  const items=[];
  items.push(["est",new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}),
   cs.in&&!cs.out?"on the clock":cs.off?"day off":"not clocked in"]);
- if(owed)items.push(["out",money0(owed),"out for collection · "+plural(inv.length,"invoice")]);
- if(tobill)items.push(["rdy",money0(tobill),"finished, not billed"]);
+ /* was byStage("Invoiced") with no dispute filter — it counted all three
+    litigation jobs as collectable and read "$74,085 out for collection" */
+ if(M.invoicedOut.amt)items.push(["out",money0(M.invoicedOut.amt),
+  "out for collection · "+plural(M.invoicedOut.n,"invoice")]);
+ if(M.unbilled.amt)items.push(["rdy",money0(M.unbilled.amt),"finished, not billed"]);
+ if(M.contested.amt)items.push(["late",money0(M.contested.amt),
+  "contested · "+plural(M.contested.n,"case")+" — not collectable"]);
  /* The big number IS the count — plural() would print it a second time,
     which is where "1  1 late start this week" came from. Label only. */
  if(due.length)items.push(["out",due.length+"",countWord(due.length,"estimate")+" due"+(due.some(j=>j.dueDate<t)?" or overdue":" today")]);
@@ -3898,10 +3992,9 @@ function tickerHTML(){
  if(live.length)items.push(["est",live.length+"",countWord(live.length,"job")+" on the board"]);
  const pipeline=sum(live,j=>+j.total||0);
  if(pipeline)items.push(["est",money0(pipeline),"of estimates in play"]);
- const myFees=sum(live,j=>fee(j).due);
- if(myFees)items.push(["rdy",money0(myFees),"my fees, not yet collected"]);
- const paidYTD=sum(D.jobs.filter(j=>j.status==="Paid"),j=>fee(j).gross);
- if(paidYTD)items.push(["paid",money0(paidYTD),"collected all time"]);
+ /* "my fees not yet collected" also swept in the contested jobs */
+ if(M.collectable.amt)items.push(["rdy",money0(M.collectable.amt),"my fees, not yet collected"]);
+ if(M.banked.amt)items.push(["paid",money0(M.banked.amt),"collected all time"]);
  const w=weekStats();
  if(w&&w.worked)items.push(["est",dur(w.worked),"on the clock this week"]);
  if(w&&w.lateDays)items.push(["out",w.lateDays+"",countWord(w.lateDays,"late start")+" this week"]);
@@ -4274,6 +4367,79 @@ function saveNut(){const n=NUT();
  if($("#nutcash2")){const v=+$("#nutcash2").value||0;if(v!==(+n.cash||0)){n.cash=v;n.cashAt=today();}}
  n.on=true;save();close_();render();toast("Target set — "+money0(nutTotal()));}
 
+/* ---- band one: am I going to make rent -----------------------------------
+   Every number here comes from MONEY(). Nothing on this band filters jobs or
+   sums fees on its own — that habit is what let three screens call litigation
+   money "out for collection".
+
+   Order is by how real the money is, and the row that leads is whichever one
+   he can act on fastest. Finished-but-uninvoiced beats everything: the work is
+   already done, there is nothing to negotiate, and it is the shortest path
+   between him and the nut. */
+const MBANDS=[
+ ["unbilled","rdy","Finished, not billed","invoice it today"],
+ ["late","late","Past due","chase it"],
+ ["sent","out","Out, inside terms","nothing to do yet"],
+ ["working","est","Being estimated","not earned yet"],
+ ["contested","late","Contested","a case, not a receivable"],
+ ["banked","paid","Collected","in the account"]
+];
+function moneyBandHTML(){
+ const M=MONEY(), h=moneyHeadline();
+ const nut=(typeof nutState==="function")?nutState():null;
+ const rows=MBANDS.filter(([k])=>M[k]&&M[k].n>0);
+ return `<div class="mband">
+  <div class="mband-hd" onclick="go('money')">
+   <div>
+    <div class="mband-k">Where you stand</div>
+    <div class="mband-n v-${h.k==="unbilled"?"rdy":h.k==="late"?"late":h.k==="contested"?"late":"est"}">${esc(h.line)}</div>
+    <div class="mband-s">${esc(h.sub)}</div>
+   </div>
+   <div class="mband-r">
+    <div class="mband-k">Collectable</div>
+    <div class="mband-c money">${money0(M.collectable.amt)}</div>
+    ${M.contested.amt?`<div class="mband-s v-late">${money0(M.contested.amt)} contested, excluded</div>`:""}
+   </div>
+  </div>
+  ${rows.length?`<div class="mlad">${rows.map(([k,c,label,note])=>`
+   <div class="mlad-r" style="--mt:var(--c-${c})">
+    <span class="mlad-b"></span>
+    <span class="mlad-l">${label}</span>
+    <span class="mlad-n">${plural(M[k].n,"job")}</span>
+    <span class="mlad-a money v-${c}">${money0(M[k].amt)}</span>
+    <span class="mlad-w">${note}</span>
+   </div>`).join("")}</div>`:""}
+  ${M.unbilled.n?`<button class="btn" style="margin-top:14px;background:var(--c-rdy);border-color:var(--c-rdy);color:var(--paper)"
+    onclick="go('invoice',{id:'${M.unbilled.jobs[0].id}'})">Invoice ${esc(jobName(M.unbilled.jobs[0]))} — ${money0(fee(M.unbilled.jobs[0]).due)} →</button>`:""}
+ </div>`;
+}
+/* ---- band three: what's stuck and who's holding it ----------------------
+   Three of his ten jobs are in litigation and two more are blocked on someone
+   else's crew. That is half the board, and until now it lived in a side room
+   he had to remember to visit. Blocked work you can't act on still needs to
+   be visible, or you re-discover it by accident a month later. */
+function stuckHTML(){
+ const disp=(typeof openDisputes==="function")?openDisputes():[];
+ const wait=D.jobs.filter(j=>j.status==="Waiting");
+ if(!disp.length&&!wait.length)return "";
+ const row=(j,tone,label,note)=>`<div class="qrow" style="--qt:var(--c-${tone})">
+   <div class="qc-s"><span class="qb v-${tone}">${label}</span>
+    <span class="qwhy">${esc(note||"")}</span></div>
+   <div class="qc-j" onclick="go('job',{id:'${j.id}'})"><b>${esc(jobName(j))}</b>
+    <span class="qsub">${esc(shortAddr(j.address)||"")}</span></div>
+   <div class="qc-n">${esc((j.loss||"")+(j.contractor?" · "+j.contractor:""))}</div>
+   <div class="qc-d money">${money0(fee(j).due)}</div>
+   <div class="qc-a"><button class="qgo" onclick="${tone==="late"?`go('disputes')`:`qSched('${j.id}')`}">${
+     tone==="late"?"Open the case":"Check on it"}</button></div>
+  </div>`;
+ return `<div class="row between" style="margin:22px 0 8px;align-items:baseline">
+   <div class="lab">◈ Stuck — not yours to move</div>
+   <span class="xs dim">${plural(disp.length+wait.length,"job")}</span></div>
+  <div class="qtab">
+   ${disp.map(j=>row(j,"late","CONTESTED",j.disputeStage||"in dispute")).join("")}
+   ${wait.map(j=>row(j,"lost","WAITING",j.waitingOn||"not ready yet")).join("")}
+  </div>`;
+}
 R.today=()=>{
  const t=today();
  const plans=D.plans.filter(p=>p.date===t)
@@ -4289,7 +4455,9 @@ R.today=()=>{
   :`◷ ${dur(cs.worked)} today`;
  const restOpen=D.todayRest===true;   /* collapsed by default, remembered */
  return `
+ ${moneyBandHTML()}
  ${copilotHTML()}
+ ${stuckHTML()}
  <button class="btn sec" style="margin-top:14px" onclick="D.todayRest=!${restOpen};save();render()">
   ${restOpen?"▴ Hide the rest of the day":"▾ Show the rest of the day"}</button>
  <div style="display:${restOpen?"block":"none"}">
@@ -7887,8 +8055,10 @@ R.foreman=()=>{
 /* ================= INVOICES ================= */
 R.invoices=()=>{
  const ready=billable(),inv=byStage("Invoiced"),paid=byStage("Paid");
+ const M=MONEY();
  return `<div class="topbar"><div class="grow"><h1>Invoices</h1>
-   <div class="sub2">${plural(inv.length,"invoice")} out · ${money0(sum(inv,j=>fee(j).due))} outstanding</div></div></div>
+   <div class="sub2">${plural(M.invoicedOut.n,"invoice")} out · ${money0(M.invoicedOut.amt)} outstanding${
+     M.contested.amt?` · <span class="v-late">${money0(M.contested.amt)} contested, not counted</span>`:""}</div></div></div>
  <div class="cols" style="margin-top:4px">
   <div class="colw"><div class="sechead" style="margin-top:0"><h2>Ready to bill</h2><span class="em dim">${ready.length}</span></div>
    ${ready.length?ready.map(j=>`<div class="pan tap" onclick="go('invoice',{id:'${j.id}'})" style="border-left:2px solid var(--c-rdy)">
