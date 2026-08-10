@@ -964,7 +964,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-136 · one money engine, and a screen built on it";
+const BUILD="C-137 · paid is paid, retainer stays retainer";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1241,10 +1241,20 @@ const sum=(a,f)=>a.reduce((s,j)=>s+f(j),0);
      covered    retainer work; tracked, never invoiced                        */
 function moneyState(j){
  if(!j||j.status==="Lost")return "lost";
- if(inDispute(j))return "contested";        /* beats every other state */
+ const f=fee(j);
+ /* Retainer work is never invoiced at ANY stage. Reading this only at
+    Complete meant that the moment he marked one Paid it fell through to
+    banked and reported $0 — three of his closed jobs showed
+    "Collected · $0" when they were retainer work worth tracking. */
+ if(onRetainer(j)&&f.gross===0&&["Complete","Paid"].includes(j.status))return "covered";
+ /* Money that ARRIVED is not money at risk. "Dispute beats everything" was
+    too broad: Benny & Donna Rains is Paid $8,930.51 and still carries the
+    Rains disputeStage, so collected cash was being counted as contested.
+    A continuing claim lives on the job that's still owed — this one is done. */
  if(j.status==="Paid")return "banked";
+ if(inDispute(j))return "contested";
  if(j.status==="Invoiced")return isLate(j)?"late":"sent";
- if(j.status==="Complete")return (onRetainer(j)&&fee(j).due===0)?"covered":"unbilled";
+ if(j.status==="Complete")return "unbilled";
  return "working";                          /* Waiting + Estimating */
 }
 const MONEY_STATES=["banked","late","sent","unbilled","working","contested","covered"];
@@ -4382,7 +4392,8 @@ const MBANDS=[
  ["sent","out","Out, inside terms","nothing to do yet"],
  ["working","est","Being estimated","not earned yet"],
  ["contested","late","Contested","a case, not a receivable"],
- ["banked","paid","Collected","in the account"]
+ ["banked","paid","Collected","in the account"],
+ ["covered","est","Retainer work","covered — never invoiced"]
 ];
 function moneyBandHTML(){
  const M=MONEY(), h=moneyHeadline();

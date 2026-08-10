@@ -160,10 +160,30 @@ const CASES = [
              invDate: "2026-07-01", paidDate: "2026-07-10" }),
     expect: { state: "banked" } },
 
-  { name: "a dispute beats every other state",
+  { name: "a dispute beats every UNPAID state",
     job: J({ total: 20000, feeMode: "pct", feePct: 10, status: "Complete",
              disputeStage: "Mediation" }),
     expect: { state: "contested" } },
+
+  /* Found live on his board: Benny & Donna Rains is Paid $8,930.51 and still
+     carries the Rains disputeStage, so collected cash was being reported as
+     contested. Money that arrived is not money at risk. */
+  { name: "paid beats contested — cash in hand is not at risk",
+    job: J({ total: 20000, feeMode: "pct", feePct: 10, status: "Paid",
+             paidDate: "2026-08-09", disputeStage: "Filed" }),
+    expect: { state: "banked" } },
+
+  /* Also found live: three closed retainer jobs read "Collected · $0" because
+     covered was only reachable from Complete. */
+  { name: "retainer stays covered after it's marked Paid",
+    job: J({ total: 50000, feeMode: "retainer", feePct: 10, status: "Paid",
+             paidDate: "2026-08-05" }),
+    expect: { wouldBe: 5000, state: "covered" } },
+
+  { name: "retainer with extras is billable, not covered",
+    job: J({ total: 50000, feeMode: "retainer", status: "Complete",
+             extras: [{ label: "Site meeting", amount: 350 }] }),
+    expect: { due: 350, state: "unbilled" } },
 
   { name: "lost is not money",
     job: J({ total: 99999, feeMode: "pct", feePct: 50, status: "Lost" }),
