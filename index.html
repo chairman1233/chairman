@@ -971,7 +971,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-139 · a background tab can't overwrite you";
+const BUILD="C-140 · your typing survives a tap";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -7983,7 +7983,9 @@ async function testAI(){
   if(el)el.innerHTML=`<span class="v-paid sm">✓ Connected${esc(m)}</span>`;
  }catch(e){if(el)el.innerHTML=`<span class="v-out sm">✕ ${esc(e.message||String(e))}</span>`;}
 }
-function pickProv(el,p){AICFG().provider=p;save();
+function pickProv(el,p){
+ stashMe();                        /* keep what he's typed before the rebuild */
+ AICFG().provider=p;save();
  [...el.parentNode.children].forEach(c=>c.classList.toggle("on",c===el));
  close_();settings();}
 /* "API key not valid" was really a 17-character key in a 39-character slot —
@@ -8010,7 +8012,7 @@ function saveAI(){const c=AICFG();
   /* paste a key for a provider you aren't on and we follow the key, not the tab */
   const own=keyOwner(raw);
   if(raw&&own&&own!==c.provider){
-   c.keys[own]=raw;c.provider=own;save();close_();settings();
+   c.keys[own]=raw;c.provider=own;stashMe();save();close_();settings();
    toast("That's a "+AIPROV[own].label+" key — switched you over");return;
   }
   const problem=keyProblem(c.provider,raw);
@@ -8340,7 +8342,7 @@ function settings(){const m=D.me;
       ${aiKeyed().map(p=>esc(AIPROV[p].label)).join(" and ")}. Calls will fail until you
       either paste a ${esc(AIPROV[AICFG().provider].label)} key below or switch back.</p>
      ${aiKeyed().map(p=>`<button class="btn sec s" style="margin:10px 8px 0 0"
-       onclick="AICFG().provider='${p}';save();close_();settings()">Use ${esc(AIPROV[p].label)}</button>`).join("")}
+       onclick="stashMe();AICFG().provider='${p}';save();close_();settings()">Use ${esc(AIPROV[p].label)}</button>`).join("")}
     </div>`:""}
    <label><span class="t">API key</span>
     <input class="in" id="aikey" type="password" value="${esc(AICFG().key||"")}" placeholder="paste your key"
@@ -8416,7 +8418,21 @@ function settings(){const m=D.me;
     ? "Signed in as <b>"+esc(SESS.user.email||"you")+"</b>. Every change saves here and to your cloud within about two seconds, so your phone and desktop stay in step. A backup file is still worth keeping now and then."
     : "<b>Not signed in — this device only.</b> Nothing is syncing anywhere. Back up your data, or sign in so it follows you between phone and desktop."
   }</p>`);}
-function saveMe(){D.me=Object.assign({},D.me,{name:$("#sn").value.trim()||"Benny",biz:$("#sb").value.trim(),
+/* Anything that reopens the Settings sheet — picking an AI provider, uploading
+   a logo, switching a key — used to close_() and settings() straight away,
+   rebuilding every field from what was SAVED. Whatever he had typed and not
+   yet saved was thrown away with the old sheet. He filled in his business
+   address, clicked Claude, and watched it all disappear.
+
+   stashMe() writes the open sheet's fields into D.me first, so a rebuild
+   redraws what he typed instead of erasing it. saveMe() is now stash + close.
+   Anything that reopens the sheet must call stashMe() before it does. */
+function stashMe(){
+ if(!$("#sn"))return false;            /* sheet isn't open — nothing to keep */
+ collectMe();
+ return true;
+}
+function collectMe(){D.me=Object.assign({},D.me,{name:$("#sn").value.trim()||"Benny",biz:$("#sb").value.trim(),
  phone:$("#sp").value.trim(),email:$("#se").value.trim(),rate:+$("#sr").value||2,
  hourRate:$("#shr")?(+$("#shr").value||0):D.me.hourRate,
  addr:$("#sad")?$("#sad").value.trim():D.me.addr,
@@ -8429,13 +8445,16 @@ function saveMe(){D.me=Object.assign({},D.me,{name:$("#sn").value.trim()||"Benny
  siteFee:$("#ssite")?(+$("#ssite").value||0):D.me.siteFee,
  mportFees:MPORT_STORIES.reduce((o,[k])=>{
    const el=$("#mpf_"+k);o[k]=el?(+el.value||MPORT_DEFAULT_FEES[k]):mportFees()[k];return o;},{})});
- save();close_();render();toast("Saved");}
+ save();}
+function saveMe(){collectMe();close_();render();toast("Saved");}
 function setTerms(t){const el=$("#strm");if(el)el.value=t;}
 function pickLogo(){const i=document.createElement("input");i.type="file";i.accept="image/*";
  i.onchange=async()=>{const f=i.files[0];if(!f)return;
-  const {data}=await prepFile(f);D.me.logo=data;save();close_();settings();toast("Logo updated");};
+  const {data}=await prepFile(f);
+  stashMe();                       /* the sheet is about to be rebuilt */
+  D.me.logo=data;save();close_();settings();toast("Logo updated");};
  i.click();}
-function resetLogo(){D.me.logo="";save();close_();settings();toast("Back to the default logo");}
+function resetLogo(){stashMe();D.me.logo="";save();close_();settings();toast("Back to the default logo");}
 function backup(){
  /* never write the API key into a file that leaves the device */
  const safe=JSON.parse(JSON.stringify(D));
