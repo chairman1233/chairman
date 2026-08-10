@@ -971,7 +971,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-138 · the map stops covering your typing";
+const BUILD="C-139 · a background tab can't overwrite you";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1086,6 +1086,28 @@ let _quotaWarned=false;
 /* Storage full used to be swallowed silently — saving stopped and nothing said
    so. Shed history first, then the spare copy, and only then admit defeat. */
 function save(){
+ /* He keeps several Chairman tabs open. A BACKGROUND tab has no user input to
+    protect — its only writes come from timers and ticks — but it still holds a
+    whole copy of D from whenever it last synced. When it wrote, it stamped a
+    fresh _ts over the foreground tab's newer data, and the settings he had
+    just typed vanished a few seconds later. C-96 stopped a tab adopting OLDER
+    data; it never stopped a stale tab PUBLISHING as if it were current.
+
+    So: if this tab is hidden and storage has moved on without us, take the
+    newer copy instead of overwriting it. A hidden tab is never the source of
+    truth. The foreground tab always wins, which is the one he's typing in. */
+ try{
+  if(typeof document!=="undefined"&&document.hidden){
+   const raw=localStorage.getItem(K);
+   if(raw){
+    const inc=JSON.parse(raw);
+    if((inc._ts||0)>(D._ts||0)){
+     D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),inc);
+     return;                                   /* adopted, wrote nothing */
+    }
+   }
+  }
+ }catch(e){}
  D._ts=Date.now();
  const body=JSON.stringify(D);
  let wrote=false;
