@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-144 · matched against all 527 of his PDFs";
+const BUILD="C-145 · six fixes, one push";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1035,7 +1035,10 @@ function toast(m){const t=document.createElement("div");t.className="toast";t.te
 const K="chairman_v2";
 const BLANK={jobs:[],plans:[],subs:[],notes:[],files:[],log:[],accounts:[],calls:[],
  invNo:1001,view:"board",calView:"month",theme:"studio",zoom:1,
- clock:{sched:{0:"",1:"07:00",2:"07:00",3:"07:00",4:"07:00",5:"07:00",6:""},days:{}},
+ /* sched starts EMPTY. It used to carry 07:00 strings, which meant every
+    fresh device was born believing he starts at 7am — and could sync that
+    belief over his real hours. CK_ seeds a blank board once, flagged. */
+ clock:{sched:{},days:{}},
  me:{name:"Benny",biz:"Chairman Remodeling",email:"",phone:"",rate:2,
   terms:"Due on completion",adjFee:0,siteFee:0},last:null,seeded:false};
 let D=load();
@@ -1072,6 +1075,17 @@ function load(){
 const HKEY=K+"_hist", HMAX=20;
 const realJobs=d=>((d&&d.jobs)||[]).filter(j=>!j._demo);
 function readHist(){try{return JSON.parse(localStorage.getItem(HKEY)||"[]")}catch(e){return[]}}
+/* what a snapshot keeps: the work, not the wardrobe. The logo alone is a
+   ~150KB data-URL; twenty snapshots of it was 3MB of the ~5MB localStorage
+   ceiling — two days from every save() failing with the quota toast. */
+function slimForHist(d){
+ const c=JSON.parse(JSON.stringify(d));
+ if(c.me)delete c.me.logo;
+ if(c.ai){c.ai.key="";c.ai.keys={};}
+ delete c.mem;delete c.chat;
+ return c;
+}
+const HBYTES=700000;   /* hard budget for the whole ring, well under quota */
 function snapshot(reason){
  try{
   const hist=readHist();
@@ -1082,8 +1096,27 @@ function snapshot(reason){
   if(last&&!shrank&&now-last.at<120000)return;
   hist.unshift({at:now,reason:reason||(shrank?"board shrank":"autosave"),
    jobs:realJobs(D).length,notes:(D.notes||[]).length,
-   data:JSON.stringify(D)});
-  localStorage.setItem(HKEY,JSON.stringify(hist.slice(0,HMAX)));
+   data:slimForHist(D)});   /* an object — the old string form double-encoded */
+  let out=hist.slice(0,HMAX);
+  while(out.length>2&&JSON.stringify(out).length>HBYTES)out.pop();
+  localStorage.setItem(HKEY,JSON.stringify(out));
+ }catch(e){}
+}
+/* one-time shrink of the ring that already grew to 3MB. Old entries hold data
+   as a double-encoded string with the logo inside — re-encode them slim.
+   Runs at every boot but exits in microseconds once the ring is under budget. */
+function compactHist(){
+ try{
+  const raw=localStorage.getItem(HKEY);
+  if(!raw||raw.length<=HBYTES)return;
+  const hist=readHist().map(h=>{
+   let d=h.data;
+   if(typeof d==="string"){try{d=JSON.parse(d)}catch(e){d=null}}
+   return {at:h.at,reason:h.reason,jobs:h.jobs,notes:h.notes,data:d?slimForHist(d):null};
+  }).filter(h=>h.data);
+  let out=hist.slice(0,HMAX);
+  while(out.length>2&&JSON.stringify(out).length>HBYTES)out.pop();
+  localStorage.setItem(HKEY,JSON.stringify(out));
  }catch(e){}
 }
 function restoreVersion(at){
@@ -1093,7 +1126,15 @@ function restoreVersion(at){
      ". Your current board is snapshotted first, so this is reversible too.",
      "Roll back",()=>{
   snapshot("before rollback");
-  try{D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),JSON.parse(v.data));}catch(e){return;}
+  /* entries written before the compaction hold data as a string; after, as an
+     object. A rollback must read both, and must not clobber the logo that
+     slim snapshots deliberately leave out. */
+  try{
+   const data=typeof v.data==="string"?JSON.parse(v.data):v.data;
+   const keepLogo=(D.me&&D.me.logo)||"";
+   D=Object.assign({},JSON.parse(JSON.stringify(BLANK)),data);
+   if(keepLogo&&!(D.me&&D.me.logo)){D.me=D.me||{};D.me.logo=keepLogo;}
+  }catch(e){return;}
   save();applyTheme();close_();go("today");toast("Rolled back");
  });
 }
@@ -2634,7 +2675,7 @@ async function flushCloud(){
   const r=await cloudFetch("/rest/v1/boards?on_conflict=user_id",{method:"POST",
    headers:{"content-type":"application/json",Prefer:"resolution=merge-duplicates"},
    body:JSON.stringify({user_id:SESS.user.id,data:D,updated_at:new Date(D._ts||Date.now()).toISOString()})});
-  if(r.ok)_lastSynced=D._ts||Date.now();
+  if(r.ok){_lastSynced=D._ts||Date.now();_cloudAt=Date.now();}
  }catch(e){}
 }
 async function cloudPull(){
@@ -2700,7 +2741,18 @@ function adoptRemote(data,rts){
  D._ts=rts;
  try{localStorage.setItem(K,JSON.stringify(D));
   if(realJobs(D).length)localStorage.setItem(K+"_bak",JSON.stringify(D));}catch(e){}
+ _cloudAt=Date.now();
  saveSess(keepSess);applyTheme();render();
+}
+/* when the cloud last confirmed anything, in either direction — module-level
+   on purpose: it's about THIS session's connection, not the data */
+let _cloudAt=0;
+function syncChip(){
+ if(!cloudCfg())return "";
+ if(!signedIn())return `<span class="v-late">· not signed in</span>`;
+ if(!_cloudAt)return `<span class="dim">· syncing…</span>`;
+ const m=Math.round((Date.now()-_cloudAt)/60000);
+ return `<span class="${m>=5?"v-out":"dim"}">· synced ${m<1?"just now":m+"m ago"}</span>`;
 }
 function askConflict(lost,remoteData,rts){
  const names=lost.slice(0,6).map(x=>"· "+esc(x.name)).join("<br>");
@@ -3252,19 +3304,30 @@ function delApp(id){D.apps=APPS().filter(a=>a.id!==id);save();close_();appsSheet
 /* ================= TIME CLOCK ================= */
 const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const DOWFULL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const DEFSHIFT={s:"07:00",e:"17:00"};
+const DEFSHIFT={s:"08:00",e:"17:00"};
 const CK_=()=>{
  if(!D.clock)D.clock={sched:{},days:{}};
  if(!D.clock.days)D.clock.days={};
  if(!D.clock.sched)D.clock.sched={};
- /* older saves stored a bare start time string — give it an end too */
- let changed=false;
+ /* His hours kept "resetting to 7–5". They weren't being reset — they were
+    being INVENTED. Any context whose sched had gaps (a phone on first load,
+    a cleared cache) had the default written into the gap and then SAVED, and
+    that fabrication synced over his real 8–5 everywhere else.
+    Rules now: a truly blank board gets the default ONCE, flagged so it can
+    never happen twice. A board where any day exists gets gaps filled with
+    null (off) in memory only — never a fabricated shift, never auto-saved. */
+ let migrated=false,seededNow=false;
+ const hasAny=[0,1,2,3,4,5,6].some(i=>D.clock.sched[i]!==undefined);
  [0,1,2,3,4,5,6].forEach(i=>{
   const v=D.clock.sched[i];
-  if(typeof v==="string"){D.clock.sched[i]=v?{s:v,e:""}:null;changed=true;}
-  else if(v===undefined){D.clock.sched[i]=(i>=1&&i<=5)?{s:DEFSHIFT.s,e:DEFSHIFT.e}:null;changed=true;}
+  if(typeof v==="string"){D.clock.sched[i]=v?{s:v,e:""}:null;migrated=true;}
+  else if(v===undefined){
+   if(!hasAny&&!D.clock.seeded){D.clock.sched[i]=(i>=1&&i<=5)?{s:DEFSHIFT.s,e:DEFSHIFT.e}:null;seededNow=true;}
+   else D.clock.sched[i]=null;   /* in memory only — an unknown day is a day off, not 7am */
+  }
  });
- if(changed)try{save()}catch(e){}
+ if(seededNow){D.clock.seeded=true;try{save()}catch(e){}}
+ else if(migrated){try{save()}catch(e){}}
  return D.clock;};
 const shiftOf=iso=>{const v=CK_().sched[new Date(iso+"T00:00:00").getDay()];return (v&&v.s)?v:null;};
 const hm=d=>String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
@@ -3745,6 +3808,14 @@ setInterval(foremanTick,5*60*1000);
 setInterval(pingTriggers,5*60*1000);
 setInterval(cloudPull,25*1000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)cloudPull();});
+/* The phone opened to an empty board because NOTHING pulled on load — the
+   first pull was the 25-second interval, and iOS routinely evicts the local
+   copy, so for 25 seconds (or until he gave up) the app showed nothing and
+   then started raising conflicts. Pull the moment the app starts, and again
+   on pageshow — iOS fires that instead of a fresh load when it restores a
+   tab from its back-forward cache. */
+setTimeout(cloudPull,300);
+window.addEventListener("pageshow",e=>{if(e.persisted)cloudPull();});
 setTimeout(pingTriggers,4000);
 /* the board stays live: re-render Today every 30s unless a sheet or the mic is open */
 setInterval(()=>{
@@ -4255,7 +4326,7 @@ function paintView(html){
 function hdDateTick(){
  const el=document.getElementById("hddate");if(!el)return;
  const n=new Date();
- el.innerHTML=`<b>${n.toLocaleDateString("en-US",{weekday:"long"})}</b> · ${n.toLocaleDateString("en-US",{month:"long",day:"numeric"})} · ${h12(hm(n))}`;
+ el.innerHTML=`<b>${n.toLocaleDateString("en-US",{weekday:"long"})}</b> · ${n.toLocaleDateString("en-US",{month:"long",day:"numeric"})} · ${h12(hm(n))} ${syncChip()}`;
 }
 setInterval(hdDateTick,30000);
 /* The header lives OUTSIDE #vz; every sticky bar lives inside it. "Fit all"
@@ -4754,13 +4825,81 @@ function moveMenu(id){const j=job(id);
   `<hr class="rule" style="margin:22px 0"><button class="btn sec" onclick="close_();go('job',{id:'${id}'})">Open job</button>
    <button class="btn sec" onclick="close_();newJob('${id}')">Edit details</button>
    <button class="btn warn" onclick="delJob('${id}')">Delete this job</button>`);}
+/* ---- invoice numbering ---------------------------------------------------
+   INV-1001 ended up on three jobs and INV-1002 on three more, because numbers
+   came from a stored counter — and a counter is exactly the kind of state two
+   devices can hold different copies of. After one sync conflict, both sides
+   happily issued the same "next" number. Numbers now derive from what
+   actually exists: scan the board, take the highest, add one. Two devices can
+   still race within seconds of each other, but they can no longer drift. */
+function peekInvNo(){
+ let hi=1000;
+ (D.jobs||[]).forEach(j=>{const m=String(j.invNo||"").match(/^INV-(\d+)$/);
+  if(m)hi=Math.max(hi,+m[1]);});
+ if((+D.invNo||0)>hi+1)hi=(+D.invNo)-1;
+ return "INV-"+(hi+1);
+}
+function nextInvNo(){
+ let hi=1000;
+ (D.jobs||[]).forEach(j=>{const m=String(j.invNo||"").match(/^INV-(\d+)$/);
+  if(m)hi=Math.max(hi,+m[1]);});
+ if((+D.invNo||0)>hi+1)hi=(+D.invNo)-1;     /* respect a manually raised counter */
+ D.invNo=hi+2;                               /* keep the legacy counter ahead */
+ return "INV-"+(hi+1);
+}
+/* One-time repair of the damage the counter already did.
+   - Duplicates: the EARLIEST invoice keeps its number (that's the one that
+     was really issued first); later holders are renumbered, with a note on
+     the job recording what changed — these numbers may be on paper somewhere.
+   - Jobs in pre-invoice states (Waiting/Estimating/Lost) carrying an invoice
+     number: an un-issued invoice on a job that was moved back is a phantom —
+     the number is freed and noted. Custom numbers (GDCon-…) are never touched. */
+function fixInvoiceDupes(){
+ if(D.invFixV1)return;
+ const note=(j,t)=>D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:true,
+  created:new Date().toISOString(),text:t});
+ let n=0;
+ /* free phantoms first so their numbers can be reissued honestly */
+ (D.jobs||[]).forEach(j=>{
+  if(j.invNo&&/^INV-\d+$/.test(j.invNo)&&["Waiting","Estimating","Lost"].includes(j.status)){
+   note(j,"[Invoice repair] Removed "+j.invNo+(j.invDate?" dated "+j.invDate:"")+
+    " — this job is "+j.status+" and was never validly invoiced under that number.");
+   delete j.invNo;delete j.invDate;n++;
+  }
+ });
+ /* then renumber duplicate survivors, earliest keeps */
+ const byNo={};
+ (D.jobs||[]).forEach(j=>{if(j.invNo&&/^INV-\d+$/.test(j.invNo))(byNo[j.invNo]=byNo[j.invNo]||[]).push(j);});
+ Object.values(byNo).forEach(list=>{
+  if(list.length<2)return;
+  list.sort((a,b)=>String(a.invDate||"9999").localeCompare(String(b.invDate||"9999")));
+  list.slice(1).forEach(j=>{
+   const old=j.invNo;j.invNo=nextInvNo();
+   note(j,"[Invoice repair] Renumbered "+old+" → "+j.invNo+
+    " — "+old+" was also issued to another job. If a copy went out under "+old+", reissue it.");
+   n++;
+  });
+ });
+ D.invFixV1=new Date().toISOString();
+ if(n){save();console.log("invoice repair:",n,"records");}else save();
+}
 function moveJob(id,to){
  const j=job(id);if(!j||j.status===to)return render();
  if((to==="Complete"||to==="Invoiced")&&!j.total&&!onRetainer(j)){toast("Add the estimate total");return newJob(id);}
  const from=j.status;
  j.status=to;
+ /* Moving an invoiced job back to a pre-invoice stage used to leave the
+    invoice number and date stuck on it — a Waiting job carrying INV-1003 is
+    how the board ends up in impossible states. The number is freed and the
+    change recorded; re-invoicing issues a fresh number. */
+ if(from==="Invoiced"&&["Waiting","Estimating"].includes(to)&&j.invNo){
+  D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:true,created:new Date().toISOString(),
+   text:"[Invoice withdrawn] "+j.invNo+(j.invDate?" dated "+j.invDate:"")+
+   " — moved back to "+to+". If a copy already went out, tell them it's superseded."});
+  delete j.invNo;delete j.invDate;
+ }
  if(to==="Complete"&&!j.readyDate)j.readyDate=today();
- if(to==="Invoiced"){if(!j.invNo){j.invNo="INV-"+D.invNo;D.invNo++;}if(!j.invDate)j.invDate=today();}
+ if(to==="Invoiced"){if(!j.invNo)j.invNo=nextInvNo();if(!j.invDate)j.invDate=today();}
  if(to==="Paid"){
   j.paidDate=today();
   /* the amount was never written on the way to Paid, so collected history read
@@ -5783,12 +5922,34 @@ function toggleTimer(id){const j=job(id);if(!j)return;
 function addTime(id){const j=job(id);
  sheet("Time on this estimate",`
   <p class="sm dim" style="margin:0 0 20px">Logged so far: <b>${dur(jobMin(j))}</b></p>
-  <label><span class="t">Set total time <em>hours and minutes</em></span>
+  <div class="lab" style="margin-bottom:8px">Forgot the timer? Log the session</div>
+  <p class="xs dim" style="margin:0 0 12px">You know when you started and finished — enter that, the math is mine.</p>
+  <div class="row" style="gap:10px;align-items:center;margin-bottom:6px">
+   <input class="in" id="tfrom" type="time" style="margin:0" aria-label="started at">
+   <span class="dim">to</span>
+   <input class="in" id="tto" type="time" style="margin:0" aria-label="finished at"></div>
+  <button class="btn sec" style="margin:0 0 22px" onclick="addSession('${id}')">＋ Add this session</button>
+  <label><span class="t">Or set the total <em>hours and minutes</em></span>
    <div class="row" style="gap:10px">
     <input class="in" id="th" type="number" min="0" placeholder="hrs" value="${Math.floor(jobMin(j)/60)||""}">
     <input class="in" id="tm" type="number" min="0" max="59" placeholder="min" value="${jobMin(j)%60||""}"></div></label>
-  <button class="btn" onclick="saveTime('${id}')">Save</button>
+  <button class="btn" onclick="saveTime('${id}')">Save total</button>
   <button class="btn warn" onclick="resetTime('${id}')">Reset to zero</button>`);}
+function addSession(id){
+ const j=job(id);if(!j)return;
+ const a=$("#tfrom")?$("#tfrom").value:"",b=$("#tto")?$("#tto").value:"";
+ if(!a||!b){toast("Both times — start and finish");return;}
+ let d=mins(b)-mins(a);
+ if(d<0)d+=1440;                       /* finished after midnight */
+ if(d===0){toast("That's zero minutes");return;}
+ if(d>16*60){toast("That's over 16 hours — check the times");return;}
+ j.timeMin=(+j.timeMin||0)+d;
+ /* the session is EVIDENCE — it defends the assessment fee — so it goes in
+    the daybook with its times, not just into a silent total */
+ D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),
+  text:"[Time] "+dur(d)+" logged by hand — "+h12(a)+" to "+h12(b)});
+ save();close_();render();toast(dur(d)+" added — "+dur(jobMin(j))+" total");
+}
 function saveTime(id){const j=job(id);
  j.timeMin=(+$("#th").value||0)*60+(+$("#tm").value||0);j.timerAt=null;
  save();close_();render();toast("Time saved");}
@@ -6240,7 +6401,7 @@ function setPctFor(id,v){const j=job(id);j.feePct=+v||0;
  if(j.feeMode==="flat")j.feeMode="pct";save();render();toast(j.feePct+"%");}
 
 function invText(j){
- const f=fee(j),me=D.me,no=j.invNo||("INV-"+D.invNo),L=[];
+ const f=fee(j),me=D.me,no=j.invNo||peekInvNo(),L=[];
  L.push(`INVOICE ${no}`);
  L.push(`Date: ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`);
  L.push("");
@@ -6322,7 +6483,7 @@ const myLogo=()=>D.me.logo||LOGO_DEFAULT;
 const printLogo=()=>D.me.logo||LOGO_PRINT;
 function invoiceHTML(j){
  const f=fee(j),me=D.me,B=billParty(j);
- const no=j.invNo||("INV-"+D.invNo);
+ const no=j.invNo||peekInvNo();
  const dateStr=new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
  const desc=f.kind==="flat"?`Insurance estimate preparation & claim scope — flat fee`
   :f.kind==="hourly"?`Insurance estimate preparation & claim scope — ${dur(f.mins)} at ${money0(f.hourRate)}/hr`
@@ -6403,7 +6564,7 @@ function invoiceFileName(j){
 }
 async function printInvoice(id){
  const j=job(id);
- if(!j.invNo){j.invNo="INV-"+D.invNo;D.invNo++;j.invDate=today();
+ if(!j.invNo){j.invNo=nextInvNo();j.invDate=today();
   if(j.status==="Complete")j.status="Invoiced";save();}
  _logoForPrint=await cleanPrintLogo();   /* the mark, frame cropped, tile erased */
  document.getElementById("printarea").innerHTML=invoiceHTML(j);
@@ -6421,7 +6582,7 @@ function previewPDF(id){const j=job(id);
    max-height:52vh;overflow:auto;font:11px/1.4 Georgia,serif">
    <div style="text-align:center;margin-bottom:12px;font:bold 15px Georgia,serif;letter-spacing:.14em">CHAIRMAN</div>
    <div style="font-weight:700;font-size:14px;text-align:center">${esc(D.me.biz||"Chairman Remodeling")}</div>
-   <div style="text-align:center;font-size:10px;color:#555;margin-bottom:14px">INVOICE ${esc(job(id).invNo||"INV-"+D.invNo)}</div>
+   <div style="text-align:center;font-size:10px;color:#555;margin-bottom:14px">INVOICE ${esc(job(id).invNo||peekInvNo())}</div>
    <div style="display:flex;justify-content:space-between;border-top:1px solid #000;border-bottom:1px solid #000;padding:8px 0;font-weight:700">
     <span>${esc(billParty(j).name)}</span><span>${money(fee(j).over||fee(j).due)}</span></div>
    ${D.me.payInfo?`<div style="margin-top:12px;border:1px solid #000;padding:8px;white-space:pre-wrap;font-size:10px">${esc(D.me.payInfo)}</div>`
@@ -6441,7 +6602,7 @@ function sendInv(id){
  const j=job(id),to=($("#toEm")?.value||billParty(j).email||"").trim();
  if(to){if(billParty(j).isC)j.contractorEmail=to;else{j.ownerEmail=to;j.email=to;}}
  const t=invText(j);
- if(!j.invNo){j.invNo="INV-"+D.invNo;D.invNo++;}
+ if(!j.invNo)j.invNo=nextInvNo();
  j.invDate=today();j.status="Invoiced";save();
  location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(t.subj)}&body=${encodeURIComponent(t.body)}`;
  setTimeout(()=>{toast("Invoice logged");go("job",{id});},600);
@@ -8704,7 +8865,7 @@ function adoptStored(){
 window.addEventListener("storage",e=>{if(e.key===K)adoptStored();});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)adoptStored();});
 migrate();
-openIDB().then(()=>{fixClockDays();seedDeals();go("today")});
+openIDB().then(()=>{fixClockDays();fixInvoiceDupes();compactHist();seedDeals();go("today")});
 </script>
 </body>
 </html>

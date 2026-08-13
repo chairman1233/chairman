@@ -1,1 +1,33 @@
 PASS — 1 inline script(s) parse clean.
+dense rows: 12  (legacy collapsible sections: 0)
+field ids found: 42
+PASS — no duplicate ids in newJob().
+file                                            kind       matched    want      score  verdict
+----------------------------------------------------------------------------------------------------
+GARY_BYRD_FINAL_DRAFT_CON.pdf                   Estimate   —          —         0      ok (no match)
+TONKAWA_FINAL_DRAFT_CON.pdf                     Estimate   jennifer   jennifer  28     ok
+TONKAWA_CUSTOMER_TOTAL_AMOUNT_CON.pdf           Totals     jennifer   jennifer  28     ok
+OAKWILD_FINAL_DRAFT_CON.pdf                     Estimate   —          —         0      ok (no match)
+BONNER_FINAL_DRAFT_CON.pdf                      Estimate   brenda     brenda    28     ok
+BONNER_CUSTOMER_TOTAL_AMOUNT_CON.pdf            Totals     brenda     brenda    28     ok
+10935_PECAN_REBUILD_CUSTOMER_TOTAL_AMOUNT_CON.  Totals     —          —         0      ok (no match)
+10935_PECAN_DR_FINAL_DRAFT_CON.pdf              Estimate   —          —         0      ok (no match)
+GARY_BYRD_CUSTOMER_TOTAL_AMOUNT_CON.pdf         Totals     —          —         0      ok (no match)
+THE_VOYAGER_FINAL_DRAFT_CON.pdf                 Estimate   —          —         0      ok (no match)
+GIBSON__FINAL_DRAFT_CON.pdf                     Estimate   —          —         0      ok (no match)
+521_WINBURN_FINAL_DRAFT_CON.pdf                 Estimate   —          —         0      ok (no match)
+2002_WOODFORD_GREENC_FINAL_DRAFT_CON.pdf        Estimate   —          —         0      ok (no match)
+1003 Claxton Street, Houston, TX - Final Estim  Estimate   —          —         0      ok (no match)
+107 Glynn Way Dr, Houston - Final Estimate.pdf  Estimate   —          —         0      ok (no match)
+107_GLYNN_WAY_DR_CUSTOMER_TOTAL_AMOUNT_CON.pdf  Totals     —          —         0      ok (no match)
+1209 Wisdom Drive, Deer Park, TX - Final Estim  Estimate   —          —         0      ok (no match)
+11008 N L St, La Porte, TX (Recon) - Final Est  Estimate   —          —         0      ok (no match)
+ELLIOT_ST_77023-1_FINAL_DRAFT_CON.pdf           Estimate   —          —         0      ok (no match)
+4235_LAKEWOOD_DR_FINAL_DRAFT_CON.pdf            Estimate   carmen     carmen    88     ok
+105_GLYNN_WAY_DR_CUSTOMER_TOTAL_AMOUNT_CON.pdf  Totals     rains1     rains     88     ok
+1807_WOODED_ACRES_FINAL_DRAFT_CON.pdf           Estimate   cokie1     cokie     116    ok
+3126_BONNER_ST_CUSTOMER_TOTAL_AMOUNT_CON.pdf    Totals     brenda     brenda    88     ok
+Carmen Hernandez Mitigation Estimate.pdf        Estimate   carmen     carmen    60     ok
+----------------------------------------------------------------------------------------------------
+ok 24 · missed 0 · WRONG 0
+PASS — no misfiles, no misses.
