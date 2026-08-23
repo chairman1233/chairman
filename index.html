@@ -1022,7 +1022,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-158 · the briefing — one place, one read";
+const BUILD="C-159 · one number, everywhere";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4506,8 +4506,8 @@ function nutStats(ym){
  ym=ym||ymNow();
  const target=nutTotal(),amt=+NUT().pay.amount||0;
  const cash=+NUT().cash||0;
- const fees=D.jobs.filter(j=>j.paidDate&&String(j.paidDate).slice(0,7)===ym)
-  .reduce((n,j)=>n+fee(j).gross,0);
+ const fees=D.jobs.filter(j=>j.paidDate&&String(j.paidDate).slice(0,7)===ym&&!sealed(j))
+  .reduce((n,j)=>n+fee(j).gross,0);   /* sealed case money lives on Disputes, not in the month */
  const covered=cash+fees;
  const gap=Math.max(0,target-covered);
  const days=nutPaydays(ym);
@@ -4786,7 +4786,7 @@ function brfItems(){
     ?`<b>${esc(jobName(j))}</b> — ${esc(x.label.toLowerCase())} · ${esc(x.why)}`
     :`<b>${esc(jobName(j))} — ${esc(x.label.toLowerCase())}</b> — due today`;
    items.push({tone,html:line,
-    act:x.kind==="none"?"SET":fl?fl.l.split("—")[0].trim().toUpperCase().slice(0,9):"OPEN",
+    act:x.kind==="none"?"SET":fl?(w=>w.length>14?"DO IT":w)(fl.l.split("—")[0].trim().toUpperCase()):"OPEN",
     fn:x.kind==="none"?`setNextSheet('${j.id}')`:fl?fl.fn:`go('job',{id:'${j.id}'})`});
   });
  return items;
