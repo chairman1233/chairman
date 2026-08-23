@@ -252,6 +252,14 @@ for (const [k, amt, n] of BUCKETS) {
       + `${Math.round(amt)}/${n}`.padEnd(14) + `${Math.round(got.amt)}/${got.n}   <-- FAIL`);
   }
 }
+/* sealed case money must not appear in any bucket — it lives on Disputes */
+ctx.D.jobs.push({ id: "sealedpaid", status: "Paid", total: 89305.05, feeMode: "aftersubs",
+  feePct: 10, paidDate: "2026-08-09", sealed: true, subs: [], subCosts: {}, extras: [], payments: [] });
+const M2 = JSON.parse(ctx.__money());
+if (Math.round(M2.banked.amt) !== Math.round(M.banked.amt)) {
+  failed++;
+  console.log("a SEALED Paid job leaked into banked   <-- FAIL");
+}
 /* the defect this engine exists to prevent */
 if (M.collectable.amt >= M.contested.amt) {
   failed++;

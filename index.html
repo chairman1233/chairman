@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-156 · sealed cases, one door";
+const BUILD="C-157 · sealed means the money too";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1361,6 +1361,7 @@ function MONEY(){
  MONEY_STATES.forEach(k=>b[k]={jobs:[],n:0,amt:0});
  b.lost={jobs:[],n:0,amt:0};
  (D.jobs||[]).forEach(j=>{
+  if(sealed(j))return;   /* case-world money lives on the Disputes screen only */
   const s=moneyState(j),f=fee(j);
   /* banked is what he actually received; everything else is what's still owed */
   const amt=s==="banked"?f.gross:s==="covered"?f.wouldBe:f.due;
@@ -4664,7 +4665,7 @@ function moneyBandHTML(){
    <div class="mband-r">
     <div class="mband-k">Collectable</div>
     <div class="mband-c money">${money0(M.collectable.amt)}</div>
-    ${M.contested.amt?`<div class="mband-s v-late">${money0(M.contested.amt)} with the attorney — not counted</div>`:""}
+    ${(typeof openDisputes==="function"&&openDisputes().length)?`<div class="mband-s v-late">${money0(sum(openDisputes(),j=>fee(j).due))} with the attorney — not counted</div>`:""}
    </div>
   </div>
   ${owes.length?`<div class="mlad">${owes.map(o=>{
