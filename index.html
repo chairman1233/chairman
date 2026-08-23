@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-150 · contracts from the company page";
+const BUILD="C-151 · the address is in the filename";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6652,11 +6652,13 @@ function invoiceHTML(j){
 }
 /* Chrome names a Save-as-PDF after document.title, so the file was always
    "Chairman.pdf". Swap in a real filename for the duration of the print. */
-const safeFile=s=>String(s||"").replace(/[\\/:*?"<>|]+/g,"").replace(/\s+/g," ").trim().slice(0,60);
+const safeFile=s=>String(s||"").replace(/[\\/:*?"<>|]+/g,"").replace(/\s+/g," ").trim().slice(0,100);
 function invoiceFileName(j){
  const who=safeFile(billParty(j).name||jobName(j));
  const when=(j.invDate||today());
- return safeFile([j.invNo||"Invoice",who,when].filter(Boolean).join(" — "));
+ /* the property in the name — three jobs can share one payer, and at eight
+    a week "INV-1009 — Green Dynasty" says nothing about WHICH house */
+ return safeFile([j.invNo||"Invoice",who,shortAddr(j.address)||"",when].filter(Boolean).join(" — "));
 }
 /* ================= THE CONTRACT =========================================
    The Estimating Services Agreement, generated per company from its profile.
@@ -6771,7 +6773,7 @@ async function printContract(acctId){
  document.getElementById("printarea").innerHTML=contractHTML(a,opts);
  close_();
  const was=document.title;
- document.title=safeFile("Estimating Agreement — "+opts.name+" — "+today());
+ document.title=safeFile(["Estimating Agreement",opts.name,opts.addr?shortAddr(opts.addr):"",today()].filter(Boolean).join(" — "));
  setTimeout(()=>{window.print();setTimeout(()=>{document.title=was;render();},600);},120);
 }
 async function printInvoice(id){
