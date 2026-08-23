@@ -83,8 +83,20 @@ const REMOTE=[{user_id:"u1",updated_at:"2026-08-20T10:00:00Z",
   const {ctx,calls}=fresh([]);           /* remote: no rows at all */
   ctx.__setBoard([{id:"first",status:"Estimating"}],Date.now());
   await ctx.__pull();                    /* no rows → seeds via flush */
+  await new Promise(r=>setTimeout(r,25)); /* the flush now awaits a pre-check GET —
+                                             give the real event loop one beat */
   if(calls.pushes<1)fail("first device never seeded an empty cloud");
   else ok("first device with real work still seeds a confirmed-empty cloud");
+ }
+ /* 5a — LAST NIGHT'S CLOBBER: a stale-but-not-empty phone must not flatten
+        a newer cloud. Remote is newer; the push must divert, not overwrite. */
+ {
+  const {ctx,calls}=fresh([{user_id:"u1",updated_at:new Date(Date.now()+60000).toISOString(),
+    data:{jobs:[{id:"new1"},{id:"new2"},{id:"new3"}],notes:[],plans:[],_ts:Date.now()+60000}}]);
+  ctx.__setBoard([{id:"stale1",status:"Paid"}],Date.now()-86400000);   /* yesterday's board */
+  await ctx.__flush();
+  if(calls.pushes>0)fail("a STALE board overwrote a newer cloud — the clobber is back");
+  else ok("a stale board diverts to pull instead of flattening a newer cloud");
  }
  /* 5 — a non-empty board still syncs normally */
  {

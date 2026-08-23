@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-153 · an empty phone can never win";
+const BUILD="C-154 · neither can a stale one";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2676,12 +2676,28 @@ async function flushCloud(){
     board must not overwrite a cloud that has his company on it */
  if(boardIsEmpty(D)&&_remoteHadData!==false)return;
  try{
+  /* THE STALE-PHONE CLOBBER. The empty guards held, but a phone that woke
+     with an old 11-job board wasn't empty — it pushed and flattened a night's
+     work. So the push now LOOKS FIRST: if the cloud row is newer than this
+     board, this device isn't the truth — divert to cloudPull (which adopts,
+     merges, or asks) and let the next flush carry the resolved board. */
+  const chk=await cloudFetch("/rest/v1/boards?select=updated_at");
+  if(chk.ok){
+   const rows=await chk.json();
+   if(rows.length&&new Date(rows[0].updated_at).getTime()>(D._ts||0)+1500){
+    _cloudAt=Date.now();          /* the round trip itself succeeded */
+    cloudPull();
+    return;
+   }
+  }
   const r=await cloudFetch("/rest/v1/boards?on_conflict=user_id",{method:"POST",
    headers:{"content-type":"application/json",Prefer:"resolution=merge-duplicates"},
    body:JSON.stringify({user_id:SESS.user.id,data:D,updated_at:new Date(D._ts||Date.now()).toISOString()})});
-  if(r.ok){_lastSynced=D._ts||Date.now();_cloudAt=Date.now();}
- }catch(e){}
+  if(r.ok){_lastSynced=D._ts||Date.now();_cloudAt=Date.now();_cloudErr="";}
+  else _cloudErr="cloud said "+r.status;
+ }catch(e){_cloudErr=e.message||"network";}
 }
+let _cloudErr="";
 async function cloudPull(){
  if(!cloudCfg()||!signedIn())return;
  /* Never swap the whole board out from under an open form. The job being
@@ -2692,6 +2708,7 @@ async function cloudPull(){
   const r=await cloudFetch("/rest/v1/boards?select=data,updated_at&user_id=eq."+SESS.user.id);
   if(!r.ok)return;
   const rows=await r.json();
+  _cloudAt=Date.now();_cloudErr="";      /* the round trip worked — even a no-op is "in sync" */
   if(!rows.length){_remoteHadData=false;flushCloud();return;}   /* first device seeds the cloud */
   const remote=rows[0],rts=new Date(remote.updated_at).getTime();
   if(!remote.data)return;
@@ -2720,7 +2737,7 @@ async function cloudPull(){
    return;
   }
   adoptRemote(remote.data,rts);
- }catch(e){}
+ }catch(e){_cloudErr=e.message||"network";}
 }
 let _conflictOpen=false;
 /* records that exist here and nowhere in the incoming copy */
@@ -2759,6 +2776,7 @@ let _cloudAt=0;
 function syncChip(){
  if(!cloudCfg())return "";
  if(!signedIn())return `<span class="v-late">· not signed in</span>`;
+ if(_cloudErr)return `<span class="v-late" style="cursor:pointer" title="${esc(_cloudErr)}" onclick="cloudPull();toast('Retrying — '+_cloudErr)">· sync failed — tap to retry</span>`;
  if(!_cloudAt)return `<span class="dim">· syncing…</span>`;
  const m=Math.round((Date.now()-_cloudAt)/60000);
  return `<span class="${m>=5?"v-out":"dim"}">· synced ${m<1?"just now":m+"m ago"}</span>`;
