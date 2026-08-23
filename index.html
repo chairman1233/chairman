@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-154 · neither can a stale one";
+const BUILD="C-155 · the dead stay dead";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2751,13 +2751,24 @@ function onlyHere(local,remote){
  return out;
 }
 /* union by id — this device wins ties, because he is looking at it */
+/* A deletion has to be a FACT that syncs, not an absence a merge can undo.
+   Without tombstones, every merge with an older copy raised the dead — the
+   QA test job came back three times. Deleted ids live in D.tomb for 90 days;
+   the merge unions them from both sides and then filters the dead out. */
+const TOMB_TTL=90*86400000;
+function tomb(id){if(!D.tomb)D.tomb={};D.tomb[id]=Date.now();}
+function tombAlive(t){const now=Date.now(),out={};
+ Object.entries(t||{}).forEach(([id,ts])=>{if(now-ts<TOMB_TTL)out[id]=ts;});
+ return out;}
 function mergeBoards(mine,theirs){
  const out=Object.assign({},JSON.parse(JSON.stringify(BLANK)),theirs);
+ const dead=Object.assign({},tombAlive(theirs&&theirs.tomb),tombAlive(mine&&mine.tomb));
+ out.tomb=dead;
  ["jobs","notes","subs","plans","log","files","accounts","calls"].forEach(k=>{
   const seen=new Map();
   ((theirs&&theirs[k])||[]).forEach(x=>seen.set(x.id,x));
   ((mine&&mine[k])||[]).forEach(x=>seen.set(x.id,x));
-  out[k]=[...seen.values()];
+  out[k]=[...seen.values()].filter(x=>!dead[x.id]);
  });
  return out;
 }
@@ -5500,6 +5511,7 @@ function delJob(id){const j=job(id);
   D.files=D.files.filter(x=>x.jobId!==id);
   D.notes=D.notes.filter(x=>x.jobId!==id);
   D.jobs=D.jobs.filter(x=>x.id!==id);if(D.last===id)D.last=null;
+  tomb(id);                     /* so no merge with an older copy revives it */
   save();close_();go("jobs");toast("Deleted");});}
 
 /* ================= JOB ================= */
