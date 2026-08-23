@@ -667,7 +667,7 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .mband-r{text-align:right;flex:none}
 .mband-c{font:400 clamp(21px,3.1vw,29px)/1.1 var(--serif);color:var(--ink);margin:6px 0 3px}
 .mlad{margin-top:16px;border-top:1px solid var(--rule)}
-.mlad-r{display:grid;grid-template-columns:8px minmax(120px,1.1fr) 74px 108px minmax(0,1fr);
+.mlad-r{display:grid;grid-template-columns:8px minmax(120px,1.1fr) 74px 108px minmax(0,1fr) auto;
  gap:11px;align-items:center;padding:9px 0;border-bottom:1px solid var(--rule)}
 .mlad-r:last-child{border-bottom:0}
 .mlad-b{width:8px;height:8px;border-radius:2px;background:var(--mt)}
@@ -678,7 +678,7 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
  text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:700px){
  .mband-hd{flex-direction:column;gap:10px}.mband-r{text-align:left}
- .mlad-r{grid-template-columns:8px 1fr auto;gap:9px}
+ .mlad-r{grid-template-columns:8px 1fr auto auto;gap:9px}
  .mlad-n,.mlad-w{display:none}
 }
 
@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-145 · six fixes, one push";
+const BUILD="C-146 · the dashboard says who";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4568,42 +4568,67 @@ function saveNut(){const n=NUT();
    he can act on fastest. Finished-but-uninvoiced beats everything: the work is
    already done, there is nothing to negotiate, and it is the shortest path
    between him and the nut. */
-const MBANDS=[
- ["unbilled","rdy","Finished, not billed","invoice it today"],
- ["late","late","Past due","chase it"],
- ["sent","out","Out, inside terms","nothing to do yet"],
- ["working","est","Being estimated","not earned yet"],
- ["contested","late","Contested","a case, not a receivable"],
- ["banked","paid","Collected","in the account"],
- ["covered","est","Retainer work","covered — never invoiced"]
-];
+/* ---- who owes you ------------------------------------------------------
+   "Finished, not billed · $6,092" is a number; the question at 7am is a NAME.
+   Group every collectable dollar by the party who pays it — Bobby, Nick,
+   whoever — with the amount, how long it's been sitting, and the one action
+   that moves it. The bucket totals still exist on the Money screen; the
+   dashboard leads with people. */
+function whoOwes(){
+ const by={};
+ (D.jobs||[]).forEach(j=>{
+  const s=moneyState(j);
+  if(!["late","sent","unbilled"].includes(s))return;
+  const who=billParty(j).name||"—";
+  const b=by[who]=by[who]||{name:who,amt:0,jobs:[],worst:"sent",oldest:0};
+  b.amt+=fee(j).due;b.jobs.push({j,s});
+  const age=s==="unbilled"?(j.readyDate?Math.max(0,Math.round((new Date(today())-new Date(j.readyDate))/864e5)):0)
+                          :(j.invDate?(ago(j.invDate)||0):0);
+  if(age>b.oldest)b.oldest=age;
+  if(s==="late")b.worst="late";
+  else if(s==="unbilled"&&b.worst!=="late")b.worst="unbilled";
+ });
+ return Object.values(by).sort((a,b)=>b.amt-a.amt);
+}
+const OWE_TONE={late:"late",unbilled:"rdy",sent:"out"};
+const OWE_WORD={late:"past due",unbilled:"needs an invoice",sent:"invoiced, waiting"};
 function moneyBandHTML(){
  const M=MONEY(), h=moneyHeadline();
- const nut=(typeof nutState==="function")?nutState():null;
- const rows=MBANDS.filter(([k])=>M[k]&&M[k].n>0);
+ const owes=whoOwes();
  return `<div class="mband">
   <div class="mband-hd" onclick="go('money')">
    <div>
-    <div class="mband-k">Where you stand</div>
-    <div class="mband-n v-${h.k==="unbilled"?"rdy":h.k==="late"?"late":h.k==="contested"?"late":"est"}">${esc(h.line)}</div>
-    <div class="mband-s">${esc(h.sub)}</div>
+    <div class="mband-k">Who owes you</div>
+    <div class="mband-n v-${h.k==="unbilled"?"rdy":h.k==="late"?"late":h.k==="contested"?"late":"est"}">${
+      owes.length?esc(owes[0].name)+" — "+money0(owes[0].amt):esc(h.line)}</div>
+    <div class="mband-s">${owes.length?esc(OWE_WORD[owes[0].worst])+(owes[0].oldest?" · "+plural(owes[0].oldest,"day"):""):esc(h.sub)}</div>
    </div>
    <div class="mband-r">
     <div class="mband-k">Collectable</div>
     <div class="mband-c money">${money0(M.collectable.amt)}</div>
-    ${M.contested.amt?`<div class="mband-s v-late">${money0(M.contested.amt)} contested, excluded</div>`:""}
+    ${M.contested.amt?`<div class="mband-s v-late">${money0(M.contested.amt)} with the attorney — not counted</div>`:""}
    </div>
   </div>
-  ${rows.length?`<div class="mlad">${rows.map(([k,c,label,note])=>`
-   <div class="mlad-r" style="--mt:var(--c-${c})">
-    <span class="mlad-b"></span>
-    <span class="mlad-l">${label}</span>
-    <span class="mlad-n">${plural(M[k].n,"job")}</span>
-    <span class="mlad-a money v-${c}">${money0(M[k].amt)}</span>
-    <span class="mlad-w">${note}</span>
-   </div>`).join("")}</div>`:""}
-  ${M.unbilled.n?`<button class="btn" style="margin-top:14px;background:var(--c-rdy);border-color:var(--c-rdy);color:var(--paper)"
-    onclick="go('invoice',{id:'${M.unbilled.jobs[0].id}'})">Invoice ${esc(jobName(M.unbilled.jobs[0]))} — ${money0(fee(M.unbilled.jobs[0]).due)} →</button>`:""}
+  ${owes.length?`<div class="mlad">${owes.map(o=>{
+    const c=OWE_TONE[o.worst];
+    const first=o.jobs.find(x=>x.s==="unbilled")||o.jobs[0];
+    const act=first.s==="unbilled"
+      ?`<button class="qgo" style="--qg:var(--c-rdy)" onclick="event.stopPropagation();go('invoice',{id:'${first.j.id}'})">Invoice</button>`
+      :first.s==="late"
+      ?`<button class="qgo" style="--qg:var(--c-late)" onclick="event.stopPropagation();chaseInv('${first.j.id}')">Chase</button>`
+      :`<button class="qgo" onclick="event.stopPropagation();go('job',{id:'${first.j.id}'})">Open</button>`;
+    return `<div class="mlad-r" style="--mt:var(--c-${c});cursor:pointer" onclick="go('job',{id:'${first.j.id}'})">
+     <span class="mlad-b"></span>
+     <span class="mlad-l">${esc(o.name)}</span>
+     <span class="mlad-n">${plural(o.jobs.length,"job")}${o.oldest?" · "+o.oldest+"d":""}</span>
+     <span class="mlad-a money v-${c}">${money0(o.amt)}</span>
+     <span class="mlad-w">${OWE_WORD[o.worst]}</span>
+     <span style="flex:none">${act}</span>
+    </div>`;}).join("")}</div>`
+   :`<p class="sm dim" style="margin:14px 0 0">Nobody owes you right now. ${M.working.n?plural(M.working.n,"job")+" being estimated — "+money0(M.working.amt)+" on the way.":""}</p>`}
+  ${(M.working.n||M.banked.amt)?`<div class="mband-s" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--rule)">
+    ${M.working.n?"In the works: "+plural(M.working.n,"job")+" · "+money0(M.working.amt):""}
+    ${M.working.n&&M.banked.amt?" &nbsp;·&nbsp; ":""}${M.banked.amt?"Collected: "+money0(M.banked.amt):""}</div>`:""}
  </div>`;
 }
 /* ---- band three: what's stuck and who's holding it ----------------------
@@ -4622,16 +4647,20 @@ function stuckHTML(){
     <span class="qsub">${esc(shortAddr(j.address)||"")}</span></div>
    <div class="qc-n">${esc((j.loss||"")+(j.contractor?" · "+j.contractor:""))}</div>
    <div class="qc-d money">${money0(fee(j).due)}</div>
-   <div class="qc-a"><button class="qgo" onclick="${tone==="late"?`go('disputes')`:`qSched('${j.id}')`}">${
-     tone==="late"?"Open the case":"Check on it"}</button></div>
+   <div class="qc-a"><button class="qgo" onclick="qSched('${j.id}')">Check on it</button></div>
   </div>`;
- return `<div class="row between" style="margin:22px 0 8px;align-items:baseline">
+ /* Cases live with the attorney now — Bobby's handling both, Benny is waiting
+    on updates, and two crimson rows every morning is pressure with no action
+    attached. They compress to one quiet line; the Disputes screen and the
+    money quarantine still hold them in full. */
+ return `${wait.length?`<div class="row between" style="margin:22px 0 8px;align-items:baseline">
    <div class="lab">◈ Stuck — not yours to move</div>
-   <span class="xs dim">${plural(disp.length+wait.length,"job")}</span></div>
+   <span class="xs dim">${plural(wait.length,"job")}</span></div>
   <div class="qtab">
-   ${disp.map(j=>row(j,"late","CONTESTED",j.disputeStage||"in dispute")).join("")}
    ${wait.map(j=>row(j,"lost","WAITING",j.waitingOn||"not ready yet")).join("")}
-  </div>`;
+  </div>`:""}
+  ${disp.length?`<div class="mband-s" style="margin:14px 0 0;cursor:pointer" onclick="go('disputes')">
+   ⚖ ${plural(disp.length,"case")} with the attorney · ${money0(sum(disp,j=>fee(j).due))} — Disputes ›</div>`:""}`;
 }
 R.today=()=>{
  const t=today();
