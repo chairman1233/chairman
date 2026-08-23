@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-152 · a status page with no money on it";
+const BUILD="C-153 · an empty phone can never win";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -2669,8 +2669,12 @@ async function cloudFetch(path,opts={},retry=true){
 let _pushT=null,_lastSynced=0;
 function cloudDirty(){if(!cloudCfg()||!signedIn())return;
  clearTimeout(_pushT);_pushT=setTimeout(flushCloud,1500);}
+let _remoteHadData=null;   /* null = never checked; empty pushes need a confirmed-empty cloud */
 async function flushCloud(){
  if(!cloudCfg()||!signedIn())return;
+ /* the other half of the empty-phone bug: even if the pull is late, an empty
+    board must not overwrite a cloud that has his company on it */
+ if(boardIsEmpty(D)&&_remoteHadData!==false)return;
  try{
   const r=await cloudFetch("/rest/v1/boards?on_conflict=user_id",{method:"POST",
    headers:{"content-type":"application/json",Prefer:"resolution=merge-duplicates"},
@@ -2688,7 +2692,7 @@ async function cloudPull(){
   const r=await cloudFetch("/rest/v1/boards?select=data,updated_at&user_id=eq."+SESS.user.id);
   if(!r.ok)return;
   const rows=await r.json();
-  if(!rows.length){flushCloud();return;}          /* first device seeds the cloud */
+  if(!rows.length){_remoteHadData=false;flushCloud();return;}   /* first device seeds the cloud */
   const remote=rows[0],rts=new Date(remote.updated_at).getTime();
   if(!remote.data)return;
   /* An empty cloud copy must never wipe a board that has real work on it —
@@ -2696,6 +2700,11 @@ async function cloudPull(){
      NEWER, it was a deliberate delete, and a stale tab must not resurrect
      what was cleared somewhere else. */
   if(boardIsEmpty(remote.data)&&!boardIsEmpty(D)&&(D._ts||0)>rts){flushCloud();return;}
+  /* An empty local board never argues with a cloud that has real work.
+     Timestamps only arbitrate between two boards that both have content —
+     an evicted phone minting a fresh _ts on blankness is not "newer". */
+  if(boardIsEmpty(D)&&!boardIsEmpty(remote.data)){_remoteHadData=true;adoptRemote(remote.data,rts);return;}
+  _remoteHadData=!boardIsEmpty(remote.data);
   /* Small clock differences between devices should not cause a fight. */
   if(rts<=(D._ts||0)+1500)return;
 
@@ -2835,7 +2844,16 @@ async function doAuth(){
    ?await authCall("token?grant_type=password",{email:em,password:pw})
    :await authCall("signup",{email:em,password:pw});
   if(!d.access_token){err.textContent="Account created — check your email to confirm, then sign in.";_authMode="in";return;}
-  saveSess(d);D.cloudSkip=false;save();
+  saveSess(d);D.cloudSkip=false;
+  /* THE EMPTY-PHONE BUG. save() stamps a fresh _ts on this device's board —
+     and on a phone whose storage iOS just evicted, that board is BLANK. The
+     pull then compared timestamps, decided the blank board was "newer" than
+     the cloud, refused to adopt, and flushCloud pushed the emptiness UP.
+     He signed in and watched his company vanish. A blank board must never
+     out-timestamp anything: zero its clock before saving, pull before any
+     flush, and let the flush guard below refuse to publish emptiness. */
+  if(boardIsEmpty(D))D._ts=0;
+  save();
   err.textContent="";
   await cloudPull();flushCloud();render();toast("Signed in");
  }catch(e2){err.textContent=e2.message;}
