@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-151 · the address is in the filename";
+const BUILD="C-152 · a status page with no money on it";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5486,8 +5486,85 @@ function jobActionBar(j){
   ${act(FICON.Estimate,"Estimate",fTint("Estimate"),`pickFiles('${j.id}','Estimate')`,true)}
   ${act(FICON.Contract,"Contract",fTint("Contract"),`pickFiles('${j.id}','Contract')`,true)}
   ${act("✎","Note","var(--c-rdy)",`addNote('${j.id}')`,true)}
+  ${act("⎙","Status","var(--c-est)",`statusSheet('${j.id}')`,true)}
   ${act("▤","Bill","var(--c-paid)",`go('invoice',{id:'${j.id}'})`,true)}
  </div>`;
+}
+/* ================= CLIENT STATUS UPDATE ================================
+   A one-page "where your job stands" PDF for the client or the contractor's
+   homeowner. NO MONEY ON IT — no fee, no total, no invoice state. Money-
+   smelling notes are excluded from the pick list entirely rather than merely
+   unchecked, because the failure mode is his thumb slipping at 9pm. */
+const MONEYISH=/\$|fee|invoice|paid|owe|retainer|deal|rate|%|zelle|deposit|refund/i;
+function statusSheet(jobId){
+ const j=job(jobId);if(!j)return;
+ const notes=D.notes.filter(n=>n.jobId===jobId&&!MONEYISH.test(n.text)).slice(0,10);
+ sheet("Status update — "+jobName(j),`
+  <p class="sm dim" style="margin:0 0 16px">One page for the client: where it stands, what's next, and only the
+   notes you tick. Nothing about billing can appear on it.</p>
+  <label><span class="t">Message to them <em>plain words, top of the page</em></span>
+   <textarea class="in" id="stMsg" rows="3">${esc(statusPlainLine(j))}</textarea></label>
+  <label><span class="t">What happens next</span>
+   <input class="in" id="stNext" value="${esc((j.next&&j.next.text)||"")}" placeholder="Waiting on the adjuster's response"></label>
+  ${notes.length?`<div class="lab" style="margin:14px 0 6px">Notes to include</div>
+   ${notes.map((n,i)=>`<label class="row" style="gap:9px;padding:7px 0;border-bottom:1px solid var(--rule);cursor:pointer;align-items:flex-start">
+     <input type="checkbox" id="stN${i}" data-note="${esc(n.id)}" style="margin-top:3px">
+     <span class="sm" style="flex:1">${esc(n.text.slice(0,140))}<span class="xs dim"> · ${relTime(n.created)}</span></span></label>`).join("")}`
+   :`<p class="xs dim">No shareable notes on this job — money-related notes never appear here.</p>`}
+  <button class="btn" style="margin-top:16px" onclick="printStatus('${jobId}')">⎙ Print / Save as PDF</button>`);
+}
+function statusPlainLine(j){
+ const ph=phaseOf(j);
+ if(j.status==="Waiting")return "We're scheduled and ready — waiting on "+(j.waitingOn||"the site to be ready")+".";
+ if(ph==="Sketch")return "I've completed the on-site review and the property sketch. The detailed line-item estimate is being written now.";
+ if(ph==="Line items")return "The estimate is being written line by line — the detailed scope is coming together.";
+ if(ph==="Review")return "The estimate is written and in final review.";
+ if(ph==="Done"||["Complete","Invoiced","Paid"].includes(j.status))return "The estimate is complete and has been delivered.";
+ return "Your property is in the estimating queue and work is underway.";
+}
+async function printStatus(jobId){
+ const j=job(jobId);if(!j)return;
+ const msg=$("#stMsg")?$("#stMsg").value.trim():statusPlainLine(j);
+ const nxt=$("#stNext")?$("#stNext").value.trim():"";
+ const picked=[...document.querySelectorAll('[id^="stN"]:checked')].map(el=>el.dataset.note);
+ const notes=D.notes.filter(n=>picked.includes(n.id)&&!MONEYISH.test(n.text));
+ const me=D.me;
+ const dateStr=new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+ const H=t=>`<div style="font:bold 10.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;margin:14pt 0 5pt;border-bottom:1pt solid #1B1B1E;padding-bottom:2pt">${t}</div>`;
+ const link=(u,l)=>`<a href="${esc(u)}" style="color:#0B5FBF!important;text-decoration:none;border-bottom:.5pt solid #9dbfe6">${esc(l)}</a>`;
+ const links=[];
+ if(j.mportLink)links.push(link(j.mportLink,"Walk the 3D scan of your property"));
+ if(j.ccLink)links.push(link(j.ccLink,"Photo documentation"));
+ _logoForPrint=await cleanPrintLogo();
+ document.getElementById("printarea").innerHTML=`
+ <div style="font-family:Georgia,serif;color:#1B1B1E;max-width:7.2in;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+  <div style="text-align:center">
+   <img src="${esc(_logoForPrint||printLogo())}" style="width:44pt;height:44pt;object-fit:contain" alt="">
+   <div style="font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:4pt;margin-top:5pt">CHAIRMAN REMODELING GROUP</div>
+   <div style="font:7.5pt Helvetica,Arial,sans-serif;letter-spacing:2pt;color:#5A5C60;margin:3pt 0 8pt">ESTIMATING DIVISION &nbsp;·&nbsp; HOUSTON / LA PORTE, TEXAS</div>
+   <div style="border-bottom:1.5pt solid #1B1B1E"></div>
+   <div style="font:bold 17pt Georgia,serif;margin:10pt 0 2pt">Project Status Update</div>
+   <div style="font:10pt Helvetica,Arial,sans-serif;color:#5A5C60">${dateStr}</div>
+  </div>
+  <div style="font:10.5pt/1.7 Georgia,serif;margin-top:10pt">
+   <b>Property:</b> ${esc(j.address||jobName(j))}${j.owner?`<br><b>Prepared for:</b> ${esc(j.owner)}`:""}
+   ${j.insurer?`<br><b>Carrier:</b> ${esc(j.insurer)}${j.claim?" · Claim "+esc(j.claim):""}`:""}
+  </div>
+  ${H("WHERE YOUR PROJECT STANDS")}
+  <div style="font:11pt/1.6 Georgia,serif">${esc(msg)}</div>
+  ${notes.length?H("NOTES YOU SHOULD BE AWARE OF")+notes.map(n=>
+    `<div style="font:10.5pt/1.55 Georgia,serif;margin-bottom:5pt">·&nbsp; ${esc(n.text.replace(/^\[[^\]]*\]\s*/,""))}
+     <span style="font:8.5pt Helvetica,Arial,sans-serif;color:#5A5C60">&nbsp;(${new Date(n.created).toLocaleDateString("en-US",{month:"short",day:"numeric"})})</span></div>`).join(""):""}
+  ${nxt?H("WHAT HAPPENS NEXT")+`<div style="font:11pt/1.6 Georgia,serif">${esc(nxt)}</div>`:""}
+  ${links.length?H("YOUR DOCUMENTATION")+`<div style="font:10.5pt/2 Georgia,serif">${links.join("<br>")}</div>`:""}
+  <div style="text-align:center;font:9pt Helvetica,Arial,sans-serif;color:#555;margin-top:22pt;border-top:.5pt solid #ccc;padding-top:6pt">
+   Questions? Call or text ${esc(me.name||"Benny Mancillas")} — ${esc(me.phone||"713-806-1233")}
+   <span style="color:#999"> · Powered by Chairman Command Center</span></div>
+ </div>`;
+ close_();
+ const was=document.title;
+ document.title=safeFile(["Status",j.owner||billParty(j).name,shortAddr(j.address),today()].filter(Boolean).join(" — "));
+ setTimeout(()=>{window.print();setTimeout(()=>{document.title=was;render();},600);},120);
 }
 /* ---------- job detail disclosure ----------
    The reference block is 25 rows of carrier numbers, links and fee math. It is
