@@ -336,7 +336,7 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  .hd{text-align:center;padding-bottom:12pt;border-bottom:.75pt solid #d5d5d5}
  /* the logo arrives pre-cleaned as a transparent PNG — nothing clever here */
  .hlogo{width:68pt;height:auto}
- .hname{font:bold 15pt Georgia,serif;letter-spacing:.26em;margin-top:7pt}
+
  .htag{font:8.5pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;
   color:#888!important;margin-top:4pt}
  .hfor{text-align:center;padding:13pt 0 10pt}
@@ -349,7 +349,7 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  .hpay{text-align:center}
  .hpay .inv-lab{text-align:center}
  /* his number is the one thing on the page that gets colour */
- .paynum{color:#C4581F!important;font:bold 14pt Inter,Helvetica,Arial,sans-serif;letter-spacing:.01em}
+
  .hsub{font:11.5pt/1.5 Inter,Helvetica,Arial,sans-serif;color:#444!important}
  .hsub2{font:10pt Inter,Helvetica,Arial,sans-serif;color:#777!important;margin-top:4pt}
  .hgrid{display:flex;gap:22pt;margin-top:11pt;align-items:stretch;page-break-inside:avoid}
@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-148 · the invoice he designed, with teeth";
+const BUILD="C-149 · the pink is gone for good";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6603,7 +6603,7 @@ function invoiceHTML(j){
 
   <table style="width:100%;border-collapse:collapse;margin-top:10pt"><tr>
    <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif;width:50%">
-    <b>${esc(me.name||"Benny Mancillas")}</b><br>Independent Estimator<br>
+    <b>${esc(me.name||"Benny Mancillas")}</b><br>Chairman Remodeling Group — Estimating Division<br>
     ${me.phone?"Phone / Zelle: "+esc(me.zelle||me.phone)+"<br>":""}${me.email?"Email: "+esc(me.email):""}</td>
    <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif">
     <b>Bill To:</b><br><b>${esc(B.name)}</b><br>
