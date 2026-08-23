@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-149 · the pink is gone for good";
+const BUILD="C-150 · contracts from the company page";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6658,6 +6658,122 @@ function invoiceFileName(j){
  const when=(j.invDate||today());
  return safeFile([j.invNo||"Invoice",who,when].filter(Boolean).join(" — "));
 }
+/* ================= THE CONTRACT =========================================
+   The Estimating Services Agreement, generated per company from its profile.
+   Rates come off the ACCOUNT (fresh % + supplement %), the address he types
+   lands as the initial Assignment, and Green Dynasty never sees this screen —
+   partners don't get paperwork. Wording is kept in lockstep with the invoice
+   terms: contract, invoice and fee agreement must argue the same principle
+   or the daylight between them becomes the other side's argument. */
+function seedRatesV1(){
+ if(D.ratesV1)return;
+ ACCOUNTS().forEach(a=>{
+  if(/green dynasty/i.test(a.name))return;         /* partners — their own deal */
+  if(a.feePct==null||a.feePct==="")a.feePct=2;
+  if(a.supPct==null)a.supPct=7.5;
+  if(!a.feeMode)a.feeMode="pct";
+ });
+ D.ratesV1=new Date().toISOString();save();
+}
+function contractSheet(acctId){
+ const a=ACCOUNTS().find(x=>x.id===acctId);if(!a)return;
+ sheet("Contract — "+a.name,`
+  <p class="sm dim" style="margin:0 0 16px">Prints the Estimating Services Agreement filled in for this company.
+   One signature covers every job they send until it's replaced.</p>
+  <label><span class="t">Contractor</span><input class="in" id="ctrName" value="${esc(a.name)}"></label>
+  <label><span class="t">Contact / phone</span>
+   <input class="in" id="ctrContact" value="${esc([a.contact,a.phone].filter(Boolean).join(" · "))}"></label>
+  <div class="row" style="gap:10px">
+   <label class="grow"><span class="t">Fresh estimates %</span>
+    <input class="in" id="ctrPct" type="number" step="0.1" value="${a.feePct!=null?a.feePct:2}"></label>
+   <label class="grow"><span class="t">Supplements % of increase</span>
+    <input class="in" id="ctrSup" type="number" step="0.1" value="${a.supPct!=null?a.supPct:7.5}"></label>
+  </div>
+  <label><span class="t">Property address <em>optional — names the first assignment on the contract</em></span>
+   <input class="in" id="ctrAddr" value="" placeholder="5115 Anthony Lane, Pasadena, TX"
+    autocomplete="off" autocorrect="off" spellcheck="false"></label>
+  <button class="btn" onclick="printContract('${a.id}')">⎙ Print / Save as PDF</button>`);
+}
+function contractHTML(a,opts){
+ const me=D.me,mf=mportFees(),sv=+me.siteFee||265,svDay=Math.max(0,sv-15);
+ const S="font-family:Georgia,serif";
+ const dateStr=new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+ const H=t=>`<div style="font:bold 10.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;margin:13pt 0 4pt;border-bottom:1pt solid #1B1B1E;padding-bottom:2pt">${t}</div>`;
+ const P=t=>`<div style="font:10.5pt/1.5 Georgia,serif;margin-bottom:6pt">${t}</div>`;
+ const SUB=(k,t)=>`<div style="font:10.5pt/1.5 Georgia,serif;margin:0 0 4pt 18pt"><b>${k}</b>&nbsp; ${t}</div>`;
+ const row=(k,v)=>`<tr><td style="font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1pt;color:#5A5C60;padding:3pt 10pt 3pt 0;white-space:nowrap;vertical-align:bottom">${k}</td>
+  <td style="font:10.5pt Georgia,serif;padding:3pt 0;border-bottom:.75pt solid #1B1B1E;width:100%">${v||"&nbsp;"}</td></tr>`;
+ return `<div style="${S};color:#1B1B1E;max-width:7.2in;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+  <div style="text-align:center">
+   <img src="${esc(_logoForPrint||printLogo())}" style="width:44pt;height:44pt;object-fit:contain" alt="">
+   <div style="font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:4pt;margin-top:5pt">CHAIRMAN REMODELING GROUP</div>
+   <div style="font:7.5pt Helvetica,Arial,sans-serif;letter-spacing:2pt;color:#5A5C60;margin:3pt 0 8pt">ESTIMATING DIVISION &nbsp;·&nbsp; HOUSTON / LA PORTE, TEXAS</div>
+   <div style="border-bottom:1.5pt solid #1B1B1E"></div>
+   <div style="font:bold 17pt Georgia,serif;margin:10pt 0 8pt">Estimating Services Agreement</div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8pt">
+   ${row("DATE",dateStr)}
+   ${row("CONTRACTOR",esc(opts.name||a.name))}
+   ${row("CONTACT",esc(opts.contact||""))}
+   ${opts.addr?row("FIRST ASSIGNMENT",esc(opts.addr)):""}
+   ${row("ESTIMATOR","Chairman Remodeling Group LLC, through its Estimating Division — "+esc(me.name||"Benny Mancillas")+" · "+esc(me.phone||"713-806-1233"))}
+  </table>
+  ${P(`This Agreement covers estimating work the Contractor assigns to Estimator. Each assigned property is one "Assignment." It is not a construction contract, and it does not make Estimator a party to any agreement between the Contractor and its client.`)}
+  ${H("1 · WHO YOU ARE DEALING WITH")}
+  ${P("Estimator provides professional insurance estimating services only. The Contractor is dealing with the estimating division of Chairman Remodeling Group — not with a competing contractor. On every Assignment, Estimator acts solely as an estimator: the property owner is and remains the Contractor's client, and Estimator will not solicit that client for construction work.")}
+  ${H("2 · SERVICES AND RATE")}
+  ${P("For each Assignment, Estimator prepares a line-item Xactimate estimate and provides a reasonable number of revisions, phone negotiations, and email rebuttals with the carrier. Rates for this Contractor:")}
+  ${SUB("Fresh estimates:",`<b>${esc(String(opts.pct))}%</b> of the estimate total`)}
+  ${SUB("Supplements:",`<b>${esc(String(opts.sup))}%</b> of the increase recovered above the carrier's written baseline — nothing recovered, nothing owed`)}
+  ${SUB("Matterport scan:",`$${mf.s1} single story · $${mf.s2} two story · $${mf.s3} three-plus / large`)}
+  ${H("3 · CANCELLING AN ASSIGNMENT")}
+  ${SUB("(a)","Cancellation is free at any time — unless a site visit has been made, the Matterport scan has been performed, or estimating work has begun.")}
+  ${SUB("(b)","Once any of those has happened, the fee for work actually performed is due on cancellation.")}
+  ${SUB("<b>(c)</b>","<b>If the Matterport scan has been completed before cancellation, the full scan fee for that property is due — regardless of when the cancellation occurs.</b>")}
+  ${P("Cancellation must be in writing — text or email is sufficient — and is effective when received.")}
+  ${H("4 · CARRIER OUTCOME — NON-REFUNDABLE")}
+  ${P("Fees are earned upon delivery of the estimate. They are not contingent on, and are not refundable for, the carrier's approval, denial, reduction, or negotiation of any portion of the claim — including supplements and claims adjusted or negotiated downward.")}
+  ${H("5 · JOB RETENTION — NON-REFUNDABLE")}
+  ${P("Fees pay for estimating services actually rendered. They are not refundable if the Contractor loses, withdraws from, or does not win the underlying job.")}
+  ${H("6 · CLIENT–CONTRACTOR DISPUTES")}
+  ${P("Estimator is not a party to any dispute between the Contractor and the property owner or any other party, and provides no mediation, dispute-resolution, or advocacy services. Fees are independent of any such dispute and its outcome.")}
+  ${H("7 · SITE VISITS AND ADDITIONAL WORK")}
+  ${P(`On-site visits are billed separately at $${sv} per visit ($${svDay} per day for extended site work) unless the rate schedule says otherwise. Work outside the stated scope — extra revisions beyond a reasonable number, additional site visits, extended Matterport storage — is quoted and billed separately before performance.`)}
+  ${H("8 · PAYMENT")}
+  ${P(`Invoices are due upon receipt, by Zelle to ${esc(me.zelle||me.phone||"713-806-1233")}, payable to ${esc(me.name||"Benny Mancillas")}. Matterport files remain available for two weeks after payment, then are permanently deleted; a one-month extension is available for $79 if requested before the window closes.`)}
+  ${H("9 · TEXAS LAW AND ELECTRONIC ACCEPTANCE")}
+  ${P("This Agreement is governed by Texas law; venue lies in Harris County. If any provision is unenforceable, the rest stands. It may be accepted electronically — a signature, an emailed or texted confirmation, or assignment of work after receiving these terms each constitutes acceptance under the Texas Uniform Electronic Transactions Act. This Agreement plus the rate schedule is the entire agreement on estimating services and applies to every Assignment until replaced in writing.")}
+  <table style="width:100%;border-collapse:collapse;margin-top:16pt;page-break-inside:avoid"><tr>
+   <td style="width:48%;vertical-align:top;padding-right:14pt">
+    <div style="border-top:1pt solid #1B1B1E;font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1pt;color:#5A5C60;padding-top:3pt">CONTRACTOR</div>
+    <div style="height:26pt"></div>
+    <div style="border-bottom:1pt solid #1B1B1E"></div>
+    <div style="font:7.5pt Helvetica,Arial,sans-serif;color:#5A5C60;margin-top:2pt">Signature · printed name · date</div></td>
+   <td style="width:48%;vertical-align:top;padding-left:14pt">
+    <div style="border-top:1pt solid #1B1B1E;font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1pt;color:#5A5C60;padding-top:3pt">ESTIMATOR</div>
+    <div style="font:10.5pt Georgia,serif;margin-top:4pt">${esc(me.name||"Benny Mancillas")}</div>
+    <div style="height:12pt"></div>
+    <div style="border-bottom:1pt solid #1B1B1E"></div>
+    <div style="font:7.5pt Helvetica,Arial,sans-serif;color:#5A5C60;margin-top:2pt">Chairman Remodeling Group LLC — Estimating Division</div></td>
+  </tr></table>
+ </div>`;
+}
+async function printContract(acctId){
+ const a=ACCOUNTS().find(x=>x.id===acctId);if(!a)return;
+ const opts={name:$("#ctrName")?$("#ctrName").value.trim():a.name,
+  contact:$("#ctrContact")?$("#ctrContact").value.trim():"",
+  pct:$("#ctrPct")?(+$("#ctrPct").value||2):(a.feePct||2),
+  sup:$("#ctrSup")?(+$("#ctrSup").value||7.5):(a.supPct||7.5),
+  addr:$("#ctrAddr")?$("#ctrAddr").value.trim():""};
+ /* typed rates become the company's rates — the contract IS the record */
+ a.feePct=opts.pct;a.supPct=opts.sup;a.updatedAt=new Date().toISOString();save();
+ _logoForPrint=await cleanPrintLogo();
+ document.getElementById("printarea").innerHTML=contractHTML(a,opts);
+ close_();
+ const was=document.title;
+ document.title=safeFile("Estimating Agreement — "+opts.name+" — "+today());
+ setTimeout(()=>{window.print();setTimeout(()=>{document.title=was;render();},600);},120);
+}
 async function printInvoice(id){
  const j=job(id);
  if(!j.invNo){j.invNo=nextInvNo();j.invDate=today();
@@ -7219,6 +7335,9 @@ R.account=({id})=>{
  <div class="row" style="gap:10px;margin-top:16px;flex-wrap:wrap">
   <button class="btn s" style="margin:0" onclick="newJobForAcct('${a.id}')">+ New job for them</button>
   <button class="btn sec s" style="margin:0" onclick="weeklyUpdate('${a.id}')">⎙ Weekly update</button>
+  ${/green dynasty/i.test(a.name)
+   ?`<span class="chip v-est" title="Partners — no contract needed">◆ Partner</span>`
+   :`<button class="btn sec s" style="margin:0" onclick="contractSheet('${a.id}')">✍ Contract</button>`}
  </div>
  <div class="pan" style="margin-top:20px;border-color:${col}">
   <div class="ln2"><span class="k">Main contact</span><b>${esc(a.contact||"—")}</b></div>
@@ -8961,7 +9080,7 @@ function adoptStored(){
 window.addEventListener("storage",e=>{if(e.key===K)adoptStored();});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)adoptStored();});
 migrate();
-openIDB().then(()=>{fixClockDays();fixInvoiceDupes();compactHist();seedDeals();go("today")});
+openIDB().then(()=>{fixClockDays();fixInvoiceDupes();compactHist();seedRatesV1();seedDeals();go("today")});
 </script>
 </body>
 </html>
