@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-146 · the dashboard says who";
+const BUILD="C-147 · who, and which house";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4580,8 +4580,13 @@ function whoOwes(){
   const s=moneyState(j);
   if(!["late","sent","unbilled"].includes(s))return;
   const who=billParty(j).name||"—";
-  const b=by[who]=by[who]||{name:who,amt:0,jobs:[],worst:"sent",oldest:0};
+  const b=by[who]=by[who]||{name:who,amt:0,jobs:[],addrs:[],worst:"sent",oldest:0};
   b.amt+=fee(j).due;b.jobs.push({j,s});
+  /* the name says who to call; the address says which job the money is on.
+     With three jobs at one address and eight a week coming, a payer row
+     without the property under it made him go look it up. */
+  const a=shortAddr(j.address)||jobName(j);
+  if(a&&!b.addrs.includes(a))b.addrs.push(a);
   const age=s==="unbilled"?(j.readyDate?Math.max(0,Math.round((new Date(today())-new Date(j.readyDate))/864e5)):0)
                           :(j.invDate?(ago(j.invDate)||0):0);
   if(age>b.oldest)b.oldest=age;
@@ -4619,7 +4624,9 @@ function moneyBandHTML(){
       :`<button class="qgo" onclick="event.stopPropagation();go('job',{id:'${first.j.id}'})">Open</button>`;
     return `<div class="mlad-r" style="--mt:var(--c-${c});cursor:pointer" onclick="go('job',{id:'${first.j.id}'})">
      <span class="mlad-b"></span>
-     <span class="mlad-l">${esc(o.name)}</span>
+     <span class="mlad-l" style="line-height:1.35">${esc(o.name)}
+      <span style="display:block;font:400 11.5px var(--sans);color:var(--ink3);letter-spacing:0;text-transform:none">${
+       esc(o.addrs.slice(0,2).join(" · "))}${o.addrs.length>2?" · +"+(o.addrs.length-2)+" more":""}</span></span>
      <span class="mlad-n">${plural(o.jobs.length,"job")}${o.oldest?" · "+o.oldest+"d":""}</span>
      <span class="mlad-a money v-${c}">${money0(o.amt)}</span>
      <span class="mlad-w">${OWE_WORD[o.worst]}</span>
