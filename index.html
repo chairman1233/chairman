@@ -657,6 +657,29 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 /* The nav item you just left shouldn't snap either. */
 #side button,nav button{transition:background .14s ease,color .14s ease}
 
+/* ---- the briefing: one column that reads --------------------------------- */
+.brf{max-width:760px}
+.brf-h{font:400 clamp(22px,3.4vw,30px)/1.35 var(--serif);margin:6px 0 18px}
+.brf-h b{font-weight:400}
+.brf-list{border-top:1px solid var(--rule)}
+.brf-r{display:flex;align-items:baseline;gap:14px;padding:13px 2px;border-bottom:1px solid var(--rule)}
+.brf-n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--panel2);
+ color:var(--bt,var(--ink3));display:grid;place-items:center;font:700 11.5px var(--sans);
+ align-self:center}
+.brf-t{flex:1;min-width:0;font:400 16px/1.5 var(--serif);color:var(--ink)}
+.brf-t b{font-weight:700}
+.brf-a{flex:none;background:none;border:1px solid var(--bt,var(--rule2));color:var(--bt,var(--ink2));
+ border-radius:999px;padding:6px 13px;font:700 10px var(--sans);letter-spacing:.08em;
+ white-space:nowrap;align-self:center}
+.brf-a:hover{background:var(--panel2)}
+.brf-r.quiet .brf-t{color:var(--ink3);font-size:13.5px}
+.brf-r.quiet .brf-n{background:none;color:var(--ink3)}
+.brf-f{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+ font:400 12.5px var(--sans);color:var(--ink3);margin-top:14px}
+@media(max-width:560px){
+ .brf-t{font-size:14.5px}
+ .brf-a{padding:5px 10px;font-size:9px}}
+
 /* ---- band one: the money ladder ---------------------------------------- */
 .mband{border:1px solid var(--rule);border-radius:14px;background:var(--panel);
  padding:16px 18px;margin:0 0 16px}
@@ -999,7 +1022,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-157 · sealed means the money too";
+const BUILD="C-158 · the briefing — one place, one read";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4723,6 +4746,87 @@ function stuckHTML(){
   ${disp.length?`<div class="mband-s" style="margin:14px 0 0;cursor:pointer" onclick="go('disputes')">
    ⚖ ${plural(disp.length,"case")} with the attorney · ${money0(sum(disp,j=>fee(j).due))} — Disputes ›</div>`:""}`;
 }
+/* ================= THE BRIEFING ========================================
+   His complaint, verbatim: "I have to look in a bunch of places to get a feel
+   of what I'm doing." So Today is now ONE column that reads top to bottom —
+   a headline sentence, a numbered do-in-order list where every line is a
+   person, a number and its one button, a grey line for what's waiting, and a
+   footer. It REPLACES the money band + queue table + stuck band on this
+   screen only. Every figure still comes from MONEY()/whoOwes()/queueItems()
+   — same gated engines, new skin. */
+function brfItems(){
+ const items=[];
+ const owes=whoOwes();
+ const covered=new Set();
+ owes.forEach(o=>{
+  o.jobs.forEach(x=>covered.add(x.j.id));
+  const first=o.jobs.find(x=>x.s==="unbilled")||o.jobs[0];
+  const where=o.addrs[0]||"";
+  if(o.worst==="late")items.push({tone:"late",
+   html:`<b>${esc(o.name)} is past due — ${money0(o.amt)}</b> — ${esc(where)}${o.oldest?" · "+o.oldest+" days":""}`,
+   act:"CHASE",fn:`chaseInv('${first.j.id}')`});
+  else if(o.worst==="unbilled")items.push({tone:"rdy",
+   html:`<b>${esc(o.name)} owes ${money0(o.amt)}</b> — ${esc(where)}${o.oldest?" · sitting "+o.oldest+" days":""}`,
+   act:"INVOICE",fn:`go('invoice',{id:'${first.j.id}'})`});
+  else items.push({tone:"out",
+   html:`<b>${esc(o.name)} — ${money0(o.amt)} invoiced</b> — waiting on them`,
+   act:"OPEN",fn:`go('job',{id:'${first.j.id}'})`});
+ });
+ const q=queueItems().filter(x=>!covered.has(x.j.id));
+ const order={rush:0,over:1,today:2,none:3,later:4,wait:9};
+ q.filter(x=>x.sortKind!=="wait").sort((a,b)=>order[a.sortKind]-order[b.sortKind])
+  .forEach(x=>{
+   const j=x.j,fl=flowOf(j);
+   const tone=x.sortKind==="rush"||x.sortKind==="over"?"late":x.sortKind==="today"?"out":x.sortKind==="none"?"est":"paid";
+   const line=x.kind==="none"
+    ?`<b>${esc(jobName(j))}</b> — set the next move`
+    :x.kind==="over"
+    ?`<b>${esc(jobName(j))} — ${esc(x.label.toLowerCase())}</b> — ${esc(x.why)}`
+    :x.kind==="later"
+    ?`<b>${esc(jobName(j))}</b> — ${esc(x.label.toLowerCase())} · ${esc(x.why)}`
+    :`<b>${esc(jobName(j))} — ${esc(x.label.toLowerCase())}</b> — due today`;
+   items.push({tone,html:line,
+    act:x.kind==="none"?"SET":fl?fl.l.split("—")[0].trim().toUpperCase().slice(0,9):"OPEN",
+    fn:x.kind==="none"?`setNextSheet('${j.id}')`:fl?fl.fn:`go('job',{id:'${j.id}'})`});
+  });
+ return items;
+}
+const BRF_TONE={late:"var(--c-late)",rdy:"var(--c-rdy)",out:"var(--c-out)",est:"var(--c-est)",paid:"var(--c-paid)"};
+function briefingHTML(){
+ const M=MONEY();
+ const items=brfItems();
+ const shown=items.slice(0,7),more=items.length-shown.length;
+ const wait=queueItems().filter(x=>x.sortKind==="wait");
+ const disp=(typeof openDisputes==="function")?openDisputes():[];
+ const head=M.late.amt
+   ?`You're owed <b class="v-rdy">${money0(M.collectable.amt)}</b> and <b class="v-late">${money0(M.late.amt)}</b> of it is past due.`
+  :M.unbilled.amt
+   ?`You're owed <b class="v-rdy">${money0(M.unbilled.amt)}</b> and none of it is invoiced yet.`
+  :M.sent.amt
+   ?`<b class="v-out">${money0(M.sent.amt)}</b> is invoiced and inside terms — nothing to chase.`
+  :M.working.n
+   ?`Nobody owes you right now — ${plural(M.working.n,"job")} in the works, <b class="v-est">${money0(M.working.amt)}</b> coming.`
+   :`Nobody owes you right now.`;
+ return `<div class="brf">
+  <div class="brf-h">${head}</div>
+  <div class="brf-list">
+   ${shown.map((it,i)=>`<div class="brf-r" style="--bt:${BRF_TONE[it.tone]}">
+     <span class="brf-n">${i+1}</span>
+     <span class="brf-t">${it.html}</span>
+     <button class="brf-a" onclick="event.stopPropagation();${it.fn}">${esc(it.act)} →</button>
+    </div>`).join("")}
+   ${more>0?`<div class="brf-r quiet" style="cursor:pointer" onclick="go('jobs')">
+     <span class="brf-n">＋</span><span class="brf-t">${plural(more,"more item")} — Pipeline ›</span></div>`:""}
+   ${wait.length?`<div class="brf-r quiet">
+     <span class="brf-n">◌</span>
+     <span class="brf-t">${wait.map(x=>esc(jobName(x.j))+" — "+esc((x.j.waitingOn||"waiting").toLowerCase())).join(" &nbsp;·&nbsp; ")}</span></div>`:""}
+  </div>
+  <div class="brf-f">
+   <span>${M.working.n?"In the works "+money0(M.working.amt):""}${M.working.n&&M.banked.amt?" · ":""}${M.banked.amt?"Collected "+money0(M.banked.amt):""}</span>
+   ${disp.length?`<span style="cursor:pointer" onclick="go('disputes')">⚖ ${plural(disp.length,"case")} · ${money0(sum(disp,j=>fee(j).due))} — Disputes ›</span>`:""}
+  </div>
+ </div>`;
+}
 R.today=()=>{
  const t=today();
  const plans=D.plans.filter(p=>p.date===t)
@@ -4738,9 +4842,7 @@ R.today=()=>{
   :`◷ ${dur(cs.worked)} today`;
  const restOpen=D.todayRest===true;   /* collapsed by default, remembered */
  return `
- ${moneyBandHTML()}
- ${copilotHTML()}
- ${stuckHTML()}
+ ${briefingHTML()}
  <button class="btn sec" style="margin-top:14px" onclick="D.todayRest=!${restOpen};save();render()">
   ${restOpen?"▴ Hide the rest of the day":"▾ Show the rest of the day"}</button>
  <div style="display:${restOpen?"block":"none"}">
