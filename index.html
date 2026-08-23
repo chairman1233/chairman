@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-155 · the dead stay dead";
+const BUILD="C-156 · sealed cases, one door";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1884,7 +1884,13 @@ const prioRank=j=>{const i=PRIO.indexOf(j.priority||"Moderate");return i<0?1:i;}
 const sortJobs=a=>[...a].sort((x,y)=>prioRank(x)-prioRank(y)
  ||(x.dueDate||"9999-99-99").localeCompare(y.dueDate||"9999-99-99")
  ||(x.created2||"").localeCompare(y.created2||""));
-const byStage=s=>sortJobs(D.jobs.filter(j=>j.status===s));
+/* A sealed case leaves every day-to-day surface — board, lists, invoices,
+   map, matcher — and lives ONLY behind the Disputes door. He said it plainly:
+   "I don't want Donna showing up until I say or click on something." The
+   money quarantine already excludes contested dollars; this quarantines the
+   SIGHT of the case. */
+const sealed=j=>!!(j&&j.sealed);
+const byStage=s=>sortJobs(D.jobs.filter(j=>j.status===s&&!sealed(j)));
 const billable=()=>byStage("Complete").filter(j=>fee(j).due>0);
 const onRetainer=j=>fee(j).kind==="retainer";
 const addDays=(iso,n)=>{const d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return isoDay(d);};
@@ -2285,7 +2291,7 @@ function estFuzzy(a,b){
  return edits+(a.length-i)+(b.length-k)<=1;
 }
 function estMatch(fileName){
- const live=D.jobs.filter(j=>!["Lost"].includes(j.status));
+ const live=D.jobs.filter(j=>!["Lost"].includes(j.status)&&!sealed(j));
  const scored=live.map(j=>{const s=estScore(fileName,j);return {j,score:s.score,why:s.why};})
   .sort((a,b)=>b.score-a.score);
  const best=scored[0];
@@ -3087,7 +3093,7 @@ async function pinAll(){
 }
 function mapJobs(){
  const showDone=!!D.mapDone;
- return D.jobs.filter(j=>j.lat&&j.lon&&j.status!=="Lost"&&(showDone||j.status!=="Paid"));
+ return D.jobs.filter(j=>j.lat&&j.lon&&j.status!=="Lost"&&!sealed(j)&&(showDone||j.status!=="Paid"));
 }
 function toggleMapDone(){D.mapDone=!D.mapDone;save();render();}
 
@@ -5956,6 +5962,19 @@ R.business=()=>{
 };
 
 /* ================= DISPUTES ================= */
+function toggleSeal(id){const j=job(id);j.sealed=!j.sealed;save();render();
+ toast(j.sealed?"Sealed — visible only in Disputes":"Unsealed");}
+function caseLogSheet(id){const j=job(id);if(!j||!j.caseLog)return;
+ sheet("Case log — "+jobName(j),`
+  <div class="sm" style="white-space:pre-wrap;line-height:1.65;max-height:60vh;overflow:auto">${esc(j.caseLog)}</div>
+  <button class="btn sec" style="margin-top:14px" onclick="printCaseLog('${id}')">⎙ Print / Save as PDF</button>`);}
+async function printCaseLog(id){const j=job(id);
+ _logoForPrint=await cleanPrintLogo();
+ document.getElementById("printarea").innerHTML=
+  `<div style="font:10.5pt/1.6 Georgia,serif;color:#1B1B1E;max-width:7.2in;margin:0 auto;white-space:pre-wrap">${esc(j.caseLog)}</div>`;
+ close_();const was=document.title;
+ document.title=safeFile(["Case log",jobName(j),today()].filter(Boolean).join(" — "));
+ setTimeout(()=>{window.print();setTimeout(()=>{document.title=was;render();},600);},120);}
 R.disputes=()=>{
  const list=disputes().sort((a,b)=>(inDispute(b)?1:0)-(inDispute(a)?1:0));
  const open=list.filter(inDispute);
@@ -5979,6 +5998,11 @@ R.disputes=()=>{
       <div class="nm" style="font-size:13.5px;white-space:normal">${esc(e.text.length>150?e.text.slice(0,148)+"…":e.text)}</div>
       <div class="mt">${esc(e.date)}${e.kind?" · "+esc(e.kind):""}</div></div></div>`).join("")}
     ${chron.length>4?`<p class="xs dim" style="margin:6px 0 0">+ ${chron.length-4} more in the export</p>`:""}`:""}
+   ${j.caseSummary?`<div class="pan" style="margin-top:14px;border-color:var(--c-late);border-left-width:2px">
+     <div class="lab v-late">⚖ Case summary</div>
+     <div class="sm" style="margin-top:8px;white-space:pre-wrap;line-height:1.6">${esc(j.caseSummary)}</div></div>`:""}
+   ${j.caseLog?`<button class="btn sec s" style="margin-top:10px" onclick="caseLogSheet('${j.id}')">📄 Full case log</button>`:""}
+   <button class="btn sec s" style="margin-top:10px" onclick="toggleSeal('${j.id}')">${sealed(j)?"👁 Unseal — show on all screens":"🔒 Seal — only show here"}</button>
    <div class="upbar" style="margin-top:14px">
     <button onclick="copyText(disputeChronText(job('${j.id}')))">Copy chronology</button>
     <button onclick="printChron('${j.id}')">⎙ Chronology PDF</button>
