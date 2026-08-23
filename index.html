@@ -999,7 +999,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-147 · who, and which house";
+const BUILD="C-148 · the invoice he designed, with teeth";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6549,45 +6549,105 @@ function invoiceHTML(j){
  const links=[];
  if(j.mportLink)links.push(link(j.mportLink,"3D scan — walk the property"));
  if(j.ccLink)links.push(link(j.ccLink,"Job photos — CompanyCam"));
- /* Layout H — his spec: the mark centered, the name once directly under it,
-    and the CLIENT as the headline. This document was prepared FOR someone;
-    the page says so before it says anything else. */
- const covered=f.kind==="retainer"&&f.due===0;
+ /* His chosen layout, from the AJ&S invoice he built by hand: logo left,
+    INVOICE right, grey meta table, black SERVICES header, black TOTAL DUE bar,
+    then a numbered terms block that does the legal work. The client-first
+    "Prepared for" layout survives on the ESTIMATE; the invoice is a bill and
+    reads like one. */
+ const S="font-family:Helvetica,Arial,sans-serif";
+ const PC="-webkit-print-color-adjust:exact;print-color-adjust:exact";
+ const rateTxt=f.kind==="flat"?"Flat fee"
+  :f.kind==="hourly"?dur(f.mins)+" at "+money0(f.hourRate)+"/hr"
+  :f.kind==="aftersubs"?f.rate+"% after subs ("+money(f.base)+")"
+  :f.rate+"% of Estimate ("+money(j.total)+")";
+ const sv=+me.siteFee||265, svDay=Math.max(0,sv-15), mpExt=79;
+ /* the numbered terms. 4, 5 and 6 are the ones he asked for by name:
+    carrier talks the claim down — non-refundable; contractor loses the job —
+    non-refundable; and he is not a party to client-contractor disputes. */
+ const TERMS=[
+  ["Scope of Fee","The fee covers the initial estimate, a reasonable number of revisions, phone negotiations, and email rebuttals with the carrier. Matterport scan access is included for fourteen (14) days after payment is received."],
+  ["Matterport Access","Scan files remain available for two weeks after payment, then are permanently deleted. A one-month extension is available for $"+mpExt+".00 if requested before the window expires."],
+  ["Site Visits","Any on-site visit is billed separately at $"+sv+".00 per visit (or $"+svDay+".00 per day for extended site work). Site visits are not included in the fee."],
+  ["Carrier Outcome — Non-Refundable","The fee is earned upon delivery of the estimate. It is not contingent on, and is not refundable for, the carrier's approval, denial, reduction, or negotiation of any portion of the claim — including supplements and claims adjusted or negotiated downward."],
+  ["Job Retention — Non-Refundable","The fee pays for estimating services actually rendered and is earned on delivery. It is not refundable if the contractor loses, withdraws from, or does not win the underlying job."],
+  ["Client–Contractor Disputes","Estimator is not a party to any dispute between the contractor and the property owner or any other party, and provides no mediation, dispute-resolution, or advocacy services. The fee is independent of any such dispute and its outcome."],
+  ["No Guarantees","This invoice and the underlying estimate do not guarantee any particular settlement amount. Estimator provides professional estimating services only and does not act as an attorney, public adjuster, or advocate beyond the written estimate and included communications."],
+  ["Additional Work","Work outside the stated scope (extra revisions beyond a reasonable number, additional site visits, extended Matterport storage, etc.) will be quoted and billed separately before performance."],
+  ["Acceptance","Payment of this invoice constitutes acceptance of these terms."]
+ ];
+ const svcRows=[];
+ svcRows.push(`<tr>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;font:10.5pt/1.5 Helvetica,Arial,sans-serif">
+   Professional Xactimate estimating services — ${esc(j.loss||"insurance")} ${esc((j.workType==="Project"?"project":"estimate").toLowerCase())}
+   (${esc(jobName(j))}). Includes full estimate${j.mportLink?", Matterport scan access":""}, phone negotiations, email rebuttals, and a limited number of revisions.
+   ${links.length?`<div style="margin-top:4pt">${links.join(" &nbsp;·&nbsp; ")}</div>`:""}</td>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;text-align:center;font:10.5pt Helvetica,Arial,sans-serif">1</td>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;font:10.5pt Helvetica,Arial,sans-serif;white-space:nowrap">${esc(rateTxt)}</td>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;text-align:right;font:bold 10.5pt Helvetica,Arial,sans-serif;white-space:nowrap">${money(f.feeOnly)}</td></tr>`);
+ extraList(j).forEach(x=>svcRows.push(`<tr>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;font:10.5pt Helvetica,Arial,sans-serif">${esc(x.label)}</td>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;text-align:center;font:10.5pt Helvetica,Arial,sans-serif">1</td>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd"></td>
+  <td style="padding:8pt;border-bottom:.5pt solid #ddd;text-align:right;font:10.5pt Helvetica,Arial,sans-serif">${money(x.amount)}</td></tr>`));
+ if(f.adv)svcRows.push(`<tr>
+  <td style="padding:8pt;font:10.5pt Helvetica,Arial,sans-serif" colspan="3">Less payment received</td>
+  <td style="padding:8pt;text-align:right;font:10.5pt Helvetica,Arial,sans-serif">− ${money(f.adv)}</td></tr>`);
+ const metaCell=(k,v)=>`<td style="padding:5pt 8pt;font:bold 9.5pt Helvetica,Arial,sans-serif;white-space:nowrap;vertical-align:top">${k}</td>
+  <td style="padding:5pt 8pt;font:9.5pt Helvetica,Arial,sans-serif;vertical-align:top">${v}</td>`;
  return `
- <div class="inv-h">
-  <div class="hd">
-   <img class="hlogo" src="${esc(_logoForPrint||printLogo())}" alt="">
-   <div class="hname">CHAIRMAN REMODELING</div>
-   <div class="htag">Insurance estimating · Houston, Texas</div>
+ <div style="${S};color:#111;${PC}">
+  <table style="width:100%;border-collapse:collapse"><tr>
+   <td style="vertical-align:top"><img src="${esc(_logoForPrint||printLogo())}" alt="" style="width:52pt;height:52pt;object-fit:contain"></td>
+   <td style="vertical-align:top;text-align:right;font:bold 24pt Helvetica,Arial,sans-serif;letter-spacing:1pt">INVOICE</td>
+  </tr></table>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:10pt"><tr>
+   <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif;width:50%">
+    <b>${esc(me.name||"Benny Mancillas")}</b><br>Independent Estimator<br>
+    ${me.phone?"Phone / Zelle: "+esc(me.zelle||me.phone)+"<br>":""}${me.email?"Email: "+esc(me.email):""}</td>
+   <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif">
+    <b>Bill To:</b><br><b>${esc(B.name)}</b><br>
+    ${B.isC&&j.contractorContact?esc(j.contractorContact)+"<br>":""}
+    ${B.isC&&j.contractorPhone?esc(j.contractorPhone)+"<br>":!B.isC&&j.phone?esc(j.phone)+"<br>":""}
+    ${B.email?esc(B.email):""}</td>
+  </tr></table>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:12pt;background:#f2f2f2;${PC}">
+   <tr>${metaCell("Invoice #:",esc(no))}${metaCell("Date:",dateStr)}</tr>
+   <tr>${metaCell("Project:",esc(jobName(j))+" – "+esc(j.loss||"")+" "+(j.workType==="Project"?"Project":"Estimate"))}
+       ${metaCell("Property:",esc(j.address||"—"))}</tr>
+   <tr>${metaCell("Client:",esc(j.owner||B.name))}${metaCell("Estimate Date:",esc(fmt(j.readyDate||j.invDate||today())))}</tr>
+   ${(j.insurer||j.claim)?`<tr>${metaCell("Carrier:",esc(j.insurer||"—"))}${metaCell("Claim #:",esc(j.claim||"—"))}</tr>`:""}
+  </table>
+
+  <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">SERVICES</div>
+  <table style="width:100%;border-collapse:collapse">
+   <tr style="background:#111;color:#fff;${PC}">
+    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica,Arial,sans-serif">Description</th>
+    <th style="padding:6pt 8pt;font:bold 9.5pt Helvetica,Arial,sans-serif;width:28pt">Qty</th>
+    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica,Arial,sans-serif;width:110pt">Rate</th>
+    <th style="padding:6pt 8pt;text-align:right;font:bold 9.5pt Helvetica,Arial,sans-serif;width:70pt">Amount</th></tr>
+   ${svcRows.join("")}
+   <tr><td colspan="3" style="padding:7pt 8pt;text-align:right;font:10.5pt Helvetica,Arial,sans-serif">Subtotal</td>
+    <td style="padding:7pt 8pt;text-align:right;font:10.5pt Helvetica,Arial,sans-serif">${money(f.gross)}</td></tr>
+   <tr style="background:#111;color:#fff;${PC}">
+    <td colspan="3" style="padding:8pt;text-align:right;font:bold 12pt Helvetica,Arial,sans-serif;letter-spacing:.5pt">TOTAL DUE</td>
+    <td style="padding:8pt;text-align:right;font:bold 13pt Helvetica,Arial,sans-serif;white-space:nowrap">${money(f.over?0:f.due)}</td></tr>
+  </table>
+
+  <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">PAYMENT</div>
+  <div style="font:10pt/1.6 Helvetica,Arial,sans-serif">
+   <b>Zelle:</b> ${esc(me.zelle||me.phone||"")} &nbsp;|&nbsp; <b>Payable to:</b> ${esc(me.name||"Benny Mancillas")}<br>
+   Payment due upon receipt.${me.terms&&!/receipt/i.test(me.terms)?" "+esc(me.terms)+".":""} Services commence upon cleared funds.</div>
+
+  <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">TERMS &amp; CONDITIONS</div>
+  <div style="font:8.5pt/1.5 Helvetica,Arial,sans-serif;color:#222;text-align:justify">
+   ${TERMS.map((t,i)=>`<div style="margin-bottom:3.5pt"><b>${i+1}. ${esc(t[0])}.</b> ${esc(t[1])}</div>`).join("")}
   </div>
 
-  <div class="hfor">
-   <div class="hkick">Prepared for</div>
-   <div class="hclient">${esc(B.name)}</div>
-   ${j.contractorContact&&B.isC?`<div class="hsub">Attn: ${esc(j.contractorContact)}</div>`:""}
-   <div class="hsub">${esc(j.address||jobName(j))}</div>
-   <div class="hsub2">${[j.insurer,j.claim?"Claim "+j.claim:"",j.loss].filter(Boolean).map(esc).join(" · ")||""}</div>
-  </div>
-
-  <table class="inv"><thead><tr><th>Scope of work</th><th class="r">Amount</th></tr></thead>
-   <tbody>${rows.join("")}</tbody></table>
-
-  <div class="hgrid">
-   <div class="hpay"><div class="inv-lab" style="border:0">How to pay</div>
-    ${me.zelle?`<div style="margin-top:5pt">Zelle · <span class="paynum">${esc(me.zelle)}</span></div>`:""}
-    ${me.payInfo?`<div style="font:10.5pt/1.5 Helvetica,Arial,sans-serif;margin-top:4pt;white-space:pre-wrap">${esc(me.payInfo)}</div>`:""}
-    <div style="font:10pt Helvetica,Arial,sans-serif;color:#555!important;margin-top:5pt">Invoice ${esc(no)} · ${dateStr}${me.terms?" · "+esc(me.terms):""}</div></div>
-   ${links.length?`<div><div class="inv-lab" style="border:0">Documentation</div>
-    <div style="font:11pt/2 Helvetica,Arial,sans-serif;margin-top:4pt">${links.join("<br>")}</div></div>`:""}
-  </div>
-
-  ${(me.yelp||me.fb)?`<div class="inv-review" style="text-align:center">Happy with the work? A quick review helps more than you'd think.
-   ${me.yelp?" "+link(me.yelp,"Yelp"):""}${me.fb?" · "+link(me.fb,"Facebook"):""}</div>`:""}
-
-  <div class="hfoot">
-   <div>Prepared by ${esc(me.name||"Benny Mancillas")}${me.phone?" · "+link("tel:"+me.phone.replace(/[^0-9+]/g,""),me.phone):""}${me.email?" · "+link("mailto:"+me.email,me.email):""}</div>
-   <div class="inv-pow" style="margin-top:5pt">Powered by Chairman Command Center</div>
-  </div>
+  <div style="text-align:center;font:8.5pt Helvetica,Arial,sans-serif;color:#555;margin-top:12pt;border-top:.5pt solid #ccc;padding-top:6pt">
+   Thank you for your business. Questions? Call or text ${esc(me.zelle||me.phone||"")}.
+   <span style="color:#999"> · Powered by Chairman Command Center</span></div>
  </div>`;
 }
 /* Chrome names a Save-as-PDF after document.title, so the file was always
