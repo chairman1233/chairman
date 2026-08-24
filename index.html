@@ -5162,12 +5162,9 @@ R.today=()=>{
       <span class="dim">→</span></div></div>`:""}
    ${estL.length?`<div class="sechead"><h2>In progress</h2><span class="em dim">${plural(estL.length,"job")}</span></div>
     ${cap(estL,"est",3).map(jobRow).join("")+moreBtn(estL,"est",3)}`:""}
-   ${(()=>{const wtg=byStage("Waiting");return wtg.length?`
-    <div class="sechead"><h2>Waiting to start</h2><span class="em dim">${wtg.length}</span></div>
-    ${wtg.map(j=>`<div class="pan" style="border-style:dashed" onclick="go('job',{id:'${j.id}'})">
-     <div class="row between"><div class="grow"><b>${esc(jobName(j))}</b>
-      <div class="in3">⏳ ${esc(j.waitingOn||"waiting")}</div></div>
-      ${flowBtn(j)}</div></div>`).join("")}`:"";})()}
+   <!-- "Waiting to start" folded into Parked above — one list, one place -->
+
+
   </div>
  </div>
  </div>`;
