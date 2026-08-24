@@ -674,6 +674,7 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .brf-a:hover{background:var(--panel2)}
 .brf-r.quiet .brf-t{color:var(--ink3);font-size:13.5px}
 .brf-r.quiet .brf-n{background:none;color:var(--ink3)}
+.brf-add{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 .brf-f{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
  font:400 12.5px var(--sans);color:var(--ink3);margin-top:14px}
 @media(max-width:560px){
@@ -1022,7 +1023,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-159 · one number, everywhere";
+const BUILD="C-160 · paste it, it's filed";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1622,9 +1623,27 @@ function parseLeadText(t){
   "Progressive","TWIA","Chubb","SageSure","SafePoint","American Family","Homeowners of America","Lemonade"];
  const ca=CARR.find(c=>new RegExp(c.replace(/ /g,"\\s+"),"i").test(t));
  if(ca)out.insurer=ca;
+ /* company FIRST — most of what he pastes comes from contractors, and the
+    company words must not be mistaken for a person's name below */
+ const co=t.match(/(?:company|contractor)\s*[:\-]\s*([A-Z][A-Za-z&'’.\- ]{2,40})/i)
+  ||t.match(/\b((?:[A-Z][A-Za-z&'’.\-]*\s+){1,3}(?:Construction|Restoration|Remodeling|Renovations?|Roofing|Builders?|Contracting|Exteriors|Group|Services|Solutions)(?:\s+(?:LLC|L\.L\.C\.|Inc\.?|Co\.?|Corp\.?|LP))?)\b/);
+ if(co)out.company=co[1].trim();
  let nm=(t.match(/(?:name|from|client|insured|homeowner|customer)\s*[:\-]\s*([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,2})/i)||[])[1];
+ /* "From: Green Dynasty Group" is the sender, not a person — drop it early so
+    the fallbacks below still get their turn at finding the real name */
+ if(nm&&out.company&&(out.company.includes(nm)||nm.includes(out.company)))nm="";
  if(!nm){const lines=t.split(/\n/).map(x=>x.trim()).filter(Boolean);
-  nm=lines.find(l=>/^[A-Z][a-z'’.\-]+(\s+[A-Z][a-z'’.\-]+){1,2}$/.test(l))||"";}
+  nm=lines.find(l=>/^[A-Z][a-z'’.\-]+(\s+[A-Z][a-z'’.\-]+){1,2}$/.test(l)
+   &&!(out.company&&(out.company.includes(l)||l.includes(out.company))))||"";}
+ if(!nm){
+  /* mid-sentence names ("...for Chrese Jackson, 3311 Stratford...") — take the
+     first capitalized pair that isn't the company, the carrier, or the address */
+  nm=[...t.matchAll(/\b([A-Z][a-z'’.\-]+[ \t]+[A-Z][a-z'’.\-]+)\b/g)].map(m=>m[1])
+   .find(x=>!(out.company&&out.company.includes(x))
+    &&!(out.address&&out.address.includes(x))
+    &&!CARR.some(c=>c.includes(x)||x.includes(c)))||"";
+ }
+ if(nm&&out.company&&out.company.includes(nm))nm="";
  if(nm)out.owner=nm.trim();
  const LK=[["water","Water"],["leak","Water"],["flood","Water"],["fire","Fire"],["mold","Mold"],
   ["roof","Roof"],["hail","Wind / Hail"],["wind","Wind / Hail"],["storm","Wind / Hail"],
@@ -1636,9 +1655,10 @@ function parseLeadText(t){
 let _leadLoss="";
 function leadSheet(){
  sheet("⤵ Paste a lead",`
-  <label><span class="t">Text, email or voicemail transcript — paste the whole thing</span>
+  <label><span class="t">Text, email or voicemail transcript — paste the whole thing, verbatim</span>
    <textarea class="in" id="leadtxt" rows="6" style="resize:vertical"
-    placeholder="Fwd: new water loss — Maria Gonzales, 8123 Winkler Dr, Houston 77017. 832-555-0117. State Farm claim 53-889-XX12"></textarea></label>
+    placeholder="Jordan Reyes&#10;1203 Twin Oaks Blvd League City, TX 77573 — need an estimate on this marina job, pull the eagle view, I'll pay for the eagle view and estimate"></textarea></label>
+  <p class="xs dim" style="margin:-8px 0 14px">Company, contact, address and phone get pulled out for you. The original text lands pinned on the job — if they said they'd pay for something, that's your proof.</p>
   <button class="btn" onclick="leadParse()">Parse it →</button>
   <div id="leadout"></div>`);
  setTimeout(()=>$("#leadtxt")&&$("#leadtxt").focus(),90);
@@ -1647,17 +1667,19 @@ function leadParse(){
  const t=$("#leadtxt").value.trim();
  if(!t){toast("Paste something first");return;}
  const p=parseLeadText(t);_leadLoss=p.loss||"";
- const found=["owner","phone","address","email","insurer","claim","loss"].filter(k=>p[k]);
+ const fromCo=!!p.company;
+ const found=["company","owner","phone","address","email","insurer","claim","loss"].filter(k=>p[k]);
  const f=(id,lab,val,ph)=>`<label><span class="t">${lab}</span>
   <input class="in" id="${id}" value="${esc(val||"")}" placeholder="${ph||""}" autocomplete="off" autocorrect="off" spellcheck="false"></label>`;
  $("#leadout").innerHTML=`
   <p class="xs" style="margin:16px 0 14px;color:${found.length?"var(--c-paid)":"var(--c-rdy)"}">
    ${found.length?"Pulled: "+found.join(", ")+" — fix anything wrong, then one tap.":"Couldn't pull much — fill in what you know, it still saves."}</p>
-  ${f("ldn","Client name",p.owner,"Maria Gonzales")}
+  ${f("ldc","Company — only if a contractor sent it",p.company,"Green Dynasty Group")}
+  ${fromCo?f("ldcc","Who texted you — their contact",p.owner,"Jordan Reyes"):""}
+  ${f("ldn",fromCo?"Property owner — their client, if they named one":"Client name",fromCo?"":p.owner,"Maria Gonzales")}
   ${f("ldp","Phone",p.phone)}
   ${f("lda","Property address",p.address)}
   ${f("lde","Email",p.email)}
-  ${f("ldc","Company — only if a contractor sent it","","Green Dynasty Group")}
   ${f("ldi","Carrier",p.insurer)}
   ${f("ldcl","Claim #",p.claim)}
   ${f("ldw","Source",p.email&&/fwd|forward/i.test(t)?"forwarded email":"","forwarded text")}
@@ -1671,28 +1693,39 @@ function leadParse(){
 }
 function leadCreate(){
  const v=id=>($("#"+id)&&$("#"+id).value.trim())||"";
- const owner=v("ldn"),na=v("ldna");
- if(!owner){toast("Needs a name");return;}
+ const owner=v("ldn"),na=v("ldna"),comp=v("ldc"),contact=v("ldcc");
+ if(!owner&&!comp){toast("Needs a name or a company");return;}
  if(!na){toast("One next move — required");return;}
- const comp=v("ldc");
  const j={id:uid(),status:"Estimating",created2:today(),
-  owner,client:owner,phone:v("ldp"),address:v("lda"),ownerEmail:v("lde"),
+  owner,client:owner,phone:comp?"":v("ldp"),address:v("lda"),ownerEmail:comp?"":v("lde"),
   insurer:v("ldi"),claim:v("ldcl"),who:v("ldw")||"pasted lead",loss:_leadLoss||"",
   jobFor:comp?"Contractor":"Homeowner",billTo:comp?"Contractor":"Owner",
   feeMode:"pct",flat:0,total:0,advance:0,
   next:{text:na,date:v("ldnd")||today()}};
  if(comp){
   j.contractor=comp;
+  if(contact)j.contractorContact=contact;
+  j.contractorPhone=v("ldp");j.contractorEmail=v("lde");
   const a=ACCOUNTS().find(x=>normAcct(x.name)===normAcct(comp));
-  if(a)j.accountId=a.id;
-  else{const nw={id:uid(),name:comp,created:new Date().toISOString()};
-   D.accounts=ACCOUNTS().concat([nw]);j.accountId=nw.id;}
+  if(a){j.accountId=a.id;
+   if(contact&&!a.contact)a.contact=contact;
+   if(v("ldp")&&!a.phone)a.phone=v("ldp");
+  }else{
+   /* every company except Green Dynasty runs the standard deal:
+      2% on a fresh estimate, 7.5% of the increase on a supplement */
+   const nw={id:uid(),name:comp,contact:contact||"",phone:v("ldp"),email:v("lde"),
+    created:new Date().toISOString(),feeMode:"pct",feePct:2,supPct:7.5,
+    notes:"Created from a pasted lead — standard 2% / 7.5% seeded. Send them the Estimating Services Agreement from this page."};
+   D.accounts=ACCOUNTS().concat([nw]);j.accountId=nw.id;
+  }
  }
  const raw=$("#leadtxt")?$("#leadtxt").value.trim():"";
  D.jobs.unshift(j);
  applyAcctRule(j);
- if(raw)D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:false,
-  created:new Date().toISOString(),text:"[Pasted lead — original]\n"+raw.slice(0,600)});
+ /* pinned + verbatim: the pasted text is often his written authorization
+    ("I'll pay for the eagle view and estimate") — it's evidence, keep it whole */
+ if(raw)D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:true,
+  created:new Date().toISOString(),text:"[What they sent — verbatim]\n"+raw.slice(0,1500)});
  save();close_();
  if(j.address){try{geocodeJob(j.id)}catch(e){}}
  go("job",{id:j.id});
@@ -4820,6 +4853,10 @@ function briefingHTML(){
    ${wait.length?`<div class="brf-r quiet">
      <span class="brf-n">◌</span>
      <span class="brf-t">${wait.map(x=>esc(jobName(x.j))+" — "+esc((x.j.waitingOn||"waiting").toLowerCase())).join(" &nbsp;·&nbsp; ")}</span></div>`:""}
+  </div>
+  <div class="brf-add">
+   <button class="btn s" style="margin:0" onclick="leadSheet()">⤵ Paste what they sent</button>
+   <button class="btn sec s" style="margin:0" onclick="newJob()">+ New job</button>
   </div>
   <div class="brf-f">
    <span>${M.working.n?"In the works "+money0(M.working.amt):""}${M.working.n&&M.banked.amt?" · ":""}${M.banked.amt?"Collected "+money0(M.banked.amt):""}</span>
