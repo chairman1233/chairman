@@ -16,7 +16,8 @@ if (start < 0 || end < 0) { console.error("FAIL — matcher block not found"); p
 /* estMatch names the tied jobs when it can't choose, so it needs jobName */
 const ctx = { D: { jobs: [] }, console,
   jobName: j => j.owner || j.contractor || "job",
-  sealed: j => !!(j && j.sealed) };
+  sealed: j => !!(j && j.sealed),
+  coName: j => (j && j.contractor) || "" };   /* no accounts in this harness */
 vm.createContext(ctx);
 vm.runInContext(script.slice(start, end), ctx);
 

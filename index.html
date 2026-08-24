@@ -666,8 +666,11 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .brf-n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--panel2);
  color:var(--bt,var(--ink3));display:grid;place-items:center;font:700 11.5px var(--sans);
  align-self:center}
-.brf-t{flex:1;min-width:0;font:400 16px/1.5 var(--serif);color:var(--ink)}
-.brf-t b{font-weight:700}
+/* UI-size rows get the UI stack — the display serif's hairline strokes vanish
+   at 16px on the dark theme. The serif stays on .brf-h where it belongs. */
+.brf-t{flex:1;min-width:0;font-family:inherit;font-size:16.5px;line-height:1.5;
+ font-weight:400;font-variant-numeric:tabular-nums;color:var(--ink)}
+.brf-t b{font-weight:600}
 .brf-a{flex:none;background:none;border:1px solid var(--bt,var(--rule2));color:var(--bt,var(--ink2));
  border-radius:999px;padding:6px 13px;font:700 10px var(--sans);letter-spacing:.08em;
  white-space:nowrap;align-self:center}
@@ -1023,7 +1026,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-160 · paste it, it's filed";
+const BUILD="C-161 · the day plans itself";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1482,7 +1485,11 @@ function saveNextQuick(id){const j=job(id);if(!j)return;
  const t=$("#nxt").value.trim();
  if(!t){toast("One action — even 'call them' counts");return;}
  j.next={text:t,date:$("#nxd").value||today()};save();close_();render();toast("Locked in");}
-function doneNext(id){const j=job(id);if(!j||!nextOf(j))return;
+function doneNext(id){const j=job(id);if(!j)return;
+ /* next already null (cleared by a stage move, or a stale render) — the button
+    must still DO something on the first click: open the picker, refresh the
+    header. A button that silently returns reads as broken. */
+ if(!nextOf(j)){render();setNextSheet(id);return;}
  D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),
   text:"[Done] "+j.next.text});
  j.next=null;save();
@@ -1957,14 +1964,21 @@ const LEADDAYS=3;   /* you work 3 days from the day the matterport + notes land 
 const forContractor=j=>(j.jobFor||"Homeowner")==="Contractor";
 /* Example rows carry the tag in their name everywhere they appear, so they can
    never be mistaken for a real job — on a card, in a list or on a map pin. */
-const jobName=j=>(j&&j._demo?"EXAMPLE · ":"")+((j&&(j.owner||j.contractor||j.client))||"Untitled");
+/* display names resolve through the ACCOUNT, never the copy stamped on the job
+   at intake — renaming "Mario Urrutia" to Houston Remodeling Contractors LLC
+   must change every screen AND the invoice payer, or the wrong legal entity
+   ends up on paper */
+const coName=j=>{if(!j)return"";
+ const a=j.accountId&&(typeof ACCOUNTS==="function")&&ACCOUNTS().find(x=>x.id===j.accountId);
+ return (a&&a.name)||j.contractor||"";};
+const jobName=j=>(j&&j._demo?"EXAMPLE · ":"")+((j&&(j.owner||coName(j)||j.client))||"Untitled");
 /* who the invoice is addressed to */
 function billParty(j){
  const toC=forContractor(j)&&(j.billTo||"Contractor")==="Contractor";
- return toC?{name:j.contractor||"Contractor",email:j.contractorEmail||"",isC:true}
+ return toC?{name:coName(j)||"Contractor",email:j.contractorEmail||"",isC:true}
           :{name:j.owner||j.client||"Client",email:j.ownerEmail||j.email||"",isC:false};
 }
-const jobSub=j=>{const b=[];if(forContractor(j)&&j.contractor)b.push("for "+j.contractor);
+const jobSub=j=>{const b=[];if(forContractor(j)&&coName(j))b.push("for "+coName(j));
  if(j.address)b.push(j.address);return b.join(" · ");};
 /* older saves stored one "client" — split it into owner + billing */
 function migrate(){
@@ -2316,7 +2330,7 @@ function estScore(fileName,j){
     picked whichever sorted first — a file with Jennifer in the name landed on
     Carmen. A company name says who hired him, never which property. It is
     only used when a job has no owner at all and is the only handle there is. */
- const addr=String(j.address||""), who=j.owner||j.contractor||"";
+ const addr=String(j.address||""), who=j.owner||coName(j)||"";
  let score=0; const why=[];
  /* a street number is the single most reliable token he produces */
  const fn=estNum(f), an=estNum(addr);
@@ -3704,6 +3718,9 @@ const PHCOL={"Not started":"lost","Sketch":"est","Line items":"rdy","Review":"ou
 const phaseOf=j=>j.phase||"Not started";
 function setPhase(id,ph){const j=job(id);j.phase=ph;
  if(ph==="Done"&&j.timerAt){j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));j.timerAt=null;}
+ /* aging runs from the day the WORK finished, not the day the job was logged —
+    Cokie read "sitting 18 days" on an estimate finished that morning */
+ if(ph==="Done")j.readyDate=today();
  save();render();toast(ph);}
 function phaseBar(j,compact){
  const ph=phaseOf(j),pct=PHPCT[ph]||0,c=PHCOL[ph];
@@ -3822,10 +3839,212 @@ function checkIn(id){const j=job(id);
 function logProgress(id,ph){
  const j=job(id),n=$("#ciNote")?$("#ciNote").value.trim():"";
  if(ph){j.phase=ph;
-  if(ph==="Done"&&j.timerAt){j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));j.timerAt=null;}}
+  if(ph==="Done"&&j.timerAt){j.timeMin=(+j.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(j.timerAt))/60000));j.timerAt=null;}
+  if(ph==="Done")j.readyDate=today();}
  const txt=(ph?"["+ph+"] ":"")+n;
  if(txt.trim())D.notes.unshift({id:uid(),jobId:id,text:txt,kind:"Note",pin:false,created:new Date().toISOString()});
  save();close_();render();toast(ph||"Logged");
+}
+
+/* ================= ESTIMATE DAY PLANNER (spec v1, Aug 24) =================
+   One button: read the board, drop what can't be worked, rank the rest, pack
+   it into the hours that are left. Every block carries one line of WHY — the
+   line is the feature; without it the schedule is a list to argue with. */
+
+/* ---- §2 the missing data -------------------------------------------------
+   blocked  {on,since,eta,who,note}|null  — never scheduled while set
+   gate     'contract'|'retainer'|'authorization'|null — only the CLEARING
+            task is schedulable ("send the agreement", never "write it")
+   blocking {who,since}|null — a third party is stalled on HIM             */
+const BLOCK_KINDS=["eagleview","matterport","photos","contract","carrier","client","sub","adjuster","other"];
+const GATE_KINDS=["contract","retainer","authorization"];
+const jBlocked=j=>!!(j&&j.blocked&&j.blocked.on);
+const blockLine=b=>b?`${b.on}${b.who?" — "+b.who:""}${b.eta?", expected "+fmt(b.eta):""}`:"";
+function setBlocked(id,b){const j=job(id);if(!j)return;
+ if(b){b.since=b.since||today();j.blocked=b;j.waitingOn=blockLine(b);}
+ else{j.blocked=null;if(j.status!=="Waiting")j.waitingOn="";}
+ save();render();}
+let _bk="",_gk=null;
+function blockSheet(id){
+ const j=job(id),b=j.blocked||{};_bk=b.on||"";_gk=j.gate||null;
+ sheet("⛔ Blocked / gated",`
+  <label><span class="t">What is it waiting on? <em>pick one — clears the job from the day plan</em></span>
+   <div class="segwrap" id="bkk">${BLOCK_KINDS.map(k=>`<button type="button" class="opt2 ${_bk===k?"on":""}"
+    onclick="_bk=(_bk==='${k}'?'':'${k}');this.parentNode.querySelectorAll('.opt2').forEach(x=>x.classList.remove('on'));if(_bk)this.classList.add('on')">${k}</button>`).join("")}</div></label>
+  <label><span class="t">Who owes it</span><input class="in" id="bkw" value="${esc(b.who||"")}" placeholder="Jordan Reyes"></label>
+  <label><span class="t">Expected when <em>blank if unknown</em></span><input class="in" id="bke" type="date" value="${esc(b.eta||"")}"></label>
+  <label><span class="t">Note</span><input class="in" id="bkn" value="${esc(b.note||"")}" placeholder="wall report, 2 @ $78"></label>
+  <label style="margin-top:6px"><span class="t">Business gate <em>bars the real work, not the chasing — "send the agreement" still schedules</em></span>
+   <div class="segwrap">${GATE_KINDS.map(k=>`<button type="button" class="opt2 ${_gk===k?"on":""}"
+    onclick="_gk=(_gk==='${k}'?null:'${k}');this.parentNode.querySelectorAll('.opt2').forEach(x=>x.classList.remove('on'));if(_gk)this.classList.add('on')">${k}</button>`).join("")}</div></label>
+  <label><span class="t">Someone stalled waiting on YOU? <em>strongest signal there is — jumps the queue</em></span>
+   <input class="in" id="bkg" value="${esc((j.blocking&&j.blocking.who)||"")}" placeholder="Lylian / carrier"></label>
+  <button class="btn" onclick="blockSave('${id}')">Save</button>
+  ${jBlocked(j)?`<button class="btn sec" onclick="setBlocked('${id}',null);close_();toast('Unblocked — back in the plan')">✓ It arrived — unblock</button>`:""}`);
+}
+function blockSave(id){const j=job(id);
+ const w=$("#bkw").value.trim(),e=$("#bke").value,n=$("#bkn").value.trim(),g=$("#bkg").value.trim();
+ j.gate=_gk;
+ j.blocking=g?{who:g,since:(j.blocking&&j.blocking.who===g&&j.blocking.since)||today()}:null;
+ setBlocked(id,_bk?{on:_bk,who:w,eta:e||null,note:n,since:(j.blocked&&j.blocked.on===_bk&&j.blocked.since)||today()}:null);
+ close_();toast(_bk?"Parked — won't be scheduled":"Saved");}
+function blockStrip(j){
+ const bits=[];
+ if(jBlocked(j))bits.push(`<span class="chip v-lost">⛔ ${esc(blockLine(j.blocked))} · day ${(ago(j.blocked.since)||0)+1}</span>`);
+ if(j.gate)bits.push(`<span class="chip v-out">🔒 gate: ${esc(j.gate)}</span>`);
+ if(j.blocking&&j.blocking.who)bits.push(`<span class="chip v-late">⚠ ${esc(j.blocking.who)} is stuck on you</span>`);
+ return `<div class="tags" style="margin:10px 0 0;cursor:pointer" onclick="blockSheet('${j.id}')">
+  ${bits.join(" ")||'<span class="chip v-lost" style="opacity:.55">＋ blocked / gated?</span>'}</div>`;
+}
+
+/* ---- §3 how long each task gets — measured, never asked ---- */
+const PLN_DEFAULTS={invoice:15,call:10,photos:15,agreement:15,sketch_mp:45,
+ sketch_field:90,supplement:60,lineitems:90,mitigation:50,review:30,chase:20};
+const median=a=>{const s=a.slice().sort((x,y)=>x-y);return s.length?(s[s.length>>1]+s[(s.length-1)>>1])/2:0;};
+const round5=n=>Math.max(5,Math.round(n/5)*5);
+function plnRawMins(kind,j){
+ if(j){
+  const peers=D.jobs.filter(p=>["Complete","Invoiced","Paid"].includes(p.status)
+   &&p.workType===j.workType&&p.loss===j.loss&&(+p.timeMin||0)>0);
+  if(peers.length>=5){
+   const share=1-(PHPCT[phaseOf(j)]||0)/100;
+   return Math.max(15,round5(median(peers.map(p=>+p.timeMin))*share));
+  }
+ }
+ return PLN_DEFAULTS[kind]||30;
+}
+/* >50 splits into consecutive ≤50 blocks — a 3-hour block never survives
+   contact with the day */
+const plnParts=raw=>{const n=Math.ceil(raw/50);return Array.from({length:n},(_,i)=>round5(Math.min(50,raw-i*50>0?Math.min(50,raw-i*50):50))).map(m=>Math.max(15,Math.min(50,m)));};
+
+/* ---- §4 the score — sort descending, that's the order ---- */
+function plnScore(t){
+ const j=t.j||{};
+ const moneyPts=Math.min((t.money||0)/100,60);
+ let deadline=0;
+ if(j.dueDate){const d=(new Date(j.dueDate)-new Date(today()))/864e5;
+  deadline=d<=1?50:d<=3?25:0;}
+ if(!deadline&&nextOf(j)&&j.next.date&&j.next.date<today())deadline=15;
+ const unblocks=(j.blocking&&j.blocking.who)?40:0;
+ const age=Math.min(j.readyDate?(ago(j.readyDate)||0):0,20);
+ const doneToday=D.plans.some(p=>p.date===today()&&p.done);
+ const quick=(t.mins<=20&&!doneToday)?10:0;
+ return moneyPts+deadline+unblocks+age+quick;
+}
+
+/* ---- eligible tasks off the live board ---- */
+const CALL_RE=/\b(call|phone|text|nudge|confirm|schedule|chase|follow.?up|reach out)\b/i;
+function plnTasks(){
+ const out=[],calls=[];
+ const active=D.jobs.filter(j=>!sealed(j)&&!["Paid","Lost"].includes(j.status)&&!j._demo);
+ active.forEach(j=>{
+  if(jBlocked(j)||j.status==="Waiting")return;              /* §2: parked, never scheduled */
+  if(j.gate){                                               /* only the clearing task */
+   const lbl=j.gate==="contract"?"Send the agreement":j.gate==="retainer"?"Collect the retainer":"Get written authorization";
+   out.push({kind:"agreement",j,mins:PLN_DEFAULTS.agreement,text:lbl+" — "+jobName(j),type:"Admin",
+    why:"Contract gate: no estimating until it's signed. This is what stops unpaid work."});
+   return;
+  }
+  if(nextOf(j)&&CALL_RE.test(j.next.text))calls.push(j);
+  if(j.status==="Complete"&&!j.invNo&&!inDispute(j)&&fee(j).due>0)
+   out.push({kind:"invoice",j,money:fee(j).due,mins:PLN_DEFAULTS.invoice,type:"Admin",
+    text:"Invoice "+jobName(j)+" — "+money0(fee(j).due),
+    why:"Highest dollars-per-minute there is — billing converts straight to collected."});
+  if(j.status==="Estimating"){
+   const ph=phaseOf(j);
+   const kind=ph==="Review"?"review"
+    :ph==="Line items"?(j.loss==="Mitigation"?"mitigation":(/suppl/i.test((j.workType||"")+(j.next&&j.next.text||""))||j.supBase?"supplement":"lineitems"))
+    :(j.mport==="Done"||j.mportLink)?"sketch_mp":"sketch_field";
+   const raw=plnRawMins(kind,j);
+   out.push({kind,j,raw,mins:Math.min(50,raw),type:"Estimate",
+    text:jobName(j)+" — "+(ph==="Not started"?"start the sketch":ph.toLowerCase()),
+    why:j.blocking&&j.blocking.who?esc(j.blocking.who)+" is frozen until this lands — only task where someone else is stalled."
+     :kind==="review"?"QA before it goes out — never the same sitting as line items."
+     :kind==="sketch_mp"?"Matterport's in hand — scope work, not discovery."
+     :"Where this job actually is: "+ph.toLowerCase()+"."});
+  }
+ });
+ out.forEach(t=>{t.score=plnScore(t)});
+ out.sort((a,b)=>b.score-a.score);
+ return {tasks:out,calls};
+}
+const plnParked=()=>D.jobs.filter(j=>!sealed(j)&&!j._demo&&!["Paid","Lost"].includes(j.status)
+ &&(jBlocked(j)||j.status==="Waiting"));
+
+/* ---- §5 packing + §6 what it writes ---- */
+const m2t=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const isoAdd=(iso,n)=>{const d=new Date(iso+"T12:00:00");d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
+function planDay(){
+ const t=today(),cs=clockState(),pom=POM();
+ /* PLN_NOW is a test seam — the gate freezes "now" through it; live it's unset */
+ const nowM=mins((typeof PLN_NOW==="function"&&PLN_NOW())||hm(new Date()));
+ const startM=Math.max(nowM,mins(cs.target)||nowM);
+ const endM=cs.endT?mins(cs.endT):nowM+4*60;      /* day off / no shift: plan 4h from now */
+ const hardEnd=endM-15;                            /* last 15 min: clock-out + notes */
+ if(hardEnd-startM<20){toast("Under 20 minutes left — nothing to plan");return;}
+ const budget=Math.round((hardEnd-startM)*0.85);   /* the 15% slack IS the feature */
+ const focus=pom.work<=25?25:50, rest=pom.work<=25?5:10;
+ const {tasks,calls}=plnTasks();
+ /* regenerate = wipe my own un-done blocks for today; NEVER his, never done */
+ /* wipe only MY un-started, un-done blocks — his own items, finished blocks
+    and a block he's mid-way through are never touched */
+ D.plans=D.plans.filter(p=>!(p.auto&&p.date===t&&!p.done&&!p.startedAt));
+ const blocks=[],cut=[];
+ let cur=startM,used=0,sinceBreak=0;
+ const place=(mins_,rec)=>{
+  if(used+mins_>budget){cut.push({text:rec.text,why:"day is 85% full — slack is what keeps the plan alive"});return false;}
+  if(cur+mins_>hardEnd){cut.push({text:rec.text,why:"no room before "+h12(m2t(hardEnd))});return false;}
+  blocks.push(Object.assign({id:uid(),date:t,time:m2t(cur),done:false,pri:false,who:"",auto:true},rec,{mins:mins_}));
+  cur+=mins_;used+=mins_;sinceBreak+=mins_;
+  if(sinceBreak>=focus&&cur+rest<=hardEnd){
+   blocks.push({id:uid(),date:t,time:m2t(cur),text:"Break",type:"Break",mins:rest,done:false,pri:false,who:"",auto:true,why:""});
+   cur+=rest;sinceBreak=0;}
+  return true;
+ };
+ /* §5.3 CALL BLOCK FIRST — they need people at desks, and each one moves work
+    into someone else's court. Capped at 20. */
+ if(calls.length){
+  const m=Math.min(20,calls.length*10);
+  place(m,{text:"Call block — "+calls.map(j=>j.next.text.replace(CALL_RE,"").replace(/^[\s\-—:]+|[\s\-—:]+$/g,"")||jobName(j)).slice(0,3).join(", "),
+   type:"Call",jobId:calls[0].id,
+   why:"Front-loaded: calls need people at desks, and each one moves work into someone else's court."});
+ }
+ for(const task of tasks){
+  const parts=task.raw&&task.raw>50?plnParts(task.raw):[task.mins];
+  if(parts.length>1&&hardEnd-cur<50){                       /* §5.6 */
+   D.plans.unshift({id:uid(),date:isoAdd(t,1),time:"",text:task.text+" — Part 1 of "+parts.length,
+    type:task.type,jobId:task.j&&task.j.id,mins:parts[0],why:task.why+" Carried: too big for what was left today.",
+    auto:true,done:false,pri:true,who:""});
+   cut.push({text:task.text,why:"needs "+task.raw+" min — starts tomorrow first thing instead of getting mangled tonight"});
+   continue;
+  }
+  parts.every((m,i)=>place(m,{text:task.text+(parts.length>1?" — Part "+(i+1)+" of "+parts.length:""),
+   type:task.type,jobId:task.j&&task.j.id,why:i===0?task.why:"Continues the block above — same sitting, fresh eyes after the break."}));
+ }
+ /* everything blocked? then chasing people IS the day */
+ if(!blocks.length){
+  const pk=plnParked();
+  if(pk.length)place(PLN_DEFAULTS.chase,{text:"Chase list — "+pk.map(j=>(j.blocked&&j.blocked.who)||jobName(j)).slice(0,4).join(", "),
+   type:"Call",why:"Every job on the board is waiting on somebody. Today the job is making them move."});
+ }
+ blocks.forEach(b=>D.plans.push(b));
+ D.planMeta={date:t,at:hm(new Date()),cut,late:cs.late||0};
+ D.todayRest=true;              /* the plan renders in "the rest of the day" — open it */
+ save();render();
+ toast(blocks.length?blocks.filter(b=>b.type!=="Break").length+" blocks planned to "+h12(m2t(hardEnd)):"Nothing schedulable — check Parked");
+}
+/* §7: starting a block starts the job timer, so §3's medians improve weekly */
+function plnStart(pid){
+ const p=D.plans.find(x=>x.id===pid);if(!p)return;
+ p.startedAt=new Date().toISOString();
+ if(p.jobId){const j=job(p.jobId);
+  if(j&&!j.timerAt){D.jobs.forEach(x=>{if(x.timerAt){x.timeMin=(+x.timeMin||0)+Math.max(0,Math.round((Date.now()-new Date(x.timerAt))/60000));x.timerAt=null;}});
+   j.timerAt=new Date().toISOString();D.last=j.id;}}
+ save();render();toast("On it — timer running");
+}
+function plnOverrun(p){
+ if(!p.startedAt||p.done||!p.mins)return false;
+ return (Date.now()-new Date(p.startedAt))/60000>p.mins*1.5;
 }
 /* ---- system notifications: only fire while the app is open ---- */
 let _more={};
@@ -4855,7 +5074,8 @@ function briefingHTML(){
      <span class="brf-t">${wait.map(x=>esc(jobName(x.j))+" — "+esc((x.j.waitingOn||"waiting").toLowerCase())).join(" &nbsp;·&nbsp; ")}</span></div>`:""}
   </div>
   <div class="brf-add">
-   <button class="btn s" style="margin:0" onclick="leadSheet()">⤵ Paste what they sent</button>
+   <button class="btn s" style="margin:0" onclick="planDay()">▸ Plan my day</button>
+   <button class="btn sec s" style="margin:0" onclick="leadSheet()">⤵ Paste what they sent</button>
    <button class="btn sec s" style="margin:0" onclick="newJob()">+ New job</button>
   </div>
   <div class="brf-f">
@@ -4867,7 +5087,12 @@ function briefingHTML(){
 R.today=()=>{
  const t=today();
  const plans=D.plans.filter(p=>p.date===t)
-  .sort((a,b)=>(b.pri?1:0)-(a.pri?1:0)||(a.done?1:0)-(b.done?1:0));
+  .sort((a,b)=>(a.done?1:0)-(b.done?1:0)
+   ||((a.time&&b.time)?a.time.localeCompare(b.time):a.time?-1:b.time?1:0)
+   ||(b.pri?1:0)-(a.pri?1:0));
+ const overP=plans.find(p=>plnOverrun(p));
+ const parked=plnParked();
+ const meta=(D.planMeta&&D.planMeta.date===t)?D.planMeta:null;
  const est=byStage("Estimating");
  const lastJ=D.last?job(D.last):null;
  const showResume=lastJ&&lastJ.status!=="Lost";
@@ -4905,17 +5130,32 @@ R.today=()=>{
   </div>
   <div class="colw">
    <div class="sechead" style="margin-top:0"><h2>Today's schedule</h2>
+    <button class="morelink" onclick="planDay()">▸ Plan my day</button>
     <button class="morelink" onclick="addPlan()">+ add</button></div>
+   ${overP?`<div class="pan" style="border-color:var(--c-late)">
+     <div class="row between"><div class="grow"><b>${esc(overP.text)}</b> is running ${Math.round((Date.now()-new Date(overP.startedAt))/60000-overP.mins)} min over.</div>
+      <button class="btn sec s" style="margin:0" onclick="planDay()">Reflow the rest</button></div></div>`:""}
    <div class="pan flat" style="padding:0">
-   ${plans.length?cap(plans,"plans",7).map(p=>`<div class="li">
+   ${plans.length?cap(plans,"plans",10).map(p=>`<div class="li" style="${p.type==='Break'?'opacity:.55':''}">
      <button class="ck ${p.done?"on":""}" onclick="tickPlan('${p.id}')">${p.done?"✓":""}</button>
      <div class="grow" onclick="addPlan('${p.id}')" style="${p.done?'opacity:.4':''}">
       <div style="${p.done?'text-decoration:line-through':''}">${p.pri&&!p.done?'<span class="pri">! </span>':""}${esc(p.text)}</div>
-      <div class="tags">${p.type?`<span class="chip v-${PCOL[p.type]||"lost"}">${esc(p.type)}</span>`:""}
-       ${p.time?`<span class="who">${esc(p.time)}</span>`:""}${p.who?`<span class="who">· ${esc(p.who)}</span>`:""}</div></div>
-     <button class="ico" style="width:26px;height:26px;font-size:11px;border:0;color:var(--ink3)" onclick="event.stopPropagation();delPlan('${p.id}')">✕</button></div>`).join("")+moreBtn(plans,"plans",7)
-    :`<div class="li"><span class="dim sm">Nothing down for today. What've you got going on?</span></div>`}
+      ${p.why?`<div class="xs dim" style="margin-top:2px">${esc(p.why)}</div>`:""}
+      <div class="tags">${p.type&&p.type!=="Break"?`<span class="chip v-${PCOL[p.type]||"lost"}">${esc(p.type)}</span>`:""}
+       ${p.time?`<span class="who">${h12(p.time)}${p.mins?" · "+p.mins+"m":""}</span>`:p.mins?`<span class="who">${p.mins}m</span>`:""}${p.who?`<span class="who">· ${esc(p.who)}</span>`:""}</div></div>
+     ${p.auto&&!p.done&&p.type!=="Break"&&!p.startedAt?`<button class="ico" style="width:26px;height:26px;font-size:11px" title="Start — timer on"
+       onclick="event.stopPropagation();plnStart('${p.id}')">▶</button>`:""}
+     <button class="ico" style="width:26px;height:26px;font-size:11px;border:0;color:var(--ink3)" onclick="event.stopPropagation();delPlan('${p.id}')">✕</button></div>`).join("")+moreBtn(plans,"plans",10)
+    :`<div class="li"><span class="dim sm">Nothing down for today — hit <b>▸ Plan my day</b> and it builds itself off the board.</span></div>`}
    </div>
+   ${parked.length?`<div class="sechead"><h2>Parked — waiting on somebody</h2><span class="em dim">${parked.length}</span></div>
+    <div class="pan flat" style="padding:0">${parked.map(j=>`<div class="li" onclick="go('job',{id:'${j.id}'})" style="cursor:pointer">
+     <div class="grow"><b>${esc(jobName(j))}</b>
+      <div class="xs dim">${jBlocked(j)?esc(blockLine(j.blocked))+" · day "+((ago(j.blocked.since)||0)+1):esc(j.waitingOn||"waiting")}</div></div>
+     <span class="dim">→</span></div>`).join("")}</div>`:""}
+   ${meta&&meta.cut&&meta.cut.length?`<div class="sechead"><h2>Didn't fit</h2><span class="em dim">${meta.cut.length}</span></div>
+    <div class="pan flat" style="padding:0">${meta.cut.map(c=>`<div class="li">
+     <div class="grow"><span class="sm">${esc(c.text)}</span><div class="xs dim">${esc(c.why)}</div></div></div>`).join("")}</div>`:""}
    ${showResume?`<div class="pan key" onclick="go('job',{id:'${lastJ.id}'})">
      <div class="row between"><div class="grow"><div class="ser" style="font-size:17px">${esc(jobName(lastJ))}</div>
       <div class="xs dim trunc" style="margin-top:3px">${esc(lastJ.address||"—")} · pick up where you left off</div></div>
@@ -4934,7 +5174,7 @@ R.today=()=>{
 };
 const PTYPES=["Estimate","Lead","Remodel","Inspection","Meeting","Follow-up","Admin","Other"];
 const PCOL={Estimate:"est",Lead:"rdy",Remodel:"out",Inspection:"est",Meeting:"lost",
- "Follow-up":"out",Admin:"lost",Other:"lost"};
+ "Follow-up":"out",Admin:"lost",Other:"lost",Call:"rdy",Break:"lost"};
 let _pt="Estimate",_ppri=false;
 function addPlan(id){
  const p=id?D.plans.find(x=>x.id===id):null;
@@ -5112,6 +5352,22 @@ function fixInvoiceDupes(){
  D.invFixV1=new Date().toISOString();
  if(n){save();console.log("invoice repair:",n,"records");}else save();
 }
+/* v2: a job holding a real invoice number + date while sitting in "Complete"
+   is in an impossible state — the invoice EXISTS and went out, so the truth is
+   Invoiced. (Cokie: INV-1009 dated Aug 22 while the dashboard said $0 billed.) */
+function fixInvoiceLimbo(){
+ if(D.invFixV2)return;
+ let n=0;
+ (D.jobs||[]).forEach(j=>{
+  if(j.invNo&&/^INV-\d+$/.test(j.invNo)&&j.invDate&&j.status==="Complete"){
+   j.status="Invoiced";n++;
+   D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:true,created:new Date().toISOString(),
+    text:"[Invoice repair] "+j.invNo+" dated "+j.invDate+" exists, so this job is Invoiced, not Complete. If that's wrong, move it back — the number will be freed properly now."});
+  }
+ });
+ D.invFixV2=new Date().toISOString();
+ save();if(n)console.log("invoice limbo repair:",n,"records");
+}
 function moveJob(id,to){
  const j=job(id);if(!j||j.status===to)return render();
  if((to==="Complete"||to==="Invoiced")&&!j.total&&!onRetainer(j)){toast("Add the estimate total");return newJob(id);}
@@ -5121,7 +5377,7 @@ function moveJob(id,to){
     invoice number and date stuck on it — a Waiting job carrying INV-1003 is
     how the board ends up in impossible states. The number is freed and the
     change recorded; re-invoicing issues a fresh number. */
- if(from==="Invoiced"&&["Waiting","Estimating"].includes(to)&&j.invNo){
+ if(from==="Invoiced"&&["Waiting","Estimating","Complete"].includes(to)&&j.invNo){
   D.notes.unshift({id:uid(),jobId:j.id,kind:"Note",pin:true,created:new Date().toISOString(),
    text:"[Invoice withdrawn] "+j.invNo+(j.invDate?" dated "+j.invDate:"")+
    " — moved back to "+to+". If a copy already went out, tell them it's superseded."});
@@ -5667,7 +5923,7 @@ function delJob(id){const j=job(id);
 function jobActionBar(j){
  const clean=p=>(p||"").replace(/[^0-9+]/g,"");
  const owner=clean(j.phone),con=clean(j.contractorPhone);
- const primary=owner||con,who=owner?(j.owner||"owner"):(j.contractorContact||j.contractor||"contractor");
+ const primary=owner||con,who=owner?(j.owner||"owner"):(j.contractorContact||coName(j)||"contractor");
  const act=(icon,label,tint,handler,on,extra="")=>
   `<button ${on?`onclick="${handler}"`:"disabled"} style="--tint:${tint}" ${extra}>
     <span class="ag">${icon}</span><span>${label}</span></button>`;
@@ -5849,6 +6105,7 @@ R.job=({id})=>{
     <button class="opt2" onclick="go('today')">← Back to the queue</button>
    </div></div>`;})()}
  ${jobActionBar(j)}
+ ${["Paid","Lost"].includes(j.status)?"":blockStrip(j)}
  ${(()=>{const g=detailGaps(j);return `<button type="button" class="jdt" onclick="togDetails()">
    <span class="jdt-l">Job details</span>
    <span class="jdt-h ${g.length?"v-out":""}">${g.length?g.join(" · "):detailSummary(j)}</span>
@@ -6174,7 +6431,7 @@ function disputeChronText(j){
   "DISPUTE CHRONOLOGY — "+jobName(j),
   "Property: "+(j.address||"—"),
   "Carrier: "+(j.insurer||"—")+(j.claim?"   Claim: "+j.claim:""),
-  "Company: "+(j.contractor||"—"),
+  "Company: "+(coName(j)||"—"),
   "Stage: "+(j.disputeStage||"—"),
   "Contract/estimate total: "+money(j.total),
   (j.disputeAmt?"Contested amount: "+money(j.disputeAmt):""),
@@ -7067,8 +7324,11 @@ async function printContract(acctId){
 }
 async function printInvoice(id){
  const j=job(id);
+ /* issuing a number IS invoicing — atomic, whatever stage the job was in.
+    A Complete job holding INV-1009 while the dashboard says "$0 invoiced" is
+    how a duplicate number goes out. */
  if(!j.invNo){j.invNo=nextInvNo();j.invDate=today();
-  if(j.status==="Complete")j.status="Invoiced";save();}
+  if(["Waiting","Estimating","Complete"].includes(j.status))j.status="Invoiced";save();}
  _logoForPrint=await cleanPrintLogo();   /* the mark, frame cropped, tile erased */
  document.getElementById("printarea").innerHTML=invoiceHTML(j);
  close_();
@@ -8292,7 +8552,7 @@ function aiJobContext(j){
   `Type: ${j.loss||"n/a"}`,`Carrier: ${j.insurer||"n/a"}`,`Claim #: ${j.claim||"n/a"}`,
   `Estimate total: ${money(j.total)}`,`Your fee: ${money(f.gross)}${f.adv?` (less ${money(f.adv)} advance = ${money(f.due)} due)`:""}`];
  if(j.disputeStage)L.push(`IN DISPUTE — stage: ${j.disputeStage}${j.disputeAmt?`, contested amount ${money(j.disputeAmt)}`:""}. This is a legal matter, not a collection. Do not suggest payment nudges; only documentation and attorney coordination.`);
- if(forContractor(j))L.push(`This is for contractor ${j.contractor}${j.contractorContact?" (contact "+j.contractorContact+")":""}; property owner is ${j.owner}. Invoice goes to ${billParty(j).name}.`);
+ if(forContractor(j))L.push(`This is for contractor ${coName(j)}${j.contractorContact?" (contact "+j.contractorContact+")":""}; property owner is ${j.owner}. Invoice goes to ${billParty(j).name}.`);
  else L.push(`Client / owner: ${j.owner||"n/a"}`);
  if(j.startDate)L.push(`Scheduled ${j.startDate} to ${j.dueDate||j.startDate}`);
  if(j.mportLink)L.push(`Matterport: ${j.mportLink}`);
@@ -8367,7 +8627,7 @@ function applyAction(i){
   if(a.do==="set_total"&&j){j.total=+a.amount||0;}
   else if(a.do==="set_stage"&&j){moveJob(j.id,a.stage);toast("Moved");renderActions();return;}
   else if(a.do==="set_priority"&&j){j.priority=a.priority;}
-  else if(a.do==="set_phase"&&j&&phaseSet(j).includes(a.phase)){j.phase=a.phase;}
+  else if(a.do==="set_phase"&&j&&phaseSet(j).includes(a.phase)){j.phase=a.phase;if(a.phase==="Done")j.readyDate=today();}
   else if(a.do==="set_dates"&&j){j.startDate=a.start||j.startDate;j.dueDate=a.due||addDays(a.start||today(),LEADDAYS);
    if(a.time)j.startTime=a.time;}
   else if(a.do==="add_extra"&&j){j.extras=j.extras||[];j.extras.push({id:uid(),label:a.label||"Extra",amount:+a.amount||0});}
@@ -8881,7 +9141,7 @@ const summaryRows=()=>D.jobs.filter(j=>["Complete","Invoiced","Paid"].includes(j
 function jobSummaryHTML(j){
  const f=fee(j);
  return `<div class="pan" style="margin-top:0"><div class="lab" style="margin-bottom:8px">▤ Estimate summary</div>
-  <div class="ln2"><span class="k">For</span><b>${esc(forContractor(j)?j.contractor||"—":j.owner||"—")}</b></div>
+  <div class="ln2"><span class="k">For</span><b>${esc(forContractor(j)?coName(j)||"—":j.owner||"—")}</b></div>
   ${forContractor(j)?`<div class="ln2"><span class="k">Property owner</span><b>${esc(j.owner||"—")}</b></div>`:""}
   <div class="ln2"><span class="k">Address</span><b>${esc(j.address||"—")}${
    geoUnresolved(j)?` <span class="v-out" style="font-size:11.5px;font-weight:600">⚠ not on the map</span>`:""}</b></div>
@@ -8900,7 +9160,7 @@ function jobSummaryHTML(j){
 function summaryText(j){
  const f=fee(j);
  return [`ESTIMATE SUMMARY`,
-  `For: ${forContractor(j)?j.contractor||"":j.owner||""}`,
+  `For: ${forContractor(j)?coName(j)||"":j.owner||""}`,
   forContractor(j)&&j.owner?`Property owner: ${j.owner}`:"",
   `Address: ${j.address||"—"}`,
   j.loss?`Job type: ${j.loss}`:"",
@@ -8915,7 +9175,7 @@ function exportEstimates(){
  const rows=summaryRows();
  const head=["Date","For","Property owner","Address","Job type","Carrier","Claim","Estimate total","Fee","Status"];
  const csv=[head.join(",")].concat(rows.map(j=>{const f=fee(j);
-  return [j.readyDate||j.created2||"",forContractor(j)?j.contractor||"":j.owner||"",j.owner||"",j.address||"",
+  return [j.readyDate||j.created2||"",forContractor(j)?coName(j)||"":j.owner||"",j.owner||"",j.address||"",
    j.loss||"",j.insurer||"",j.claim||"",(+j.total||0).toFixed(2),
    (f.kind==="retainer"?f.wouldBe:f.gross).toFixed(2),j.status]
    .map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",");})).join("\n");
@@ -8937,7 +9197,7 @@ R.summary=()=>{
  ${rows.length?`<div class="pan" style="margin-top:0">
   ${rows.map(j=>{const f=fee(j);return `<div class="frow" style="align-items:flex-start">
    <div class="grow" onclick="go('job',{id:'${j.id}'})">
-    <div class="nm">${esc(forContractor(j)?j.contractor||jobName(j):jobName(j))}</div>
+    <div class="nm">${esc(forContractor(j)?coName(j)||jobName(j):jobName(j))}</div>
     <div class="mt">${esc(j.address||"no address")}${j.loss?" · "+esc(j.loss):""}${j.insurer?" · "+esc(j.insurer):""}</div></div>
    <div style="text-align:right;flex:none">
     <div class="money ser" style="font-size:17px">${money0(j.total)}</div>
@@ -9371,7 +9631,7 @@ function adoptStored(){
 window.addEventListener("storage",e=>{if(e.key===K)adoptStored();});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)adoptStored();});
 migrate();
-openIDB().then(()=>{fixClockDays();fixInvoiceDupes();compactHist();seedRatesV1();seedDeals();go("today")});
+openIDB().then(()=>{fixClockDays();fixInvoiceDupes();fixInvoiceLimbo();compactHist();seedRatesV1();seedDeals();go("today")});
 </script>
 </body>
 </html>
