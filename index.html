@@ -678,6 +678,28 @@ body:not(.paper) .pan{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .brf-r.quiet .brf-t{color:var(--ink3);font-size:13.5px}
 .brf-r.quiet .brf-n{background:none;color:var(--ink3)}
 .brf-add{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+/* the day strip — spec §1: time column, task, one-line why */
+.dstrip{max-width:760px;margin-top:18px;border:1px solid var(--rule2);border-radius:12px;
+ overflow:hidden;background:var(--panel)}
+.dstrip .dsh{display:flex;align-items:center;gap:12px;padding:10px 16px;
+ border-bottom:1px solid var(--rule2);background:var(--panel2);
+ font:700 10.5px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.dstrip .dsh .morelink{margin:0}
+.dslot{display:grid;grid-template-columns:96px 1fr auto;gap:14px;align-items:baseline;
+ padding:12px 16px;border-bottom:1px solid var(--rule2)}
+.dslot:last-child{border-bottom:0}
+.dslot.brk{background:var(--panel2);padding:7px 16px}
+.dslot.brk .dsb{color:var(--ink3);font-size:12.5px}
+.dst{font:600 12px ui-monospace,Menlo,Consolas,monospace;color:var(--ink2);
+ white-space:nowrap;font-variant-numeric:tabular-nums}
+.dsb{font:400 15.5px/1.45 var(--sans);color:var(--ink);min-width:0}
+.dsb em{display:block;font-style:normal;font-size:13px;line-height:1.45;color:var(--ink3);margin-top:3px}
+.dsa{display:flex;gap:6px;align-self:center}
+.dsa .ico{width:28px;height:28px;font-size:11px}
+.dsq{padding:9px 16px;border-bottom:1px solid var(--rule2);cursor:pointer;
+ font:400 13px/1.5 var(--sans);color:var(--ink3)}
+.dsq:last-child{border-bottom:0}
+@media(max-width:560px){.dslot{grid-template-columns:1fr;gap:3px}.dst{font-size:11px}}
 .brf-f{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
  font:400 12.5px var(--sans);color:var(--ink3);margin-top:14px}
 @media(max-width:560px){
@@ -1026,7 +1048,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-161 · the day plans itself";
+const BUILD="C-162 · the plan gets the front page";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -5084,15 +5106,45 @@ function briefingHTML(){
   </div>
  </div>`;
 }
-R.today=()=>{
+/* ---- the day strip: the plan is a first-class band under the briefing,
+   spec §1 layout — time column, task, one-line why. Not a side panel. ---- */
+function dayStripHTML(){
  const t=today();
  const plans=D.plans.filter(p=>p.date===t)
   .sort((a,b)=>(a.done?1:0)-(b.done?1:0)
    ||((a.time&&b.time)?a.time.localeCompare(b.time):a.time?-1:b.time?1:0)
    ||(b.pri?1:0)-(a.pri?1:0));
- const overP=plans.find(p=>plnOverrun(p));
  const parked=plnParked();
  const meta=(D.planMeta&&D.planMeta.date===t)?D.planMeta:null;
+ const overP=plans.find(p=>plnOverrun(p));
+ if(!plans.length&&!parked.length)return "";
+ return `<div class="dstrip">
+  <div class="dsh"><span class="grow">Today's plan${meta?` · made ${h12(meta.at)}`:""}</span>
+   <button class="morelink" onclick="planDay()">${plans.some(p=>p.auto)?"↻ replan":"▸ plan my day"}</button>
+   <button class="morelink" onclick="addPlan()">+ add</button></div>
+  ${overP?`<div class="dsq" style="color:var(--c-late)" onclick="planDay()">
+    ⚠ <b>${esc(overP.text)}</b> is running ${Math.round((Date.now()-new Date(overP.startedAt))/60000-overP.mins)} min over — tap to reflow the rest of the day</div>`:""}
+  ${plans.map(p=>p.type==="Break"
+   ?`<div class="dslot brk"><span class="dst">${esc(h12(p.time||""))} · ${p.mins||10}m</span><span class="dsb">Break</span><span></span></div>`
+   :`<div class="dslot${p.done?" done":""}">
+     <span class="dst">${p.time?esc(h12(p.time)):""}${p.mins?(p.time?" · ":"")+p.mins+"m":""}</span>
+     <span class="dsb" onclick="addPlan('${p.id}')" style="cursor:pointer${p.done?";opacity:.45;text-decoration:line-through":""}">
+      ${p.pri&&!p.done?'<span class="pri">! </span>':""}${esc(p.text)}
+      ${p.why&&!p.done?`<em>${esc(p.why)}</em>`:""}</span>
+     <span class="dsa">
+      ${p.auto&&!p.done&&!p.startedAt?`<button class="ico" title="Start — timer on" onclick="event.stopPropagation();plnStart('${p.id}')">▶</button>`:""}
+      <button class="ck ${p.done?"on":""}" onclick="tickPlan('${p.id}')">${p.done?"✓":""}</button>
+     </span></div>`).join("")}
+  ${!plans.length?`<div class="dsq">Nothing planned — hit <b>▸ plan my day</b> and it builds itself off the board.</div>`:""}
+  ${parked.length?`<div class="dsh" style="border-top:1px solid var(--rule2)"><span class="grow">Parked — waiting on somebody</span><span>${parked.length}</span></div>
+   ${parked.map(j=>`<div class="dsq" onclick="go('job',{id:'${j.id}'})">
+    <b style="color:var(--ink)">${esc(jobName(j))}</b> — ${jBlocked(j)?esc(blockLine(j.blocked))+" · day "+((ago(j.blocked.since)||0)+1):esc((j.waitingOn||"waiting").toLowerCase())} <span style="float:right">→</span></div>`).join("")}`:""}
+  ${meta&&meta.cut&&meta.cut.length?`<div class="dsh" style="border-top:1px solid var(--rule2)"><span class="grow">Didn't fit</span><span>${meta.cut.length}</span></div>
+   ${meta.cut.map(c=>`<div class="dsq" style="cursor:default">${esc(c.text)} — <span class="dim">${esc(c.why)}</span></div>`).join("")}`:""}
+ </div>`;
+}
+R.today=()=>{
+ const t=today();
  const est=byStage("Estimating");
  const lastJ=D.last?job(D.last):null;
  const showResume=lastJ&&lastJ.status!=="Lost";
@@ -5105,6 +5157,7 @@ R.today=()=>{
  const restOpen=D.todayRest===true;   /* collapsed by default, remembered */
  return `
  ${briefingHTML()}
+ ${dayStripHTML()}
  <button class="btn sec" style="margin-top:14px" onclick="D.todayRest=!${restOpen};save();render()">
   ${restOpen?"▴ Hide the rest of the day":"▾ Show the rest of the day"}</button>
  <div style="display:${restOpen?"block":"none"}">
@@ -5129,33 +5182,7 @@ R.today=()=>{
    ${briefHTML()}
   </div>
   <div class="colw">
-   <div class="sechead" style="margin-top:0"><h2>Today's schedule</h2>
-    <button class="morelink" onclick="planDay()">▸ Plan my day</button>
-    <button class="morelink" onclick="addPlan()">+ add</button></div>
-   ${overP?`<div class="pan" style="border-color:var(--c-late)">
-     <div class="row between"><div class="grow"><b>${esc(overP.text)}</b> is running ${Math.round((Date.now()-new Date(overP.startedAt))/60000-overP.mins)} min over.</div>
-      <button class="btn sec s" style="margin:0" onclick="planDay()">Reflow the rest</button></div></div>`:""}
-   <div class="pan flat" style="padding:0">
-   ${plans.length?cap(plans,"plans",10).map(p=>`<div class="li" style="${p.type==='Break'?'opacity:.55':''}">
-     <button class="ck ${p.done?"on":""}" onclick="tickPlan('${p.id}')">${p.done?"✓":""}</button>
-     <div class="grow" onclick="addPlan('${p.id}')" style="${p.done?'opacity:.4':''}">
-      <div style="${p.done?'text-decoration:line-through':''}">${p.pri&&!p.done?'<span class="pri">! </span>':""}${esc(p.text)}</div>
-      ${p.why?`<div class="xs dim" style="margin-top:2px">${esc(p.why)}</div>`:""}
-      <div class="tags">${p.type&&p.type!=="Break"?`<span class="chip v-${PCOL[p.type]||"lost"}">${esc(p.type)}</span>`:""}
-       ${p.time?`<span class="who">${h12(p.time)}${p.mins?" · "+p.mins+"m":""}</span>`:p.mins?`<span class="who">${p.mins}m</span>`:""}${p.who?`<span class="who">· ${esc(p.who)}</span>`:""}</div></div>
-     ${p.auto&&!p.done&&p.type!=="Break"&&!p.startedAt?`<button class="ico" style="width:26px;height:26px;font-size:11px" title="Start — timer on"
-       onclick="event.stopPropagation();plnStart('${p.id}')">▶</button>`:""}
-     <button class="ico" style="width:26px;height:26px;font-size:11px;border:0;color:var(--ink3)" onclick="event.stopPropagation();delPlan('${p.id}')">✕</button></div>`).join("")+moreBtn(plans,"plans",10)
-    :`<div class="li"><span class="dim sm">Nothing down for today — hit <b>▸ Plan my day</b> and it builds itself off the board.</span></div>`}
-   </div>
-   ${parked.length?`<div class="sechead"><h2>Parked — waiting on somebody</h2><span class="em dim">${parked.length}</span></div>
-    <div class="pan flat" style="padding:0">${parked.map(j=>`<div class="li" onclick="go('job',{id:'${j.id}'})" style="cursor:pointer">
-     <div class="grow"><b>${esc(jobName(j))}</b>
-      <div class="xs dim">${jBlocked(j)?esc(blockLine(j.blocked))+" · day "+((ago(j.blocked.since)||0)+1):esc(j.waitingOn||"waiting")}</div></div>
-     <span class="dim">→</span></div>`).join("")}</div>`:""}
-   ${meta&&meta.cut&&meta.cut.length?`<div class="sechead"><h2>Didn't fit</h2><span class="em dim">${meta.cut.length}</span></div>
-    <div class="pan flat" style="padding:0">${meta.cut.map(c=>`<div class="li">
-     <div class="grow"><span class="sm">${esc(c.text)}</span><div class="xs dim">${esc(c.why)}</div></div></div>`).join("")}</div>`:""}
+   <!-- the plan lives in the day strip up top now — this column keeps the rest -->
    ${showResume?`<div class="pan key" onclick="go('job',{id:'${lastJ.id}'})">
      <div class="row between"><div class="grow"><div class="ser" style="font-size:17px">${esc(jobName(lastJ))}</div>
       <div class="xs dim trunc" style="margin-top:3px">${esc(lastJ.address||"—")} · pick up where you left off</div></div>
