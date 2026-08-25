@@ -24,9 +24,12 @@ const fail=(w,d)=>{failed++;console.log("FAIL  "+w+(d?"\n      "+d:""));};
  /* and the cleaner must leave zero chroma behind */
  const i=script.indexOf("async function cleanPrintLogo");
  const src=script.slice(i,i+1400);
- if(!/d\.data\[i\+3\]\)d\.data\[i\]=d\.data\[i\+1\]=d\.data\[i\+2\]=0/.test(src))
+ if(!/d\.data\[i\]=d\.data\[i\+1\]=d\.data\[i\+2\]=0/.test(src))
   fail("surviving logo pixels are not forced to pure black — a profile can tint them");
  else ok("every printed logo pixel is forced to pure black, zero chroma");
+ if(!/lum>135/.test(src))
+  fail("the logo is not hard-cut — the drop shadow will print as a grey box");
+ else ok("logo alpha is a hard cut: no shadow, no halo, no grey box");
 }
 
 /* --- 1b. CHROME PRINTS WITH "BACKGROUND GRAPHICS" OFF BY DEFAULT.
@@ -40,9 +43,17 @@ const fail=(w,d)=>{failed++;console.log("FAIL  "+w+(d?"\n      "+d:""));};
  if(inverted.length)fail(inverted.length+" white-on-dark block(s) in the invoice",
   "with background graphics off these print white on white — use rules and weight instead");
  else ok("no white-on-dark blocks — the invoice reads with backgrounds off");
- if(/#printarea \*\{color:#000!important\}/.test(script))
+ /* these two live in the <style> block, so they are checked against the raw
+    file, not the lifted script — an earlier version of this gate checked the
+    script and passed on absence alone, which is how it missed the rule */
+ const live=html.replace(/\/\*[\s\S]*?\*\//g,"");   /* comments quote old rules; ignore them */
+ if(/#printarea \*\{color:#000!important\}/.test(live))
   fail("the blanket print rule still forces every colour to black");
  else ok("the print stylesheet no longer clobbers deliberate colours");
+ /* nothing chromatic may leave the app on paper */
+ if(!/#printarea,#printarea \*\{filter:grayscale\(100%\)!important/.test(html.replace(/\s+/g," ")))
+  fail("printed pages are not forced to greyscale");
+ else ok("every printed page is forced to greyscale — zero chroma leaves the app");
  /* the three things that must always be legible */
  ["TOTAL DUE","RELEASED ONCE PAYMENT IS RECEIVED","DESCRIPTION"].forEach(k=>{
   const at=src.indexOf(k);
@@ -87,8 +98,10 @@ const JOB={id:"borland",status:"Complete",owner:"Catherine Borland",
  else ok("legal entity prints on the letterhead");
  if(!/806-1233/.test(out))fail("no phone anywhere on the invoice");
  else ok("phone prints");
- if(!/chairmansolutions@gmail\.com/.test(out))fail("no email anywhere on the invoice");
- else ok("email prints");
+ if(!/benny@chairmanremodeling\.com/.test(out))fail("no email anywhere on the invoice");
+ else ok("business email prints");
+ if(/chairmansolutions@gmail/.test(out))fail("the old personal gmail is still on the invoice");
+ else ok("the personal gmail is off his paperwork");
  if(/(ZELLE|PAYABLE TO)[^<]*<br>\s*<b/.test(out.replace(/&nbsp;/g," ").replace(/\s+/g," ")))
   fail("payment block has an empty value");
  else ok("payment block carries real values, no blank fields");

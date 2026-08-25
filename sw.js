@@ -1,5 +1,5 @@
 /* Network-first: always try for the freshest app, fall back to cache when offline. */
-const CACHE = "chairman-v166";
+const CACHE = "chairman-v167";
 self.addEventListener("install", e => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(
   caches.keys().then(k => Promise.all(k.map(n => n !== CACHE && caches.delete(n))))

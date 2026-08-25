@@ -335,6 +335,12 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
     printed black-on-black. Default to black; let a document override. */
  #printarea{color:#000}
  #printarea :not([style*="color"]){color:#000}
+ /* EVERY PRINTED PAGE IS GREYSCALE, BY FORCE. He kept seeing a pink cast; the
+    document's own pixels measured neutral, so this removes the last thing I
+    control — after this, no chroma can leave the app, and any tint left on
+    screen is downstream (display profile, night light, GPU colour setting). */
+ #printarea,#printarea *{filter:grayscale(100%)!important;
+  -webkit-filter:grayscale(100%)!important}
  /* ---- Layout H: centered mark, client-first ---- */
  .inv-h{max-width:7.2in;margin:0 auto}
  .hd{text-align:center;padding-bottom:12pt;border-bottom:.75pt solid #d5d5d5}
@@ -1052,7 +1058,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-166 · his mark, clean";
+const BUILD="C-167 · greyscale, guaranteed";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -7122,7 +7128,7 @@ const BIZ_LEGAL=()=>{const b=((D.me||{}).biz||"").trim();
  return BIZ_CANON.toLowerCase().startsWith(b.toLowerCase())?BIZ_CANON:b;};
 const ME_TITLE=()=>((D.me||{}).title||"").trim()||"Insurance Estimator · Xactimate Certified";
 const ME_PHONE=()=>((D.me||{}).phone||"").trim()||"(713) 806-1233";
-const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"chairmansolutions@gmail.com";
+const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"benny@chairmanremodeling.com";
 const ME_ZELLE=()=>((D.me||{}).zelle||"").trim()||ME_PHONE();
 /* the name the Zelle account is registered under — contractors send to the
    wrong handle when the invoice only says a phone number */
