@@ -1052,7 +1052,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-165 · prints right on default settings";
+const BUILD="C-166 · his mark, clean";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -7065,21 +7065,25 @@ async function cleanPrintLogo(){
  if(_logoClean)return _logoClean;
  try{
   const img=await loadImg(printLogo());
-  const s=Math.min(img.naturalWidth,img.naturalHeight);
-  /* crop inside the square frame so only the hexagon survives */
-  const cs=s*0.56, sx=(img.naturalWidth-cs)/2, sy=(img.naturalHeight-cs)/2;
+  /* Measured off the real file: the mark itself occupies x 26.9–71.2%,
+     y 23.6–75.3%. The old 56% centre crop kept the thin square frame AND the
+     soft drop shadow, and the shadow is what printed as a grey box behind the
+     mark. Crop to the mark, with a small margin so nothing clips. */
+  const W=img.naturalWidth,H=img.naturalHeight,pad=0.02;
+  const sx=W*(0.269-pad), sy=H*(0.236-pad);
+  const sw=W*(0.712-0.269+pad*2), sh=H*(0.753-0.236+pad*2);
+  const side=Math.max(sw,sh);                       /* square canvas, mark centred */
   const c=document.createElement("canvas");c.width=c.height=640;
   const x=c.getContext("2d");
-  x.drawImage(img,sx,sy,cs,cs,0,0,640,640);
+  x.drawImage(img,sx-(side-sw)/2,sy-(side-sh)/2,side,side,0,0,640,640);
   const d=x.getImageData(0,0,640,640);
   for(let i=0;i<d.data.length;i+=4){
    const lum=(d.data[i]+d.data[i+1]+d.data[i+2])/3;
-   if(lum>200)d.data[i+3]=0;                                  /* tile → gone */
-   else if(lum>120)d.data[i+3]=Math.round(255*(200-lum)/80);  /* shadow → fades */
-   /* Every surviving pixel is forced to pure black. The source file is already
-      neutral, but a JPEG edge, a viewer's colour profile or a printer low on
-      cyan can all tint near-black grey. Zero chroma means zero to tint. */
-   if(d.data[i+3])d.data[i]=d.data[i+1]=d.data[i+2]=0;
+   /* Hard cut. Anything that isn't the mark is gone — no shadow, no halo, no
+      grey box. Surviving pixels are forced to pure black so no colour profile
+      or low-cyan printer has anything to tint. */
+   if(lum>135){d.data[i+3]=0;}
+   else{d.data[i+3]=255;d.data[i]=d.data[i+1]=d.data[i+2]=0;}
   }
   x.putImageData(d,0,0);
   _logoClean=c.toDataURL("image/png");
