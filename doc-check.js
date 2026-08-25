@@ -29,6 +29,30 @@ const fail=(w,d)=>{failed++;console.log("FAIL  "+w+(d?"\n      "+d:""));};
  else ok("every printed logo pixel is forced to pure black, zero chroma");
 }
 
+/* --- 1b. CHROME PRINTS WITH "BACKGROUND GRAPHICS" OFF BY DEFAULT.
+       Any text that relies on a dark fill to be legible disappears — that is
+       exactly how INV-1010 printed with an unreadable header, total and
+       banner. Nothing critical may depend on a background being painted. --- */
+{
+ const i=script.indexOf("function invoiceHTML");
+ const src=script.slice(i,script.indexOf("const safeFile=",i));
+ const inverted=[...src.matchAll(/background:#(?:111|000|222)[^"]*color:#fff/g)];
+ if(inverted.length)fail(inverted.length+" white-on-dark block(s) in the invoice",
+  "with background graphics off these print white on white — use rules and weight instead");
+ else ok("no white-on-dark blocks — the invoice reads with backgrounds off");
+ if(/#printarea \*\{color:#000!important\}/.test(script))
+  fail("the blanket print rule still forces every colour to black");
+ else ok("the print stylesheet no longer clobbers deliberate colours");
+ /* the three things that must always be legible */
+ ["TOTAL DUE","RELEASED ONCE PAYMENT IS RECEIVED","DESCRIPTION"].forEach(k=>{
+  const at=src.indexOf(k);
+  if(at<0){fail('"'+k+'" is missing from the invoice');return;}
+  const near=src.slice(Math.max(0,at-320),at);
+  if(/color:#fff/.test(near))fail('"'+k+'" depends on a printed background to be readable');
+  else ok('"'+k+'" is legible without background graphics');
+ });
+}
+
 /* --- 2. runtime: a bare profile still yields a complete letterhead --- */
 function boot(me){
  const store={};

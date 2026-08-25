@@ -330,7 +330,11 @@ pre.inv{white-space:pre-wrap;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospa
  html,body{background:#fff!important;color:#000!important;zoom:1!important}
  body>header,body>nav,body>.wrap,body>.ov,body>.toast{display:none!important}
  #printarea{display:block!important;font:12pt/1.45 Georgia,'Times New Roman',serif;color:#000}
- #printarea *{color:#000!important}
+ /* Was `#printarea *{color:#000!important}` — it clobbered every deliberate
+    colour in a document, including light text sitting on a dark fill, which
+    printed black-on-black. Default to black; let a document override. */
+ #printarea{color:#000}
+ #printarea :not([style*="color"]){color:#000}
  /* ---- Layout H: centered mark, client-first ---- */
  .inv-h{max-width:7.2in;margin:0 auto}
  .hd{text-align:center;padding-bottom:12pt;border-bottom:.75pt solid #d5d5d5}
@@ -1048,7 +1052,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-164 · his logo, his name";
+const BUILD="C-165 · prints right on default settings";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -7226,7 +7230,7 @@ function invoiceHTML(j){
     ${B.email?esc(B.email):""}</td>
   </tr></table>
 
-  <table style="width:100%;border-collapse:collapse;margin-top:12pt;background:#f2f2f2;${PC}">
+  <table style="width:100%;border-collapse:collapse;margin-top:12pt;background:#f2f2f2;${PC};border:.75pt solid #bbb">
    <tr>${metaCell("Invoice #:",esc(no))}${metaCell("Date:",dateStr)}</tr>
    <tr>${metaCell("Project:",esc(jobName(j))+" – "+esc(j.loss||"")+" "+(j.workType==="Project"?"Project":"Estimate"))}
        ${metaCell("Property:",esc(j.address||"—"))}</tr>
@@ -7236,17 +7240,20 @@ function invoiceHTML(j){
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">SERVICES</div>
   <table style="width:100%;border-collapse:collapse">
-   <tr style="background:#111;color:#fff;${PC}">
-    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica,Arial,sans-serif">Description</th>
-    <th style="padding:6pt 8pt;font:bold 9.5pt Helvetica,Arial,sans-serif;width:28pt">Qty</th>
-    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica,Arial,sans-serif;width:110pt">Rate</th>
-    <th style="padding:6pt 8pt;text-align:right;font:bold 9.5pt Helvetica,Arial,sans-serif;width:70pt">Amount</th></tr>
+   <!-- NOT white-on-black: Chrome ships with "Background graphics" OFF, which
+        drops the fill and leaves white text on white paper. Rules and weight
+        carry the emphasis instead, so it reads either way. -->
+   <tr style="border-top:1.25pt solid #111;border-bottom:1.25pt solid #111">
+    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica,Arial,sans-serif;letter-spacing:.6pt">DESCRIPTION</th>
+    <th style="padding:6pt 8pt;font:bold 9.5pt Helvetica,Arial,sans-serif;width:28pt;letter-spacing:.6pt">QTY</th>
+    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica,Arial,sans-serif;width:110pt;letter-spacing:.6pt">RATE</th>
+    <th style="padding:6pt 8pt;text-align:right;font:bold 9.5pt Helvetica,Arial,sans-serif;width:70pt;letter-spacing:.6pt">AMOUNT</th></tr>
    ${svcRows.join("")}
    <tr><td colspan="3" style="padding:7pt 8pt;text-align:right;font:10.5pt Helvetica,Arial,sans-serif">Subtotal</td>
     <td style="padding:7pt 8pt;text-align:right;font:10.5pt Helvetica,Arial,sans-serif">${money(f.gross)}</td></tr>
-   <tr style="background:#111;color:#fff;${PC}">
-    <td colspan="3" style="padding:8pt;text-align:right;font:bold 12pt Helvetica,Arial,sans-serif;letter-spacing:.5pt">TOTAL DUE</td>
-    <td style="padding:8pt;text-align:right;font:bold 13pt Helvetica,Arial,sans-serif;white-space:nowrap">${money(f.over?0:f.due)}</td></tr>
+   <tr style="border-top:1.25pt solid #111">
+    <td colspan="3" style="padding:9pt 8pt 4pt;text-align:right;font:bold 12pt Helvetica,Arial,sans-serif;letter-spacing:.5pt">TOTAL DUE</td>
+    <td style="padding:9pt 8pt 4pt;text-align:right;font:bold 14pt Helvetica,Arial,sans-serif;white-space:nowrap;border-bottom:3pt double #111">${money(f.over?0:f.due)}</td></tr>
   </table>
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">PAYMENT</div>
@@ -7259,8 +7266,8 @@ function invoiceHTML(j){
     <div style="font:8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666">AMOUNT DUE</div>
     <div style="font:bold 20pt Helvetica,Arial,sans-serif;margin-top:2pt">${money(f.over?0:f.due)}</div></td>
   </tr></table>
-  ${f.due>0?`<div style="margin-top:7pt;padding:6pt 10pt;background:#111;color:#fff;${PC};
-   font:bold 10pt Helvetica,Arial,sans-serif;letter-spacing:.3pt;text-align:center">
+  ${f.due>0?`<div style="margin-top:8pt;padding:7pt 10pt;border:1.25pt solid #111;
+   font:bold 10.5pt Helvetica,Arial,sans-serif;letter-spacing:.3pt;text-align:center">
    THE COMPLETED ESTIMATE IS RELEASED ONCE PAYMENT IS RECEIVED.</div>`:""}
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">TERMS &amp; CONDITIONS</div>
