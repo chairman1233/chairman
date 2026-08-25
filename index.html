@@ -7112,6 +7112,9 @@ const ME_TITLE=()=>((D.me||{}).title||"").trim()||"Insurance Estimator · Xactim
 const ME_PHONE=()=>((D.me||{}).phone||"").trim()||"(713) 806-1233";
 const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"chairmansolutions@gmail.com";
 const ME_ZELLE=()=>((D.me||{}).zelle||"").trim()||ME_PHONE();
+/* the name the Zelle account is registered under — contractors send to the
+   wrong handle when the invoice only says a phone number */
+const ZELLE_NAME=()=>((D.me||{}).zelleName||"").trim()||"Chairman Remodeling Group — Benny Mancillas";
 function invoiceHTML(j){
  const f=fee(j),me=D.me,B=billParty(j);
  const no=j.invNo||peekInvNo();
@@ -7160,6 +7163,8 @@ function invoiceHTML(j){
     carrier talks the claim down — non-refundable; contractor loses the job —
     non-refundable; and he is not a party to client-contractor disputes. */
  const TERMS=[
+  ["Delivery on Payment","The completed estimate, including all Xactimate files, PDFs and supporting documentation, is delivered once payment has been received and cleared. Drafts or partial scopes shared before payment remain the property of the Estimator and are not licensed for submission to any carrier."],
+  ["Zelle","Payment is made by Zelle to "+ZELLE_NAME()+" at "+ME_ZELLE()+". Confirm the registered name before sending — payments to any other handle cannot be credited to this invoice."],
   ["Scope of Fee","The fee covers the initial estimate, a reasonable number of revisions, phone negotiations, and email rebuttals with the carrier. Matterport scan access is included for fourteen (14) days after payment is received."],
   ["Matterport Access","Scan files remain available for two weeks after payment, then are permanently deleted. A one-month extension is available for $"+mpExt+".00 if requested before the window expires."],
   ["Site Visits","Any on-site visit is billed separately at $"+sv+".00 per visit (or $"+svDay+".00 per day for extended site work). Site visits are not included in the fee."],
@@ -7244,12 +7249,15 @@ function invoiceHTML(j){
   <table style="width:100%;border-collapse:collapse;margin-top:2pt"><tr>
    <td style="vertical-align:top;font:10pt/1.65 Helvetica,Arial,sans-serif;padding:7pt 10pt;border:.75pt solid #111;${PC}">
     <b style="letter-spacing:.4pt">ZELLE</b> &nbsp;${esc(ME_ZELLE())}<br>
-    <b style="letter-spacing:.4pt">PAYABLE TO</b> &nbsp;${esc(ME_NAME())}<br>
-    <span style="color:#444">Payment due upon receipt.${me.terms&&!/receipt/i.test(me.terms)?" "+esc(me.terms)+".":""} Services commence upon cleared funds.</span></td>
+    <b style="letter-spacing:.4pt">REGISTERED TO</b> &nbsp;${esc(ZELLE_NAME())}<br>
+    <span style="color:#444">Payment due upon receipt.${me.terms&&!/receipt/i.test(me.terms)?" "+esc(me.terms)+".":""}</span></td>
    <td style="vertical-align:middle;text-align:right;width:38%;padding-left:12pt">
     <div style="font:8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666">AMOUNT DUE</div>
     <div style="font:bold 20pt Helvetica,Arial,sans-serif;margin-top:2pt">${money(f.over?0:f.due)}</div></td>
   </tr></table>
+  ${f.due>0?`<div style="margin-top:7pt;padding:6pt 10pt;background:#111;color:#fff;${PC};
+   font:bold 10pt Helvetica,Arial,sans-serif;letter-spacing:.3pt;text-align:center">
+   THE COMPLETED ESTIMATE IS RELEASED ONCE PAYMENT IS RECEIVED.</div>`:""}
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">TERMS &amp; CONDITIONS</div>
   <div style="font:8.5pt/1.5 Helvetica,Arial,sans-serif;color:#222;text-align:justify">

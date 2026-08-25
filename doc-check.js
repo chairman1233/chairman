@@ -74,15 +74,26 @@ const JOB={id:"borland",status:"Complete",owner:"Catherine Borland",
  else ok("the fee is right: 2% of $112,388.61 = $2,247.77");
  if(!/INV-1010/.test(out))fail("invoice number missing");
  else ok("invoice number prints in the header");
+ /* the two things he asked for by name */
+ if(!/RELEASED ONCE PAYMENT IS RECEIVED/.test(out))
+  fail("the invoice does not say the estimate is released on payment");
+ else ok("\"estimate released once payment is received\" is on the face of the invoice");
+ if(!/Delivery on Payment/.test(out))fail("no delivery-on-payment term");
+ else ok("delivery-on-payment is also a numbered term");
+ if(!/Chairman Remodeling Group — Benny Mancillas/.test(out))
+  fail("the Zelle registered name is wrong or missing");
+ else ok("Zelle shows as registered: Chairman Remodeling Group — Benny Mancillas");
 }
 /* a fully-filled profile must win over every fallback */
 {
  const ctx=boot({biz:"Mancillas Estimating LLC",name:"B. R. Mancillas",phone:"713-555-0100",
-  email:"me@example.com",zelle:"713-555-0100",title:"Public Insurance Estimator"});
+  email:"me@example.com",zelle:"713-555-0100",zelleName:"Mancillas Estimating",title:"Public Insurance Estimator"});
  const out=ctx.__inv(JOB);
  if(/Benny Mancillas|806-1233|chairmansolutions/.test(out))
   fail("a fallback overrode what he actually typed in Settings");
  else ok("his own settings always beat the fallbacks");
+ if(!/Mancillas Estimating<\/|Mancillas Estimating\b/.test(out))fail("his own Zelle name did not print");
+ else ok("his own Zelle registered name prints as typed");
  if(!/Mancillas Estimating LLC/.test(out))fail("his own business name did not print");
  else ok("his business name prints as typed");
 }
