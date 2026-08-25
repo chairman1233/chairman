@@ -12,20 +12,21 @@ let failed=0;
 const ok=w=>console.log("ok    "+w);
 const fail=(w,d)=>{failed++;console.log("FAIL  "+w+(d?"\n      "+d:""));};
 
-/* --- 1. static: nothing that prints may pull the raster logo --- */
+/* --- 1. HIS logo, and only his. I once swapped it for a mark I drew myself;
+       that must never happen again, so the real asset is pinned here. --- */
 {
- const printFns=["invoiceHTML","contractHTML","printStatus"];
- let bad=[];
- printFns.forEach(fn=>{
-  const i=script.indexOf("function "+fn+"(");
-  if(i<0)return;
-  const body=script.slice(i,i+9000);
-  const end=body.indexOf("\nfunction ");
-  const src=end>0?body.slice(0,end):body;
-  if(/printLogo\(\)|_logoForPrint/.test(src))bad.push(fn);
- });
- if(bad.length)fail("a printed document still uses the raster logo (pink cast)","in: "+bad.join(", "));
- else ok("invoice, contract and status letter all use the vector mark");
+ if(!/const PRINT_MARK=\(pt\)=>`<img src="\$\{esc\(_logoForPrint\|\|printLogo\(\)\)\}"/.test(script))
+  fail("the letterhead is not using his own logo asset");
+ else ok("the letterhead uses HIS logo file, not a substitute");
+ if(/<svg[^>]*viewBox="0 0 124 136"[\s\S]{0,400}?PRINT_MARK/.test(script))
+  fail("a hand-drawn mark is still standing in for his logo");
+ else ok("no invented mark anywhere in the print path");
+ /* and the cleaner must leave zero chroma behind */
+ const i=script.indexOf("async function cleanPrintLogo");
+ const src=script.slice(i,i+1400);
+ if(!/d\.data\[i\+3\]\)d\.data\[i\]=d\.data\[i\+1\]=d\.data\[i\+2\]=0/.test(src))
+  fail("surviving logo pixels are not forced to pure black — a profile can tint them");
+ else ok("every printed logo pixel is forced to pure black, zero chroma");
 }
 
 /* --- 2. runtime: a bare profile still yields a complete letterhead --- */
@@ -67,8 +68,8 @@ const JOB={id:"borland",status:"Complete",owner:"Catherine Borland",
  if(/(ZELLE|PAYABLE TO)[^<]*<br>\s*<b/.test(out.replace(/&nbsp;/g," ").replace(/\s+/g," ")))
   fail("payment block has an empty value");
  else ok("payment block carries real values, no blank fields");
- if(/<img/i.test(out))fail("the invoice still embeds a raster image");
- else ok("no raster image on the invoice at all");
+ if(!/<img[^>]+src=/.test(out))fail("his logo is missing from the invoice entirely");
+ else ok("his logo is on the invoice");
  /* the money must still be right after all the layout surgery */
  if(!/\$2,247\.77/.test(out))fail("2% of $112,388.61 is not on the invoice","expected $2,247.77");
  else ok("the fee is right: 2% of $112,388.61 = $2,247.77");

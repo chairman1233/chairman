@@ -1048,7 +1048,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-163 · his name on every page";
+const BUILD="C-164 · his logo, his name";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6009,7 +6009,7 @@ async function printStatus(jobId){
  const links=[];
  if(j.mportLink)links.push(link(j.mportLink,"Walk the 3D scan of your property"));
  if(j.ccLink)links.push(link(j.ccLink,"Photo documentation"));
- /* letterhead is vector now — nothing to load */
+ _logoForPrint=await cleanPrintLogo();
  document.getElementById("printarea").innerHTML=`
  <div style="font-family:Georgia,serif;color:#1B1B1E;max-width:7.2in;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
   <div style="text-align:center">
@@ -6390,7 +6390,7 @@ function caseLogSheet(id){const j=job(id);if(!j||!j.caseLog)return;
   <div class="sm" style="white-space:pre-wrap;line-height:1.65;max-height:60vh;overflow:auto">${esc(j.caseLog)}</div>
   <button class="btn sec" style="margin-top:14px" onclick="printCaseLog('${id}')">⎙ Print / Save as PDF</button>`);}
 async function printCaseLog(id){const j=job(id);
- /* letterhead is vector now — nothing to load */
+ _logoForPrint=await cleanPrintLogo();
  document.getElementById("printarea").innerHTML=
   `<div style="font:10.5pt/1.6 Georgia,serif;color:#1B1B1E;max-width:7.2in;margin:0 auto;white-space:pre-wrap">${esc(j.caseLog)}</div>`;
  close_();const was=document.title;
@@ -7072,6 +7072,10 @@ async function cleanPrintLogo(){
    const lum=(d.data[i]+d.data[i+1]+d.data[i+2])/3;
    if(lum>200)d.data[i+3]=0;                                  /* tile → gone */
    else if(lum>120)d.data[i+3]=Math.round(255*(200-lum)/80);  /* shadow → fades */
+   /* Every surviving pixel is forced to pure black. The source file is already
+      neutral, but a JPEG edge, a viewer's colour profile or a printer low on
+      cyan can all tint near-black grey. Zero chroma means zero to tint. */
+   if(d.data[i+3])d.data[i]=d.data[i+1]=d.data[i+2]=0;
   }
   x.putImageData(d,0,0);
   _logoClean=c.toDataURL("image/png");
@@ -7087,12 +7091,12 @@ const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 124 136" xmlns="http://w
 </svg>`;
 const myLogo=()=>D.me.logo||LOGO_DEFAULT;
 const printLogo=()=>D.me.logo||LOGO_PRINT;
-/* The mark, inline and vector, for anything that prints. The uploaded JPG had a
-   pink cast baked into its tile that the alpha threshold could never fully
-   clear — it showed on the invoice, the contract and the status letter. */
-const PRINT_MARK=(pt)=>`<svg viewBox="0 0 124 136" style="width:${pt*0.91}pt;height:${pt}pt" xmlns="http://www.w3.org/2000/svg">
- <path fill="#111" fill-rule="evenodd" d="M62 2 118 34v40H86V58L62 44 38 58v34l24 14 24-14v-4h32v14l-56 32L6 102V34L62 2Z
-  M62 26 94 44v10H78v-2L62 44 46 54v34l16 10 16-10v-2h16v10L62 114 30 96V44L62 26Z"/></svg>`;
+/* HIS logo — the real asset, never a substitute I drew. It is measurably
+   neutral (0 pixels with any colour cast), so it prints as it looks; the
+   cleaner below only removes the white tile and forces every surviving pixel
+   to pure black so no viewer, printer or profile can tint it. */
+const PRINT_MARK=(pt)=>`<img src="${esc(_logoForPrint||printLogo())}" alt=""
+ style="width:${pt}pt;height:${pt}pt;object-fit:contain">`;
 /* WHO HE IS ON PAPER. His profile held name:"Benny" with no phone or email, so
    the invoice printed a first name and two blank lines. Documents that go to a
    contractor need the whole identity, so every field has a real fallback and a
@@ -7389,7 +7393,7 @@ async function printContract(acctId){
   addr:$("#ctrAddr")?$("#ctrAddr").value.trim():""};
  /* typed rates become the company's rates — the contract IS the record */
  a.feePct=opts.pct;a.supPct=opts.sup;a.updatedAt=new Date().toISOString();save();
- /* letterhead is vector now — nothing to load */
+ _logoForPrint=await cleanPrintLogo();
  document.getElementById("printarea").innerHTML=contractHTML(a,opts);
  close_();
  const was=document.title;
@@ -7403,7 +7407,7 @@ async function printInvoice(id){
     how a duplicate number goes out. */
  if(!j.invNo){j.invNo=nextInvNo();j.invDate=today();
   if(["Waiting","Estimating","Complete"].includes(j.status))j.status="Invoiced";save();}
- /* letterhead is vector now — nothing to load */
+ _logoForPrint=await cleanPrintLogo();
  document.getElementById("printarea").innerHTML=invoiceHTML(j);
  close_();
  const was=document.title;
