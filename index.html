@@ -1058,7 +1058,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-167 · greyscale, guaranteed";
+const BUILD="C-168 · the balance tells the truth";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -4790,9 +4790,17 @@ function nutStats(ym){
  ym=ym||ymNow();
  const target=nutTotal(),amt=+NUT().pay.amount||0;
  const cash=+NUT().cash||0;
- const fees=D.jobs.filter(j=>j.paidDate&&String(j.paidDate).slice(0,7)===ym&&!sealed(j))
-  .reduce((n,j)=>n+fee(j).gross,0);   /* sealed case money lives on Disputes, not in the month */
- const covered=cash+fees;
+ const monthFees=D.jobs.filter(j=>j.paidDate&&String(j.paidDate).slice(0,7)===ym&&!sealed(j));
+ const feesAll=monthFees.reduce((n,j)=>n+fee(j).gross,0);   /* sealed case money lives on Disputes */
+ /* DOUBLE-COUNT FIX. A bank balance already contains every fee banked before
+    it was read. Adding this month's collected fees on top counted that money
+    twice and told him he was covered when he wasn't. Only fees that landed
+    AFTER the balance snapshot are new money. */
+ const cashAt=String(NUT().cashAt||"").slice(0,10);
+ const feesNew=cashAt?monthFees.filter(j=>String(j.paidDate)>cashAt)
+   .reduce((n,j)=>n+fee(j).gross,0):feesAll;
+ const fees=feesAll;                     /* still reported — it's a real month stat */
+ const covered=cash+feesNew;
  const gap=Math.max(0,target-covered);
  const days=nutPaydays(ym);
  const retainerMonth=days.length*amt;
@@ -4800,7 +4808,7 @@ function nutStats(ym){
  const daysToPay=Math.max(0,Math.round((dayFromISO(next)-dayFromISO(today()))/86400000));
  const lastDay=new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate();
  const daysLeft=ym===ymNow()?Math.max(1,lastDay-new Date().getDate()+1):lastDay;
- return {target,amt,cash,fees,covered,gap,
+ return {target,amt,cash,fees,feesNew,cashAt,covered,gap,
   surplus:Math.max(0,covered-target),
   paydays:days,retainerMonth,next,daysToPay,
   retainerNeeded:Math.min(gap,retainerMonth),      /* how deep he'd have to dip */
@@ -4818,15 +4826,21 @@ function nutMeterHTML(){
   <div class="row between" style="align-items:baseline;margin-top:12px;gap:14px">
    <div class="num money v-${s.gap?"out":"rdy"}" style="font-size:36px">${money0(s.gap||s.surplus)}</div>
    <div class="xs dim" style="text-align:right;line-height:1.5">${s.gap?"still to bring in":"target met — ahead by"}<br>target ${money0(s.target)}${goalsTotal()?`<br><span class="v-est">incl. ${money0(goalsTotal())} in goals</span>`:""}</div></div>
+  <!-- the bar shows MONEY, not events: the balance, plus only what landed
+       after it was read. Fees banked before the snapshot are already inside
+       the balance and drawing them again inflated the bar. -->
   <div class="nutbar">
    <i style="width:${pc(s.cash)}%;background:var(--c-rdy)"></i>
-   <i style="width:${pc(s.fees)}%;background:var(--c-est)"></i>
+   ${s.feesNew?`<i style="width:${pc(s.feesNew)}%;background:var(--c-est)"></i>`:""}
   </div>
   <div class="nutkey">
-   <span><b style="background:var(--c-rdy)"></b>In the account ${money0(s.cash)}</span>
-   <span><b style="background:var(--c-est)"></b>Fees collected ${money0(s.fees)}</span>
+   <span><b style="background:var(--c-rdy)"></b>In the account ${money0(s.cash)}${
+    s.cashAt?` <span class="dim">as of ${fmt(s.cashAt)}</span>`:""}</span>
+   ${s.feesNew?`<span><b style="background:var(--c-est)"></b>Collected since ${money0(s.feesNew)}</span>`:""}
    ${s.gap?`<span><b style="background:var(--c-out)"></b>Short ${money0(s.gap)}</span>`:""}
   </div>
+  ${s.cashAt&&s.fees?`<p class="xs dim" style="margin:8px 0 0">${money0(s.fees)} collected this month${
+   s.feesNew<s.fees?" — already in the balance above, not added twice":""}.</p>`:""}
   <p class="xs dim" style="margin:13px 0 0">
    ${s.gap?`${plural(s.daysLeft,"day")} left · about <b class="v-out">${money0(s.perDay)}/day</b> to close it.`
     :`Anything else you collect this month is profit.`}

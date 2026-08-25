@@ -80,6 +80,13 @@ vm.runInContext(`
   globalThis.__money   = () => JSON.stringify(MONEY(), (k,v) => k === "jobs" ? undefined : v);
   globalThis.__fee     = j  => { D.jobs = [j]; return JSON.stringify(fee(j)); };
   globalThis.__state   = j  => { D.jobs = [j]; return moneyState(j); };
+  globalThis.__nut     = (cash, cashAt, jobs) => {
+    D.jobs = jobs;
+    D.nut = { on:true, pay:{every:"2weeks",amount:1600,anchor:"2026-07-31"},
+      cash, cashAt, goals:[], buffer:0,
+      items:[{id:"a",label:"Rent",amount:1500},{id:"b",label:"Everything else",amount:2850}] };
+    return JSON.stringify(nutStats("2026-08"));
+  };
 `, ctx);
 const feeOf   = j => JSON.parse(ctx.__fee(j));
 const stateOf = j => ctx.__state(j);
@@ -264,6 +271,40 @@ if (Math.round(M2.banked.amt) !== Math.round(M.banked.amt)) {
 if (M.collectable.amt >= M.contested.amt) {
   failed++;
   console.log("collectable must NOT include contested money   <-- FAIL");
+}
+
+/* ---- THE DOUBLE-COUNT GATE -------------------------------------------------
+   He read his balances off his bank ($1,636.79 + $768.38) and the meter added
+   this month's collected fees on top — but that money was already sitting in
+   the balance. It told him he was $210 short when he was $1,945 short. A bank
+   balance is a stock; only money that lands AFTER it was read is new. */
+{
+  const paidJob = amt => ({ id:"p"+amt, status:"Paid", total:amt*10, feeMode:"pct", feePct:10,
+    paidDate:"2026-08-20", subs:[], subCosts:{}, extras:[], payments:[] });
+  const banked = paidJob(1735);            /* collected Aug 20 */
+  /* balance read Aug 25 — the Aug 20 fee is already inside it */
+  const after = JSON.parse(ctx.__nut(2405.17, "2026-08-25", [banked]));
+  if (Math.round(after.covered) !== Math.round(2405.17)) {
+    failed++;
+    console.log(`fees banked BEFORE the balance were counted twice (covered ${Math.round(after.covered)}, should be 2405)   <-- FAIL`);
+  }
+  if (Math.round(after.fees) !== 1735) {
+    failed++;
+    console.log("this month's collected total stopped being reported   <-- FAIL");
+  }
+  /* a fee that lands AFTER the balance was read IS new money */
+  const later = paidJob(2000); later.id = "later"; later.paidDate = "2026-08-27";
+  const both = JSON.parse(ctx.__nut(2405.17, "2026-08-25", [banked, later]));
+  if (Math.round(both.covered) !== Math.round(2405.17 + 2000)) {
+    failed++;
+    console.log(`money collected after the balance was read is not being added (covered ${Math.round(both.covered)})   <-- FAIL`);
+  }
+  /* never told us a balance: fall back to counting the month's fees */
+  const none = JSON.parse(ctx.__nut(0, "", [banked]));
+  if (Math.round(none.covered) !== 1735) {
+    failed++;
+    console.log("with no balance on file the month's fees should still count   <-- FAIL");
+  }
 }
 
 console.log("-".repeat(96));
