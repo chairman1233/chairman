@@ -6,6 +6,6 @@
 #   money  — fee() still returns what he invoices
 #   ui     — his typing survives; stale tabs can't overwrite it
 set -e
-for c in parse form match money ui inv sync intake planner; do node "$c-check.js"; done
+for c in parse form match money ui inv sync intake planner doc; do node "$c-check.js"; done
 echo
 echo "ALL GATES PASS"

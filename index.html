@@ -1048,7 +1048,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-162 · the plan gets the front page";
+const BUILD="C-163 · his name on every page";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -6009,12 +6009,12 @@ async function printStatus(jobId){
  const links=[];
  if(j.mportLink)links.push(link(j.mportLink,"Walk the 3D scan of your property"));
  if(j.ccLink)links.push(link(j.ccLink,"Photo documentation"));
- _logoForPrint=await cleanPrintLogo();
+ /* letterhead is vector now — nothing to load */
  document.getElementById("printarea").innerHTML=`
  <div style="font-family:Georgia,serif;color:#1B1B1E;max-width:7.2in;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
   <div style="text-align:center">
-   <img src="${esc(_logoForPrint||printLogo())}" style="width:44pt;height:44pt;object-fit:contain" alt="">
-   <div style="font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:4pt;margin-top:5pt">CHAIRMAN REMODELING GROUP</div>
+   ${PRINT_MARK(40)}
+   <div style="font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:4pt;margin-top:5pt">${esc(BIZ_LEGAL().toUpperCase())}</div>
    <div style="font:7.5pt Helvetica,Arial,sans-serif;letter-spacing:2pt;color:#5A5C60;margin:3pt 0 8pt">ESTIMATING DIVISION &nbsp;·&nbsp; HOUSTON / LA PORTE, TEXAS</div>
    <div style="border-bottom:1.5pt solid #1B1B1E"></div>
    <div style="font:bold 17pt Georgia,serif;margin:10pt 0 2pt">Project Status Update</div>
@@ -6390,7 +6390,7 @@ function caseLogSheet(id){const j=job(id);if(!j||!j.caseLog)return;
   <div class="sm" style="white-space:pre-wrap;line-height:1.65;max-height:60vh;overflow:auto">${esc(j.caseLog)}</div>
   <button class="btn sec" style="margin-top:14px" onclick="printCaseLog('${id}')">⎙ Print / Save as PDF</button>`);}
 async function printCaseLog(id){const j=job(id);
- _logoForPrint=await cleanPrintLogo();
+ /* letterhead is vector now — nothing to load */
  document.getElementById("printarea").innerHTML=
   `<div style="font:10.5pt/1.6 Georgia,serif;color:#1B1B1E;max-width:7.2in;margin:0 auto;white-space:pre-wrap">${esc(j.caseLog)}</div>`;
  close_();const was=document.title;
@@ -7087,6 +7087,31 @@ const CHAIRMAN_MARK=`<svg class="inv-mark" viewBox="0 0 124 136" xmlns="http://w
 </svg>`;
 const myLogo=()=>D.me.logo||LOGO_DEFAULT;
 const printLogo=()=>D.me.logo||LOGO_PRINT;
+/* The mark, inline and vector, for anything that prints. The uploaded JPG had a
+   pink cast baked into its tile that the alpha threshold could never fully
+   clear — it showed on the invoice, the contract and the status letter. */
+const PRINT_MARK=(pt)=>`<svg viewBox="0 0 124 136" style="width:${pt*0.91}pt;height:${pt}pt" xmlns="http://www.w3.org/2000/svg">
+ <path fill="#111" fill-rule="evenodd" d="M62 2 118 34v40H86V58L62 44 38 58v34l24 14 24-14v-4h32v14l-56 32L6 102V34L62 2Z
+  M62 26 94 44v10H78v-2L62 44 46 54v34l16 10 16-10v-2h16v10L62 114 30 96V44L62 26Z"/></svg>`;
+/* WHO HE IS ON PAPER. His profile held name:"Benny" with no phone or email, so
+   the invoice printed a first name and two blank lines. Documents that go to a
+   contractor need the whole identity, so every field has a real fallback and a
+   half-filled profile can never produce a half-filled letterhead again. */
+const ME_NAME =()=>{const n=((D.me||{}).name||"").trim();
+ return (!n||n.split(/\s+/).length<2)?"Benny Mancillas":n;};
+/* Never INVENT an entity name — "Chairman Remodeling" + "LLC" would name a
+   company that doesn't exist. Use what he typed if it's already an entity, fill
+   in his real registered name when what he typed is just a shorthand of it, and
+   otherwise print exactly what he typed. */
+const BIZ_CANON="Chairman Remodeling Group LLC";
+const BIZ_LEGAL=()=>{const b=((D.me||{}).biz||"").trim();
+ if(!b)return BIZ_CANON;
+ if(/\b(llc|l\.l\.c|inc|corp|co)\b\.?/i.test(b))return b;
+ return BIZ_CANON.toLowerCase().startsWith(b.toLowerCase())?BIZ_CANON:b;};
+const ME_TITLE=()=>((D.me||{}).title||"").trim()||"Insurance Estimator · Xactimate Certified";
+const ME_PHONE=()=>((D.me||{}).phone||"").trim()||"(713) 806-1233";
+const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"chairmansolutions@gmail.com";
+const ME_ZELLE=()=>((D.me||{}).zelle||"").trim()||ME_PHONE();
 function invoiceHTML(j){
  const f=fee(j),me=D.me,B=billParty(j);
  const no=j.invNo||peekInvNo();
@@ -7166,17 +7191,27 @@ function invoiceHTML(j){
   <td style="padding:5pt 8pt;font:9.5pt Helvetica,Arial,sans-serif;vertical-align:top">${v}</td>`;
  return `
  <div style="${S};color:#111;${PC}">
-  <table style="width:100%;border-collapse:collapse"><tr>
-   <td style="vertical-align:top"><img src="${esc(_logoForPrint||printLogo())}" alt="" style="width:52pt;height:52pt;object-fit:contain"></td>
-   <td style="vertical-align:top;text-align:right;font:bold 24pt Helvetica,Arial,sans-serif;letter-spacing:1pt">INVOICE</td>
+  <!-- LETTERHEAD. The mark is drawn as vector, not the JPG: the photo carried a
+       pink cast in its tile that no alpha threshold cleaned up properly, and it
+       printed soft. This prints sharp at any size and is pure black. -->
+  <table style="width:100%;border-collapse:collapse;border-bottom:2pt solid #111;padding-bottom:8pt"><tr>
+   <td style="vertical-align:middle;width:46pt;padding-bottom:9pt">${PRINT_MARK(46)}</td>
+   <td style="vertical-align:middle;padding:0 0 9pt 11pt">
+    <div style="font:bold 15pt Helvetica,Arial,sans-serif;letter-spacing:2.2pt;line-height:1.1">${esc(BIZ_LEGAL())}</div>
+    <div style="font:8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.6pt;color:#555;margin-top:3pt">ESTIMATING DIVISION &nbsp;·&nbsp; HOUSTON, TEXAS</div></td>
+   <td style="vertical-align:middle;text-align:right;padding-bottom:9pt">
+    <div style="font:bold 23pt Helvetica,Arial,sans-serif;letter-spacing:2pt">INVOICE</div>
+    <div style="font:10pt Helvetica,Arial,sans-serif;color:#555;margin-top:2pt">${esc(no)}</div></td>
   </tr></table>
 
-  <table style="width:100%;border-collapse:collapse;margin-top:10pt"><tr>
+  <table style="width:100%;border-collapse:collapse;margin-top:12pt"><tr>
    <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif;width:50%">
-    <b>${esc(me.name||"Benny Mancillas")}</b><br>Chairman Remodeling Group — Estimating Division<br>
-    ${me.phone?"Phone / Zelle: "+esc(me.zelle||me.phone)+"<br>":""}${me.email?"Email: "+esc(me.email):""}</td>
+    <div style="font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666;margin-bottom:3pt">FROM</div>
+    <b>${esc(ME_NAME())}</b><br>${esc(ME_TITLE())}<br>
+    ${ME_PHONE()?esc(ME_PHONE())+"<br>":""}${ME_EMAIL()?esc(ME_EMAIL()):""}</td>
    <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif">
-    <b>Bill To:</b><br><b>${esc(B.name)}</b><br>
+    <div style="font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666;margin-bottom:3pt">BILL TO</div>
+    <b>${esc(B.name)}</b><br>
     ${B.isC&&j.contractorContact?esc(j.contractorContact)+"<br>":""}
     ${B.isC&&j.contractorPhone?esc(j.contractorPhone)+"<br>":!B.isC&&j.phone?esc(j.phone)+"<br>":""}
     ${B.email?esc(B.email):""}</td>
@@ -7206,18 +7241,25 @@ function invoiceHTML(j){
   </table>
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">PAYMENT</div>
-  <div style="font:10pt/1.6 Helvetica,Arial,sans-serif">
-   <b>Zelle:</b> ${esc(me.zelle||me.phone||"")} &nbsp;|&nbsp; <b>Payable to:</b> ${esc(me.name||"Benny Mancillas")}<br>
-   Payment due upon receipt.${me.terms&&!/receipt/i.test(me.terms)?" "+esc(me.terms)+".":""} Services commence upon cleared funds.</div>
+  <table style="width:100%;border-collapse:collapse;margin-top:2pt"><tr>
+   <td style="vertical-align:top;font:10pt/1.65 Helvetica,Arial,sans-serif;padding:7pt 10pt;border:.75pt solid #111;${PC}">
+    <b style="letter-spacing:.4pt">ZELLE</b> &nbsp;${esc(ME_ZELLE())}<br>
+    <b style="letter-spacing:.4pt">PAYABLE TO</b> &nbsp;${esc(ME_NAME())}<br>
+    <span style="color:#444">Payment due upon receipt.${me.terms&&!/receipt/i.test(me.terms)?" "+esc(me.terms)+".":""} Services commence upon cleared funds.</span></td>
+   <td style="vertical-align:middle;text-align:right;width:38%;padding-left:12pt">
+    <div style="font:8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666">AMOUNT DUE</div>
+    <div style="font:bold 20pt Helvetica,Arial,sans-serif;margin-top:2pt">${money(f.over?0:f.due)}</div></td>
+  </tr></table>
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">TERMS &amp; CONDITIONS</div>
   <div style="font:8.5pt/1.5 Helvetica,Arial,sans-serif;color:#222;text-align:justify">
    ${TERMS.map((t,i)=>`<div style="margin-bottom:3.5pt"><b>${i+1}. ${esc(t[0])}.</b> ${esc(t[1])}</div>`).join("")}
   </div>
 
-  <div style="text-align:center;font:8.5pt Helvetica,Arial,sans-serif;color:#555;margin-top:12pt;border-top:.5pt solid #ccc;padding-top:6pt">
-   Thank you for your business. Questions? Call or text ${esc(me.zelle||me.phone||"")}.
-   <span style="color:#999"> · Powered by Chairman Command Center</span></div>
+  <div style="text-align:center;font:8.5pt/1.6 Helvetica,Arial,sans-serif;color:#555;margin-top:14pt;border-top:.5pt solid #ccc;padding-top:7pt">
+   <b style="color:#111">${esc(BIZ_LEGAL())}</b> &nbsp;·&nbsp; ${esc(ME_NAME())}, ${esc(ME_TITLE())}<br>
+   ${esc(ME_PHONE())} &nbsp;·&nbsp; ${esc(ME_EMAIL())}<br>
+   <span style="color:#888">Thank you for your business.</span></div>
  </div>`;
 }
 /* Chrome names a Save-as-PDF after document.title, so the file was always
@@ -7277,8 +7319,8 @@ function contractHTML(a,opts){
   <td style="font:10.5pt Georgia,serif;padding:3pt 0;border-bottom:.75pt solid #1B1B1E;width:100%">${v||"&nbsp;"}</td></tr>`;
  return `<div style="${S};color:#1B1B1E;max-width:7.2in;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact">
   <div style="text-align:center">
-   <img src="${esc(_logoForPrint||printLogo())}" style="width:44pt;height:44pt;object-fit:contain" alt="">
-   <div style="font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:4pt;margin-top:5pt">CHAIRMAN REMODELING GROUP</div>
+   ${PRINT_MARK(40)}
+   <div style="font:bold 13pt Helvetica,Arial,sans-serif;letter-spacing:4pt;margin-top:5pt">${esc(BIZ_LEGAL().toUpperCase())}</div>
    <div style="font:7.5pt Helvetica,Arial,sans-serif;letter-spacing:2pt;color:#5A5C60;margin:3pt 0 8pt">ESTIMATING DIVISION &nbsp;·&nbsp; HOUSTON / LA PORTE, TEXAS</div>
    <div style="border-bottom:1.5pt solid #1B1B1E"></div>
    <div style="font:bold 17pt Georgia,serif;margin:10pt 0 8pt">Estimating Services Agreement</div>
@@ -7339,7 +7381,7 @@ async function printContract(acctId){
   addr:$("#ctrAddr")?$("#ctrAddr").value.trim():""};
  /* typed rates become the company's rates — the contract IS the record */
  a.feePct=opts.pct;a.supPct=opts.sup;a.updatedAt=new Date().toISOString();save();
- _logoForPrint=await cleanPrintLogo();
+ /* letterhead is vector now — nothing to load */
  document.getElementById("printarea").innerHTML=contractHTML(a,opts);
  close_();
  const was=document.title;
@@ -7353,7 +7395,7 @@ async function printInvoice(id){
     how a duplicate number goes out. */
  if(!j.invNo){j.invNo=nextInvNo();j.invDate=today();
   if(["Waiting","Estimating","Complete"].includes(j.status))j.status="Invoiced";save();}
- _logoForPrint=await cleanPrintLogo();   /* the mark, frame cropped, tile erased */
+ /* letterhead is vector now — nothing to load */
  document.getElementById("printarea").innerHTML=invoiceHTML(j);
  close_();
  const was=document.title;
