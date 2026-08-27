@@ -1058,7 +1058,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-168 · the balance tells the truth";
+const BUILD="C-169 · earned is not owed";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -1410,11 +1410,35 @@ function moneyState(j){
     A continuing claim lives on the job that's still owed — this one is done. */
  if(j.status==="Paid")return "banked";
  if(inDispute(j))return "contested";
+ /* A FEE THAT ISN'T EARNED YET IS NOT A RECEIVABLE. His partner and percentage
+    deals only become billable when something downstream happens:
+      jobDone     — 40% of what's left after the subs are paid, and only once
+                    the rebuild is finished (nothing is owed mid-job)
+      carrierPays — 10% deals don't bill until the insurance actually pays out
+      assigned    — the work hasn't even been awarded yet
+    Counting these as collectable told him $25,576 was chaseable when most of
+    it was contingent. They stay visible as pipeline instead. */
+ if(pending(j))return "pipeline";
  if(j.status==="Invoiced")return isLate(j)?"late":"sent";
  if(j.status==="Complete")return "unbilled";
  return "working";                          /* Waiting + Estimating */
 }
-const MONEY_STATES=["banked","late","sent","unbilled","working","contested","covered"];
+const EARN=[["delivery","When I deliver the estimate"],
+ ["jobDone","When the job is finished (40% after subs)"],
+ ["carrierPays","When the carrier pays out"],
+ ["assigned","Not assigned yet"]];
+const earnWhen=j=>(j&&j.earnWhen)||"delivery";
+/* true while the triggering event hasn't happened — the fee exists, but he
+   cannot invoice it and must not be nagged to chase it */
+const pending=j=>{
+ if(!j||["Paid","Lost"].includes(j.status))return false;
+ const w=earnWhen(j);
+ if(w==="assigned")return true;
+ if(w==="jobDone")return !j.jobDoneAt;
+ if(w==="carrierPays")return !j.carrierPaidAt;
+ return false;
+};
+const MONEY_STATES=["banked","late","sent","unbilled","working","contested","covered","pipeline"];
 function MONEY(){
  const b={};
  MONEY_STATES.forEach(k=>b[k]={jobs:[],n:0,amt:0});
@@ -1424,6 +1448,8 @@ function MONEY(){
   const s=moneyState(j),f=fee(j);
   /* banked is what he actually received; everything else is what's still owed */
   const amt=s==="banked"?f.gross:s==="covered"?f.wouldBe:f.due;
+  if(s==="pipeline")b.pipeline.why=(b.pipeline.why||[]).concat(
+   [{j,when:earnWhen(j),amt}]);
   b[s].jobs.push(j);b[s].n++;b[s].amt+=amt;
  });
  /* Money he can actually go and get. Disputes are deliberately absent — that
@@ -1987,7 +2013,7 @@ const sortJobs=a=>[...a].sort((x,y)=>prioRank(x)-prioRank(y)
    SIGHT of the case. */
 const sealed=j=>!!(j&&j.sealed);
 const byStage=s=>sortJobs(D.jobs.filter(j=>j.status===s&&!sealed(j)));
-const billable=()=>byStage("Complete").filter(j=>fee(j).due>0);
+const billable=()=>byStage("Complete").filter(j=>fee(j).due>0&&!pending(j));
 const onRetainer=j=>fee(j).kind==="retainer";
 const addDays=(iso,n)=>{const d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return isoDay(d);};
 const LEADDAYS=3;   /* you work 3 days from the day the matterport + notes land */
@@ -3920,6 +3946,37 @@ function blockSave(id){const j=job(id);
  j.blocking=g?{who:g,since:(j.blocking&&j.blocking.who===g&&j.blocking.since)||today()}:null;
  setBlocked(id,_bk?{on:_bk,who:w,eta:e||null,note:n,since:(j.blocked&&j.blocked.on===_bk&&j.blocked.since)||today()}:null);
  close_();toast(_bk?"Parked — won't be scheduled":"Saved");}
+/* ---- when does this fee become billable? ---- */
+function earnSheet(id){
+ const j=job(id);
+ sheet("When does this get billed?",`
+  <p class="xs dim" style="margin:0 0 14px">A fee you can't invoice yet shouldn't sit in your collectable total — it waits here as pipeline until the trigger happens.</p>
+  <div class="segwrap" style="flex-direction:column;align-items:stretch">
+   ${EARN.map(([k,lab])=>`<button type="button" class="opt2 ${earnWhen(j)===k?"on":""}"
+    style="text-align:left" onclick="setEarn('${id}','${k}')">${lab}</button>`).join("")}</div>
+  ${earnWhen(j)==="jobDone"?`<button class="btn" style="margin-top:16px" onclick="fireEarn('${id}','jobDoneAt')">
+    ✓ The job is finished — make it billable</button>`:""}
+  ${earnWhen(j)==="carrierPays"?`<button class="btn" style="margin-top:16px" onclick="fireEarn('${id}','carrierPaidAt')">
+    ✓ The carrier paid out — make it billable</button>`:""}`);
+}
+function setEarn(id,k){const j=job(id);j.earnWhen=k;
+ if(k!=="jobDone")delete j.jobDoneAt;
+ if(k!=="carrierPays")delete j.carrierPaidAt;
+ save();close_();render();toast(k==="delivery"?"Billable on delivery":"Waiting on the trigger");}
+function fireEarn(id,field){const j=job(id);j[field]=today();
+ D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),
+  text:"[Now billable] "+(field==="jobDoneAt"?"Job finished":"Carrier paid out")+" — "+money(fee(j).due)+" moved from pipeline to collectable."});
+ save();close_();render();toast("Billable — "+money(fee(j).due));}
+function earnStrip(j){
+ if(["Paid","Lost"].includes(j.status))return "";
+ const w=earnWhen(j);
+ if(w==="delivery")return "";
+ const lab=w==="assigned"?"not assigned yet"
+  :w==="jobDone"?(j.jobDoneAt?"job finished "+fmt(j.jobDoneAt)+" — billable":"bills when the job is finished")
+  :(j.carrierPaidAt?"carrier paid "+fmt(j.carrierPaidAt)+" — billable":"bills when the carrier pays");
+ return `<div class="tags" style="margin:8px 0 0;cursor:pointer" onclick="earnSheet('${j.id}')">
+  <span class="chip v-${pending(j)?"lost":"rdy"}">${pending(j)?"◷":"✓"} ${esc(lab)}</span></div>`;
+}
 function blockStrip(j){
  const bits=[];
  if(jBlocked(j))bits.push(`<span class="chip v-lost">⛔ ${esc(blockLine(j.blocked))} · day ${(ago(j.blocked.since)||0)+1}</span>`);
@@ -5124,6 +5181,11 @@ function briefingHTML(){
    <button class="btn sec s" style="margin:0" onclick="leadSheet()">⤵ Paste what they sent</button>
    <button class="btn sec s" style="margin:0" onclick="newJob()">+ New job</button>
   </div>
+  ${M.pipeline&&M.pipeline.amt?`<div class="brf-r quiet">
+    <span class="brf-n">◷</span>
+    <span class="brf-t">${money0(M.pipeline.amt)} earned but not billable yet — ${
+     (M.pipeline.why||[]).map(x=>esc(shortAddr(x.j.address)||jobName(x.j))+" ("+
+      (x.when==="assigned"?"not assigned":x.when==="jobDone"?"when the job's done":"when the carrier pays")+")").join(" · ")}</span></div>`:""}
   <div class="brf-f">
    <span>${M.working.n?"In the works "+money0(M.working.amt):""}${M.working.n&&M.banked.amt?" · ":""}${M.banked.amt?"Collected "+money0(M.banked.amt):""}</span>
    ${disp.length?`<span style="cursor:pointer" onclick="go('disputes')">⚖ ${plural(disp.length,"case")} · ${money0(sum(disp,j=>fee(j).due))} — Disputes ›</span>`:""}
@@ -6153,7 +6215,7 @@ R.job=({id})=>{
     <button class="opt2" onclick="go('today')">← Back to the queue</button>
    </div></div>`;})()}
  ${jobActionBar(j)}
- ${["Paid","Lost"].includes(j.status)?"":blockStrip(j)}
+ ${["Paid","Lost"].includes(j.status)?"":earnStrip(j)+blockStrip(j)}
  ${(()=>{const g=detailGaps(j);return `<button type="button" class="jdt" onclick="togDetails()">
    <span class="jdt-l">Job details</span>
    <span class="jdt-h ${g.length?"v-out":""}">${g.length?g.join(" · "):detailSummary(j)}</span>

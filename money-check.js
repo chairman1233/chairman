@@ -307,6 +307,76 @@ if (M.collectable.amt >= M.contested.amt) {
   }
 }
 
+/* ---- THE CONTINGENT-FEE GATE ----------------------------------------------
+   His partner deals don't become money when the estimate is done:
+     40% is after subs are paid AND only once the rebuild is finished
+     10% deals don't bill until the carrier actually pays out
+     an unassigned job isn't owed at all
+   Counting these as collectable had him believing $25,576 was chaseable when
+   most of it was contingent — the same class of lie as the double-count. */
+{
+  const base = { status:"Complete", total:42503.28, feeMode:"pct", feePct:40,
+    subs:[], subCosts:{}, extras:[], payments:[], advance:0, flat:0 };
+  const mk = (id, extra) => Object.assign({}, base, { id }, extra);
+
+  ctx.__setJobs([mk("catTail", { earnWhen:"jobDone" })]);
+  let M = JSON.parse(ctx.__money());
+  if (M.collectable.amt !== 0) {
+    failed++;
+    console.log(`a 40% fee on an UNFINISHED job is being counted as collectable (${Math.round(M.collectable.amt)})   <-- FAIL`);
+  }
+  if (Math.round(M.pipeline.amt) !== 17001) {
+    failed++;
+    console.log(`the contingent fee vanished instead of showing as pipeline (${Math.round(M.pipeline.amt)})   <-- FAIL`);
+  }
+
+  /* the job finishes -> the money becomes real */
+  ctx.__setJobs([mk("catTail", { earnWhen:"jobDone", jobDoneAt:"2026-09-30" })]);
+  M = JSON.parse(ctx.__money());
+  if (Math.round(M.collectable.amt) !== 17001) {
+    failed++;
+    console.log(`finishing the job did not make the 40% collectable (${Math.round(M.collectable.amt)})   <-- FAIL`);
+  }
+
+  /* 10% waits for the carrier */
+  ctx.__setJobs([mk("water", { feePct:10, earnWhen:"carrierPays" })]);
+  M = JSON.parse(ctx.__money());
+  if (M.collectable.amt !== 0) {
+    failed++;
+    console.log("a 10% fee is collectable before the carrier paid   <-- FAIL");
+  }
+  ctx.__setJobs([mk("water", { feePct:10, earnWhen:"carrierPays", carrierPaidAt:"2026-09-02" })]);
+  M = JSON.parse(ctx.__money());
+  if (Math.round(M.collectable.amt) !== 4250) {
+    failed++;
+    console.log(`carrier paying did not release the 10% (${Math.round(M.collectable.amt)})   <-- FAIL`);
+  }
+
+  /* not assigned = not money, at any stage */
+  ctx.__setJobs([mk("unassigned", { earnWhen:"assigned" })]);
+  M = JSON.parse(ctx.__money());
+  if (M.collectable.amt !== 0) {
+    failed++;
+    console.log("an UNASSIGNED job is being counted as collectable   <-- FAIL");
+  }
+
+  /* ordinary 2% work is untouched — it bills on delivery like always */
+  ctx.__setJobs([mk("normal", { feePct:2, total:112388.61 })]);
+  M = JSON.parse(ctx.__money());
+  if (Math.round(M.collectable.amt) !== 2248) {
+    failed++;
+    console.log(`normal delivery-billed work stopped being collectable (${Math.round(M.collectable.amt)})   <-- FAIL`);
+  }
+
+  /* money already received stays received, trigger or not */
+  ctx.__setJobs([mk("paidAnyway", { status:"Paid", earnWhen:"jobDone", paidDate:"2026-08-20" })]);
+  M = JSON.parse(ctx.__money());
+  if (Math.round(M.banked.amt) !== 17001) {
+    failed++;
+    console.log("a PAID contingent job stopped counting as banked   <-- FAIL");
+  }
+}
+
 console.log("-".repeat(96));
 if (failed) {
   console.error(`\n${failed} money assertion(s) failed. Do not push — this changes what he invoices.`);
