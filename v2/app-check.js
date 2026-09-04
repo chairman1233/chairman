@@ -20,6 +20,9 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
     createElement: () => el(), body: { appendChild() {} }, title: "" };
   global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
   global.navigator = {}; global.fetch = async () => ({ ok: true, json: async () => [] });
+  /* the logo loader is canvas work — stub the image so boot can be tested
+     headlessly; the crop maths itself is checked statically below */
+  global.Image = function () { setTimeout(() => this.onerror && this.onerror(), 0); };
   global.setInterval = () => 0; global.setTimeout = () => 0; global.clearTimeout = () => 0;
   global.Core = C; global.Migrate = { migrate };
   try { new Function(src)(); ok("the app boots clean"); }
