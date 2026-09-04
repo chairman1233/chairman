@@ -139,3 +139,52 @@ const JOB={id:"borland",status:"Complete",owner:"Catherine Borland",
 console.log("");
 if(failed){console.error(failed+" document assertion(s) failed. This paper goes to his clients — do not push.");process.exit(1);}
 console.log("PASS — his name, his company and his numbers are on every page.");
+
+/* ===================== THE PORT GATE (v0 → v1) =====================
+   Four fixes moved out of the /v2 rebuild into production. Each one is here
+   so it cannot quietly regress, and so nobody re-introduces /v2. */
+{
+  const H = fs.readFileSync("./index.html", "utf8");
+  const S = H.match(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/i)[1];
+  const noC = S.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  /* 1. fork per account drives the invoice language */
+  if (!/const forkOf=/.test(noC)) fail("port: forkOf is gone");
+  else ok("port: fork resolves per account");
+  if (!/PAYMENT IS DUE ON CARRIER APPROVAL/.test(S))
+    fail("port: approval accounts still get hold-until-paid language");
+  else ok("port: approval invoices say payment is due on carrier approval");
+  if (!/forkOf\(j\)!=="partner"/.test(noC))
+    fail("port: a partner account can still get hold language");
+  else ok("port: partners (Green Dynasty) get NO hold language at all");
+  if (!/function setFork/.test(noC)) fail("port: the fork cannot be set in the UI");
+  else ok("port: the fork is set on the account page");
+
+  /* 2. fee engine returns unknown instead of a made-up number */
+  if (!/unknown=true/.test(noC)) fail("port: after-subs with no subs still invents a number");
+  else ok("port: after-subs with no sub costs reports unknown");
+
+  /* 3. sync outbox + retry */
+  if (!/let _dirty=false,_pushing=false/.test(noC)) fail("port: no outbox");
+  else ok("port: the outbox tracks unsent writes");
+  if (!/setInterval\(\(\)=>\{if\(_dirty&&!_pushing\)flushCloud\(\);\}/.test(noC.replace(/\s+/g,"")))
+    fail("port: nothing retries a failed push");
+  else ok("port: a failed push retries every 6s");
+  if (!/if\(_dirty\)return `<span class="v-out"/.test(noC.replace(/\s+/g," ").replace(/ /g,"")) &&
+      !/queued/.test(noC))
+    fail("port: the chip never says queued");
+  else ok("port: the chip says queued when a write has not reached the cloud");
+
+  /* 4. print + mark paid */
+  if (/setTimeout\(\(\)=>\{document\.title=was;render\(\);\},600\)/.test(noC.replace(/\s+/g,"")))
+    fail("port: the invoice is still wiped on a 600ms timer");
+  else ok("port: the invoice clears on afterprint");
+  if (!/addEventListener\("afterprint"/.test(noC)) fail("port: nothing listens for afterprint");
+  else ok("port: afterprint drives print cleanup");
+  if (!/function paidSheet/.test(noC)) fail("port: mark paid is not a form");
+  else ok("port: mark paid asks for amount, method and cleared date");
+  ["paidAmount", "paidSource", "paidDate"].forEach(f => {
+    if (!new RegExp("j\\." + f + "=").test(noC)) fail("port: paidSave does not set " + f);
+  });
+  ok("port: paidSave saves amount, source and date");
+}
