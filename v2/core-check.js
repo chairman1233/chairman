@@ -102,15 +102,17 @@ eq("scan cannot be Scheduled while holding a link",
     J({ id: "b2", accountId: "nick",  approvedAt: "2026-09-02", state: "Approved" }),
     J({ id: "b3", accountId: "nick",  deliveredAt: "2026-09-03", state: "Delivered" }),
     J({ id: "b4", accountId: "mario", invNo: "INV-1010", state: "Invoiced" }),
-    J({ id: "b5", accountId: "nick",  mportStatus: "Ready", mportLink: "http://x", state: "Scanned" }),
     J({ id: "b6", accountId: "nick",  walkAt: today, state: "Scheduled" }),
     J({ id: "hidden", accountId: "bobby", legal: true, paidAt: "2026-01-01", state: "Paid" })
   ];
   const B = C.buckets(jobs, A, today);
-  eq("six buckets, no more", B.length, 6);
+  /* five now — he had the ESX bucket removed: he builds in Xactimate and does
+     not need Command Center telling him a scan landed. */
+  eq("five buckets, no more", B.length, 5);
   eq("money first — Paid, Send It leads", B[0].key, "send");
-  eq("order is send, bill, await, unpaid, noesx, walks", B.map(x => x.key),
-     ["send", "bill", "await", "unpaid", "noesx", "walks"]);
+  eq("order is send, bill, await, unpaid, walks", B.map(x => x.key),
+     ["send", "bill", "await", "unpaid", "walks"]);
+  eq("no ESX bucket anywhere", B.some(x => x.key === "noesx"), false);
   B.forEach(b => { if (b.jobs.length !== 1) fail(`bucket ${b.key} holds ${b.jobs.length} jobs, want 1`); });
   if (B.every(b => b.jobs.length === 1)) ok("every bucket catches exactly its own job");
   eq("a legal/ledger job never reaches the daily screen",

@@ -112,8 +112,10 @@ const BUCKETS = [
     test: j => j.deliveredAt && !j.approvedAt },
   { key: "unpaid",   title: "Invoiced — Not Paid", action: "Nudge",
     test: j => j.invNo && !j.paidAt },
-  { key: "noesx",    title: "Scan Ready — No ESX", action: "Mark ESX done",
-    test: j => j.mportStatus === "Ready" && j.mportLink && !j.readyDate },
+  /* The "Scan Ready — No ESX" bucket is gone. He builds the estimate in
+     Xactimate and knows what he has open; a card telling him a scan landed is
+     duplicate information he never asked the app to hold. The Scanned → Ready
+     step still exists on the job itself. */
   { key: "walks",    title: "Walks Today",         action: "Dispatch",
     test: (j, A, today) => j.walkAt && String(j.walkAt).slice(0, 10) === today }
 ];

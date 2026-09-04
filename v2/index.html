@@ -116,6 +116,14 @@ nav button i{display:block;font-style:normal;font-size:19px;margin-bottom:3px}
 .note{font:13px/1.6 var(--sans);color:var(--ink2);background:var(--card);
  border-left:2px solid var(--line2);border-radius:0 10px 10px 0;padding:11px 13px;margin:8px 0}
 .empty{text-align:center;color:var(--ink3);padding:44px 20px;font-size:14px}
+/* real forms — prompt() is dead */
+.sheet{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);
+ display:flex;align-items:flex-end;justify-content:center}
+.sheetbox{background:var(--card);border:1px solid var(--line2);width:100%;
+ max-width:520px;border-radius:16px 16px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom));
+ max-height:88vh;overflow:auto}
+.sheetbox h3{font:700 17px var(--sans);margin:0 0 16px}
+@media(min-width:1024px){.sheet{align-items:center}.sheetbox{border-radius:16px}}
 #print{display:none}
 #side{display:none}
 
@@ -256,9 +264,18 @@ const jobLabel=j=>shortAddr(j.address)||j.ownerLabel||"Untitled";
 const feeFor=j=>Core.feeOf(j,D.accounts,D.subCosts);
 const notesFor=id=>D.notes.filter(n=>n.jobId===id);
 
-function save(){D._ts=Date.now();
+/* ===================== the outbox =====================
+   A write is never dropped. It is written to this device first, marked dirty,
+   and pushed. If a push is already running or the network is gone, it STAYS
+   dirty and the retry loop keeps trying. The header always says which of those
+   is true — queued, saving, synced, or failed. No silent losses. */
+let dirty=false, lastPushErr="";
+function save(){
+ D._ts=Date.now(); dirty=true;
  try{localStorage.setItem("chairman_est_v0",JSON.stringify(D))}catch(e){}
- clearTimeout(save._t);save._t=setTimeout(push,900);}
+ chip();
+ clearTimeout(save._t);save._t=setTimeout(push,400);
+}
 function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;
  document.body.appendChild(t);setTimeout(()=>t.remove(),2300);}
 function go(v,a){V=v;ARG=a||{};window.scrollTo(0,0);render();}
@@ -289,30 +306,53 @@ async function pull(){
   if(!rem.data||!(rem.data.jobs||[]).length){await firstRun();return render();}
   const mine=(D.jobs||[]).length,theirs=(rem.data.jobs||[]).length;
   /* an empty device never overwrites a cloud with real work */
-  if(!mine&&theirs){D=Object.assign({},BLANK,rem.data);
+  if(!mine&&theirs){D=Object.assign({},BLANK,rem.data);dirty=false;
    localStorage.setItem("chairman_est_v0",JSON.stringify(D));return render();}
+  /* NEVER discard a write that hasn't reached the cloud yet. If this device is
+     dirty, its copy wins and gets pushed — otherwise tapping "paid" on the
+     phone would vanish the moment the desktop's poll came back. */
+  if(dirty){push();return render();}
   if(rts>(D._ts||0)+1500){D=Object.assign({},BLANK,rem.data);
    localStorage.setItem("chairman_est_v0",JSON.stringify(D));}
   render();
  }catch(e){syncErr="offline";render();}
 }
 async function push(){
- if(!SESS||busy)return;
- if(!(D.jobs||[]).length&&!(D.accounts||[]).length)return;   /* never push emptiness */
- busy=true;
+ if(!SESS||!dirty)return;
+ if(busy){return;}                      /* still dirty — the retry loop gets it */
+ if(!(D.jobs||[]).length&&!(D.accounts||[]).length){dirty=false;return;}
+ busy=true;chip();
+ const stamp=D._ts;
  try{
   const r=await api("/rest/v1/boards_v2?on_conflict=user_id",{method:"POST",
    headers:Object.assign(hdr(),{prefer:"resolution=merge-duplicates"}),
    body:JSON.stringify([{user_id:SESS.user.id,data:D,updated_at:new Date().toISOString()}])});
-  if(r.ok){syncAt=Date.now();syncErr="";}else syncErr="sync failed";
- }catch(e){syncErr="offline";}
+  if(r.ok){
+   /* only clear the flag if nothing was written WHILE we were pushing */
+   if(D._ts===stamp)dirty=false;
+   syncAt=Date.now();syncErr="";lastPushErr="";
+  }else{lastPushErr="HTTP "+r.status;syncErr="not saved to cloud";}
+ }catch(e){lastPushErr=e.message||"offline";syncErr="offline — saved on this device";}
  busy=false;chip();
 }
+/* the retry loop. Anything still dirty gets pushed again, forever, until it
+   lands. This is what makes the phone and the desktop the same job file. */
+setInterval(()=>{if(dirty)push();},6000);
+addEventListener("online",()=>{if(dirty)push();});
+addEventListener("visibilitychange",()=>{if(!document.hidden){if(dirty)push();pull();}});
+addEventListener("pagehide",()=>{if(dirty)push();});
+
 function chip(){
- const c=$("#syncChip");if(!c)return;
- if(!SESS){c.textContent="sign in";c.className="chip warn";return;}
- if(syncErr){c.textContent=syncErr;c.className="chip warn";return;}
- c.textContent=syncAt?"synced":"syncing";c.className="chip"+(syncAt?" on":"");
+ const state=!SESS?["sign in","warn"]
+  :busy?["saving…",""]
+  :dirty?[(syncErr?"queued · "+syncErr:"queued"),"warn"]
+  :syncErr?[syncErr,"warn"]
+  :syncAt?["synced "+new Date(syncAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}),"on"]
+  :["syncing…",""];
+ const c=$("#syncChip");
+ if(c){c.textContent=state[0];c.className="chip "+state[1];}
+ const s=document.querySelector("#side .foot button");
+ if(s){s.textContent=state[0];s.className="chip "+state[1];}
 }
 
 /* FIRST RUN — pull the v1 board and migrate it into the §7 model. Reads the
@@ -576,12 +616,43 @@ function doRelease(id){
  if(v.length){j.releasedAt=null;j.state="Paid";return toast(v[0]);}
  save();go("job",{id});toast("Released — link runs to "+fmt(j.expiresAt));
 }
+/* prompt() is suppressed in an installed PWA, which is why tapping Mark paid
+   did nothing on the phone. Everything that used to prompt is a real form. */
+function sheet(title,body,onOK,okLabel){
+ const s=document.createElement("div");s.className="sheet";
+ s.innerHTML=`<div class="sheetbox"><h3>${esc(title)}</h3>${body}
+   <button class="btn" id="skOK">${esc(okLabel||"Save")}</button>
+   <button class="btn sec" id="skNo">Cancel</button></div>`;
+ document.body.appendChild(s);
+ const close=()=>s.remove();
+ s.querySelector("#skNo").onclick=close;
+ s.onclick=e=>{if(e.target===s)close();};
+ s.querySelector("#skOK").onclick=()=>{if(onOK(s)!==false)close();};
+ setTimeout(()=>{const f=s.querySelector("input,select,textarea");if(f)f.focus();},60);
+ return s;
+}
 function markPaid(id){
  const j=job(id), f=feeFor(j);
- const src=prompt("Paid how? (Zelle)","Zelle");
- if(src===null)return;
- j.paidAt=today();j.paidSource=src||"Zelle";j.paidAmount=f.amount;j.state="Paid";
- save();render();toast("Paid — cleared funds");
+ sheet("Mark paid — cleared funds",`
+  <label><span class="t">Amount received</span>
+   <input class="in" id="pAmt" type="number" inputmode="decimal" step="0.01" value="${f.amount!=null?f.amount.toFixed(2):""}"></label>
+  <label><span class="t">How</span>
+   <select class="in" id="pSrc">
+    <option>Zelle</option><option>Check</option><option>Cash</option><option>Other</option></select></label>
+  <label><span class="t">Date it cleared</span>
+   <input class="in" id="pDate" type="date" value="${today()}"></label>
+  <p style="color:var(--ink3);font-size:13px;margin:0">Paid means cleared funds. "Sent it" is a note, not a payment.</p>`,
+ s=>{
+  const amt=+s.querySelector("#pAmt").value||0;
+  if(!amt){toast("Enter the amount");return false;}
+  j.paidAmount=amt;
+  j.paidSource=s.querySelector("#pSrc").value;
+  j.paidAt=s.querySelector("#pDate").value||today();
+  j.state="Paid";
+  D.payments.push({id:uid(),amount:amt,clearedAt:j.paidAt,source:j.paidSource,
+   matchedInvNo:j.invNo||null,accountId:j.accountId});
+  save();render();toast("Paid "+money(amt)+" — off hold");
+ },"Mark paid");
 }
 function issue(id){
  const j=job(id), v=Core.violations(j,D.accounts,D.jobs);
@@ -596,17 +667,21 @@ function extend(id){const j=job(id);
  j.extendedUntil=d.toISOString().slice(0,10);save();render();
  toast("Extended to "+fmt(j.extendedUntil)+" — bill $"+Core.EXTEND_FEE);}
 function ask(id,field,label,type){
- const cur=job(id)[field]||"";
- const val=prompt(label,cur);
- if(val===null)return;
- job(id)[field]=type==="number"?(+val||0):val;
- save();render();
+ const j=job(id),cur=j[field]||"";
+ sheet(label,`<label><span class="t">${esc(label)}</span>
+   <input class="in" id="askV" type="${type==="number"?"number":type==="date"?"date":"text"}"
+    ${type==="number"?'inputmode="decimal" step="0.01"':""} value="${esc(cur)}"></label>`,
+ s=>{const v=s.querySelector("#askV").value;
+  if(type==="number"&&!(+v)){toast("Enter a number");return false;}
+  j[field]=type==="number"?(+v||0):v;save();render();});
 }
 function addNote(id){
- const t=prompt("Note");
- if(!t)return;
- D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),text:t});
- save();render();
+ sheet("Add a note",`<label><span class="t">Note</span>
+   <textarea class="in" id="nText" rows="4"></textarea></label>`,
+ s=>{const t=s.querySelector("#nText").value.trim();
+  if(!t){toast("Type something");return false;}
+  D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),text:t});
+  save();render();});
 }
 function saveTerms(id){acct(id).terms=$("#aTerms").value.trim();save();toast("Terms saved");}
 function flipFork(id){const a=acct(id);a.fork=a.fork==="delivery"?"approval":"delivery";save();render();
@@ -652,8 +727,10 @@ async function signIn(){
  }catch(e){toast(e.message);}
 }
 /* the invoice document */
-function printInvoice(id){
+async function printInvoice(id){
  const j=job(id),a=acct(j.accountId),f=feeFor(j),me=D.me||{};
+ if(f.amount==null){toast("Can't price this yet — "+f.reason);return;}
+ if(!_markDark)await loadMarks();          /* letterhead before paper */
  const fork=Core.forkOf(j,D.accounts);
  const S="font-family:Helvetica,Arial,sans-serif";
  $("#print").innerHTML=`
@@ -695,9 +772,18 @@ function printInvoice(id){
      : "THE COMPLETED ESTIMATE IS RELEASED ONCE PAYMENT IS RECEIVED."}</div>
   ${a.terms?`<div style="margin-top:12pt;font:9pt/1.5 Helvetica;color:#222">${esc(a.terms)}</div>`:""}
  </div>`;
+ /* The document used to be wiped on a 600ms timer. window.print() blocks on a
+    desktop browser but NOT on a phone, so the page was cleared while the sheet
+    was still rendering — blank or half-drawn pages. Clear on afterprint. */
  const was=document.title;
  document.title=[j.invNo||"INVOICE",a.name,shortAddr(j.address),today()].filter(Boolean).join(" — ");
- setTimeout(()=>{window.print();setTimeout(()=>{document.title=was;$("#print").innerHTML="";},600);},120);
+ let done=false;
+ const cleanup=()=>{if(done)return;done=true;
+  document.title=was;document.getElementById("print").innerHTML="";
+  removeEventListener("afterprint",cleanup);};
+ addEventListener("afterprint",cleanup);
+ setTimeout(()=>{try{window.print();}catch(e){toast("Print blocked by the browser");}
+  setTimeout(cleanup,20000);},150);        /* long backstop only */
 }
 
 /* ===================== chrome ===================== */

@@ -24,6 +24,7 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
      headlessly; the crop maths itself is checked statically below */
   global.Image = function () { setTimeout(() => this.onerror && this.onerror(), 0); };
   global.setInterval = () => 0; global.setTimeout = () => 0; global.clearTimeout = () => 0;
+  global.addEventListener = () => {};
   global.Core = C; global.Migrate = { migrate };
   try { new Function(src)(); ok("the app boots clean"); }
   catch (e) { fail("the app throws on boot", e.message); }
@@ -76,8 +77,8 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   const real = screens.filter(s => s !== "signin");
   if (real.length > 8) fail("more than eight screens", real.join(", "));
   else ok(real.length + " screens (" + real.join(", ") + ") — within the eight");
-  if (C.BUCKETS.length !== 6) fail("not six buckets");
-  else ok("six buckets, no seventh");
+  if (C.BUCKETS.length !== 5) fail("bucket count changed unexpectedly");
+  else ok("five buckets on the home screen");
 }
 
 /* ---- 7. the kill list stayed dead ---- */
@@ -160,6 +161,57 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   else ok("mobile tap targets stay at 56px");
 }
 
+/* ---- 7e. THE FOUR THINGS THAT WERE DEAD ---- */
+{
+  /* SYNC — a write may never be dropped, and the screen must say where it is */
+  if (/if\s*\(\s*!SESS\s*\|\|\s*busy\s*\)\s*return/.test(src))
+    fail("push still drops the write when one is already in flight");
+  else ok("a write in flight no longer discards the next one");
+  if (!/let dirty=false/.test(src)) fail("there is no dirty flag — writes can be lost");
+  else ok("every write is marked dirty until the cloud confirms it");
+  if (!/setInterval\(\(\)=>\{if\(dirty\)push\(\);\}/.test(src.replace(/\s+/g, "")))
+    fail("nothing retries a failed push");
+  else ok("a failed push retries until it lands");
+  if (!/if\(dirty\)\{push\(\);return render\(\);\}/.test(src))
+    fail("a poll can still overwrite a write that hasn't reached the cloud");
+  else ok("an unsent local write is never clobbered by the poll");
+  ["queued", "saving", "synced", "offline"].forEach(w => {
+    if (!new RegExp(w).test(src)) fail('the sync chip never says "' + w + '"');
+  });
+  ok("the chip reports queued / saving / synced / offline honestly");
+
+  /* PRINT — must not wipe the document on a timer */
+  if (/setTimeout\(\(\)=>\{document\.title=was;\$\("#print"\)\.innerHTML="";\},600\)/.test(src.replace(/\s+/g, "")))
+    fail("the invoice is still cleared on a 600ms timer — phones print blank");
+  else ok("the invoice clears on afterprint, not a timer");
+  if (!/addEventListener\("afterprint"/.test(src)) fail("nothing listens for afterprint");
+  else ok("afterprint drives the cleanup");
+  if (!/if\(!_markDark\)await loadMarks\(\)/.test(src))
+    fail("the letterhead can print before the mark has loaded");
+  else ok("the mark is loaded before the document is built");
+
+  /* MARK PAID — no prompt() anywhere, and the three fields must save */
+  const nocomment = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const prompts = (nocomment.match(/(^|[^.\w])prompt\s*\(/g) || []).length;
+  if (prompts) fail("prompt() is still used " + prompts + " time(s) — suppressed in an installed PWA");
+  else ok("prompt() is gone — every input is a real form");
+  ["paidAt", "paidAmount", "paidSource"].forEach(f => {
+    if (!new RegExp("j\\." + f + "\\s*=").test(src)) fail("markPaid does not set " + f);
+  });
+  ok("markPaid saves paidAt, paidAmount and paidSource");
+  if (!/j\.state="Paid"/.test(src)) fail("marking paid does not move the job off hold");
+  else ok("marking paid moves the job to Paid");
+  if (!/D\.payments\.push/.test(src)) fail("the payment is not recorded in the ledger");
+  else ok("the payment lands in the payments ledger too");
+
+  /* ESX — the bucket is gone */
+  if (/noesx/.test(require("fs").readFileSync(__dirname + "/core.js", "utf8")))
+    fail("the ESX bucket is still there");
+  else ok("the ESX bucket is deleted");
+  if (C.BUCKETS.length !== 5) fail("expected five buckets after removing ESX", C.BUCKETS.length);
+  else ok("five buckets remain, in order");
+}
+
 /* ---- 8. the homeowner is a label and nothing else ---- */
 {
   if (/ownerLabel[^;]{0,80}(mailto|tel:|billTo|invoice)/i.test(src))
@@ -191,8 +243,8 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   const got = Object.fromEntries(B.map(b => [b.key, b.jobs.length]));
   if (got.await !== 4) fail("Awaiting Approval should be 4 per the spec", "got " + got.await);
   else ok("Awaiting Approval = 4, exactly as the spec predicted");
-  if (got.noesx !== 1) fail("Scan Ready — No ESX should be 1", "got " + got.noesx);
-  else ok("Scan Ready — No ESX = 1, as predicted");
+  if ("noesx" in got) fail("the ESX bucket is back in the migration view");
+  else ok("no ESX bucket in the migrated board either");
   if (got.send || got.bill || got.unpaid || got.walks)
     fail("a bucket that should be empty is not", JSON.stringify(got));
   else ok("every other bucket is empty — no invented backlog");
