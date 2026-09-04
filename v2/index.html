@@ -141,7 +141,7 @@ const BLANK={v:2,accounts:[],jobs:[],subCosts:[],scanDays:[],payments:[],notes:[
              me:{},seq:{invNo:1010},log:[]};
 let D=BLANK, V="today", ARG={}, SESS=null, busy=false;
 try{SESS=JSON.parse(localStorage.getItem("chairman_sess")||"null")}catch(e){}
-try{const raw=localStorage.getItem("chairman_v2");if(raw)D=Object.assign({},BLANK,JSON.parse(raw));}catch(e){}
+try{const raw=localStorage.getItem("chairman_est_v0");if(raw)D=Object.assign({},BLANK,JSON.parse(raw));}catch(e){}
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -160,7 +160,7 @@ const feeFor=j=>Core.feeOf(j,D.accounts,D.subCosts);
 const notesFor=id=>D.notes.filter(n=>n.jobId===id);
 
 function save(){D._ts=Date.now();
- try{localStorage.setItem("chairman_v2",JSON.stringify(D))}catch(e){}
+ try{localStorage.setItem("chairman_est_v0",JSON.stringify(D))}catch(e){}
  clearTimeout(save._t);save._t=setTimeout(push,900);}
 function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;
  document.body.appendChild(t);setTimeout(()=>t.remove(),2300);}
@@ -193,9 +193,9 @@ async function pull(){
   const mine=(D.jobs||[]).length,theirs=(rem.data.jobs||[]).length;
   /* an empty device never overwrites a cloud with real work */
   if(!mine&&theirs){D=Object.assign({},BLANK,rem.data);
-   localStorage.setItem("chairman_v2",JSON.stringify(D));return render();}
+   localStorage.setItem("chairman_est_v0",JSON.stringify(D));return render();}
   if(rts>(D._ts||0)+1500){D=Object.assign({},BLANK,rem.data);
-   localStorage.setItem("chairman_v2",JSON.stringify(D));}
+   localStorage.setItem("chairman_est_v0",JSON.stringify(D));}
   render();
  }catch(e){syncErr="offline";render();}
 }
@@ -233,7 +233,7 @@ async function firstRun(){
   D.me=Object.assign({name:"Benny Mancillas",phone:"(713) 806-1233",
     email:"benny@chairmanremodeling.com",zelle:"(713) 806-1233",
     zelleName:"Chairman Remodeling Group — Benny Mancillas"},v1.me||{});
-  localStorage.setItem("chairman_v2",JSON.stringify(D));
+  localStorage.setItem("chairman_est_v0",JSON.stringify(D));
   await push();
   toast("Migrated "+D.jobs.length+" jobs");
  }catch(e){console.warn("migration skipped",e);}

@@ -91,6 +91,26 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   else ok("everything on the kill list stayed dead");
 }
 
+/* ---- 7b. v1 AND v0 RUN SIDE BY SIDE ON THE SAME ORIGIN.
+       v1 owns localStorage "chairman_v2" and the `boards` table. v0 read that
+       same key on first load, mistook a raw v1 blob for migrated data, and
+       showed 9 accounts with no fork. Nothing v0 writes may share a name with
+       anything v1 owns. ---- */
+{
+  const v1 = fs.readFileSync(__dirname + "/../index.html", "utf8");
+  const keysOf = s => [...s.matchAll(/localStorage\.(?:get|set|remove)Item\(\s*["'`]([^"'`]+)/g)].map(m => m[1])
+    .concat([...s.matchAll(/\bK\s*=\s*"([^"]+)"/g)].map(m => m[1]));
+  const mine = new Set(keysOf(src)), theirs = new Set(keysOf(v1));
+  const clash = [...mine].filter(k => theirs.has(k) && k !== "chairman_sess");
+  if (clash.length) fail("v0 writes a localStorage key v1 owns", clash.join(", "));
+  else ok("no localStorage key collides with v1 (the session is shared on purpose)");
+  if (!/boards_v2/.test(src)) fail("v0 is not using its own table");
+  else ok("v0 reads and writes boards_v2, its own table");
+  if (/method:"POST"[\s\S]{0,120}\/rest\/v1\/boards\?/.test(src))
+    fail("v0 WRITES to the v1 boards table — the old app must stay untouched");
+  else ok("v0 never writes to the v1 table — rollback stays clean");
+}
+
 /* ---- 8. the homeowner is a label and nothing else ---- */
 {
   if (/ownerLabel[^;]{0,80}(mailto|tel:|billTo|invoice)/i.test(src))
