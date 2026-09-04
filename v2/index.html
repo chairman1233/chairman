@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B0C0E">
+<title>Chairman Estimating</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+/* Phone-first. One-handed. Wet floor. Dark. Large tap targets. */
+:root{
+ --bg:#0B0C0E; --card:#15171A; --card2:#1D2024; --line:#282C31; --line2:#3A4046;
+ --ink:#EEF1F4; --ink2:#9BA4AD; --ink3:#6B747D;
+ --go:#4ADE80; --wait:#FBBF24; --cold:#60A5FA; --hot:#F87171; --acc:#4d6be0;
+ --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+ --mono:ui-monospace,Menlo,Consolas,monospace;
+ --tap:56px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);
+ -webkit-font-smoothing:antialiased;overscroll-behavior-y:contain}
+body{padding:0 0 calc(96px + env(safe-area-inset-bottom))}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px}
+
+header{position:sticky;top:0;z-index:40;background:rgba(11,12,14,.94);
+ backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+ padding:calc(10px + env(safe-area-inset-top)) 0 10px}
+.hd{display:flex;align-items:center;gap:12px}
+.hd .mk{width:30px;height:30px;flex:none}
+.hd h1{font:700 15px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;margin:0}
+.hd .sub{font:11px var(--mono);color:var(--ink3);margin-top:3px;letter-spacing:.04em}
+.hd .grow{flex:1;min-width:0}
+.chip{font:600 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;
+ padding:5px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
+.chip.on{border-color:var(--go);color:var(--go)}
+.chip.warn{border-color:var(--wait);color:var(--wait)}
+
+h2.sec{font:700 11px var(--sans);letter-spacing:.16em;text-transform:uppercase;
+ color:var(--ink3);margin:26px 0 10px}
+
+/* the six buckets */
+.bk{display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+ background:var(--card);border:1px solid var(--line);border-radius:14px;
+ padding:16px;margin-bottom:10px;min-height:var(--tap)}
+.bk:active{background:var(--card2)}
+.bk .n{font:700 26px/1 var(--mono);min-width:42px;text-align:center}
+.bk .t{flex:1;min-width:0}
+.bk .t b{display:block;font:600 16px var(--sans)}
+.bk .t span{display:block;font:13px var(--sans);color:var(--ink3);margin-top:2px}
+.bk .go{font:600 11px var(--mono);color:var(--ink3);letter-spacing:.06em}
+.bk.z{opacity:.4}
+.bk.z .n{color:var(--ink3)}
+.bk[data-k=send] .n{color:var(--go)} .bk[data-k=bill] .n{color:var(--go)}
+.bk[data-k=await] .n{color:var(--wait)} .bk[data-k=unpaid] .n{color:var(--hot)}
+.bk[data-k=noesx] .n{color:var(--cold)} .bk[data-k=walks] .n{color:var(--cold)}
+
+/* rows */
+.row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+ background:var(--card);border:1px solid var(--line);border-radius:12px;
+ padding:14px;margin-bottom:8px;min-height:var(--tap)}
+.row:active{background:var(--card2)}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font:600 15px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{display:block;font:12.5px var(--sans);color:var(--ink3);margin-top:2px;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .amt{font:700 15px var(--mono);white-space:nowrap}
+.amt.unk{color:var(--wait);font-size:11.5px;font-weight:600;letter-spacing:.04em}
+
+.btn{display:block;width:100%;min-height:var(--tap);border-radius:12px;
+ background:var(--ink);color:var(--bg);font:700 16px var(--sans);
+ margin:14px 0;padding:16px}
+.btn:active{opacity:.85}
+.btn.sec{background:none;color:var(--ink);border:1px solid var(--line2)}
+.btn.warn{background:none;color:var(--hot);border:1px solid var(--hot)}
+.btn:disabled{opacity:.35}
+
+label{display:block;margin:0 0 14px}
+label .t{display:block;font:600 11px var(--sans);letter-spacing:.12em;
+ text-transform:uppercase;color:var(--ink3);margin-bottom:7px}
+.in{width:100%;min-height:var(--tap);background:var(--card);color:var(--ink);
+ border:1px solid var(--line2);border-radius:12px;padding:14px;font-size:16px}
+.in:focus{outline:0;border-color:var(--acc)}
+textarea.in{min-height:96px;resize:vertical}
+
+.pan{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+.ln{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--line)}
+.ln:last-child{border-bottom:0}
+.ln k{font:12px var(--sans);color:var(--ink3)}
+.ln v{font:600 14px var(--sans);text-align:right}
+.state{display:inline-block;font:700 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;
+ padding:6px 11px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2)}
+.state.go{border-color:var(--go);color:var(--go)}
+.state.warn{border-color:var(--wait);color:var(--wait)}
+.state.hot{border-color:var(--hot);color:var(--hot)}
+
+nav{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;
+ background:rgba(11,12,14,.96);backdrop-filter:blur(12px);
+ border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:11px 4px;font:600 10px var(--sans);letter-spacing:.06em;
+ color:var(--ink3);text-transform:uppercase;min-height:var(--tap)}
+nav button.on{color:var(--ink)}
+nav button i{display:block;font-style:normal;font-size:19px;margin-bottom:3px}
+
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));
+ transform:translateX(-50%);background:var(--ink);color:var(--bg);
+ padding:13px 20px;border-radius:999px;font:600 14px var(--sans);z-index:90;
+ max-width:88vw;text-align:center}
+.warnbox{border:1px solid var(--hot);color:var(--hot);border-radius:12px;
+ padding:12px 14px;margin:12px 0;font:13px var(--sans)}
+.note{font:13px/1.6 var(--sans);color:var(--ink2);background:var(--card);
+ border-left:2px solid var(--line2);border-radius:0 10px 10px 0;padding:11px 13px;margin:8px 0}
+.empty{text-align:center;color:var(--ink3);padding:44px 20px;font-size:14px}
+#print{display:none}
+@media print{
+ body>*{display:none!important}
+ #print{display:block!important;color:#000;background:#fff}
+ @page{size:letter;margin:.5in}
+}
+</style></head>
+<body>
+<header><div class="wrap hd">
+ <svg class="mk" viewBox="0 0 124 136" aria-hidden="true"><path fill="#EEF1F4" fill-rule="evenodd"
+  d="M62 2 118 34v40H86V58L62 44 38 58v34l24 14 24-14v-4h32v14l-56 32L6 102V34L62 2Z
+     M62 26 94 44v10H78v-2L62 44 46 54v34l16 10 16-10v-2h16v10L62 114 30 96V44L62 26Z"/></svg>
+ <div class="grow"><h1>Chairman Estimating</h1><div class="sub" id="sub">loading</div></div>
+ <button class="chip" id="syncChip" onclick="pull()">sync</button>
+</div></header>
+
+<main class="wrap" id="app"></main>
+<div id="print"></div>
+<nav id="nav"></nav>
+
+<script src="./core.js"></script>
+<script src="./migrate.js"></script>
+<script>
+/* ===================== state ===================== */
+const CLOUD={url:"https://sxfchjywhdvpzcnldrym.supabase.co",
+             key:"sb_publishable_mH4-N3aJ21twFJqpuBhrnw_gfdMMnee"};
+const BLANK={v:2,accounts:[],jobs:[],subCosts:[],scanDays:[],payments:[],notes:[],
+             me:{},seq:{invNo:1010},log:[]};
+let D=BLANK, V="today", ARG={}, SESS=null, busy=false;
+try{SESS=JSON.parse(localStorage.getItem("chairman_sess")||"null")}catch(e){}
+try{const raw=localStorage.getItem("chairman_v2");if(raw)D=Object.assign({},BLANK,JSON.parse(raw));}catch(e){}
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);};
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const money=n=>n==null?"—":"$"+(+n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const money0=n=>n==null?"—":"$"+Math.round(+n).toLocaleString("en-US");
+const fmt=d=>{if(!d)return "—";const x=new Date(String(d).slice(0,10)+"T12:00:00");
+ return x.toLocaleDateString("en-US",{month:"short",day:"numeric"});};
+const ago=d=>d?Math.max(0,Math.round((new Date(today())-new Date(String(d).slice(0,10)))/864e5)):null;
+const acct=id=>D.accounts.find(a=>a.id===id)||{};
+const job=id=>D.jobs.find(j=>j.id===id);
+const shortAddr=a=>String(a||"").split(",")[0].trim();
+const jobLabel=j=>shortAddr(j.address)||j.ownerLabel||"Untitled";
+const feeFor=j=>Core.feeOf(j,D.accounts,D.subCosts);
+const notesFor=id=>D.notes.filter(n=>n.jobId===id);
+
+function save(){D._ts=Date.now();
+ try{localStorage.setItem("chairman_v2",JSON.stringify(D))}catch(e){}
+ clearTimeout(save._t);save._t=setTimeout(push,900);}
+function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;
+ document.body.appendChild(t);setTimeout(()=>t.remove(),2300);}
+function go(v,a){V=v;ARG=a||{};window.scrollTo(0,0);render();}
+
+/* ===================== cloud ===================== */
+const url=p=>CLOUD.url+p;
+const hdr=()=>({apikey:CLOUD.key,authorization:"Bearer "+(SESS&&SESS.access_token),"content-type":"application/json"});
+let syncAt=0,syncErr="";
+async function api(p,o){
+ const r=await fetch(url(p),Object.assign({headers:hdr()},o||{}));
+ if(r.status===401&&SESS&&SESS.refresh_token){
+  const rr=await fetch(url("/auth/v1/token?grant_type=refresh_token"),{method:"POST",
+   headers:{apikey:CLOUD.key,"content-type":"application/json"},
+   body:JSON.stringify({refresh_token:SESS.refresh_token})});
+  if(rr.ok){SESS=await rr.json();localStorage.setItem("chairman_sess",JSON.stringify(SESS));
+   return fetch(url(p),Object.assign({headers:hdr()},o||{}));}
+ }
+ return r;
+}
+async function pull(){
+ if(!SESS)return render();
+ try{
+  const r=await api("/rest/v1/boards_v2?select=data,updated_at&user_id=eq."+SESS.user.id);
+  if(!r.ok){syncErr="sync failed";return render();}
+  const rows=await r.json();syncAt=Date.now();syncErr="";
+  if(!rows.length){await firstRun();push();return render();}
+  const rem=rows[0],rts=new Date(rem.updated_at).getTime();
+  if(!rem.data||!(rem.data.jobs||[]).length){await firstRun();return render();}
+  const mine=(D.jobs||[]).length,theirs=(rem.data.jobs||[]).length;
+  /* an empty device never overwrites a cloud with real work */
+  if(!mine&&theirs){D=Object.assign({},BLANK,rem.data);
+   localStorage.setItem("chairman_v2",JSON.stringify(D));return render();}
+  if(rts>(D._ts||0)+1500){D=Object.assign({},BLANK,rem.data);
+   localStorage.setItem("chairman_v2",JSON.stringify(D));}
+  render();
+ }catch(e){syncErr="offline";render();}
+}
+async function push(){
+ if(!SESS||busy)return;
+ if(!(D.jobs||[]).length&&!(D.accounts||[]).length)return;   /* never push emptiness */
+ busy=true;
+ try{
+  const r=await api("/rest/v1/boards_v2?on_conflict=user_id",{method:"POST",
+   headers:Object.assign(hdr(),{prefer:"resolution=merge-duplicates"}),
+   body:JSON.stringify([{user_id:SESS.user.id,data:D,updated_at:new Date().toISOString()}])});
+  if(r.ok){syncAt=Date.now();syncErr="";}else syncErr="sync failed";
+ }catch(e){syncErr="offline";}
+ busy=false;chip();
+}
+function chip(){
+ const c=$("#syncChip");if(!c)return;
+ if(!SESS){c.textContent="sign in";c.className="chip warn";return;}
+ if(syncErr){c.textContent=syncErr;c.className="chip warn";return;}
+ c.textContent=syncAt?"synced":"syncing";c.className="chip"+(syncAt?" on":"");
+}
+
+/* FIRST RUN — pull the v1 board and migrate it into the §7 model. Reads the
+   old table, never writes to it: the v1 app keeps running untouched, and a
+   rollback is just pointing back at it. */
+async function firstRun(){
+ if(D.jobs&&D.jobs.length)return;
+ try{
+  const r=await api("/rest/v1/boards?select=data&user_id=eq."+SESS.user.id);
+  if(!r.ok)return;
+  const rows=await r.json();
+  if(!rows.length||!rows[0].data)return;
+  const v1=rows[0].data;
+  D=Object.assign({},BLANK,Migrate.migrate(v1,today()));
+  D.me=Object.assign({name:"Benny Mancillas",phone:"(713) 806-1233",
+    email:"benny@chairmanremodeling.com",zelle:"(713) 806-1233",
+    zelleName:"Chairman Remodeling Group — Benny Mancillas"},v1.me||{});
+  localStorage.setItem("chairman_v2",JSON.stringify(D));
+  await push();
+  toast("Migrated "+D.jobs.length+" jobs");
+ }catch(e){console.warn("migration skipped",e);}
+}
+
+/* ===================== screens ===================== */
+const R={};
+
+/* §4: "Tapping a bucket lists its jobs." That list is Today in list mode, not
+   a ninth screen — the spec allows eight and means it. */
+R.today=()=>{
+ const t=today(), B=Core.buckets(D.jobs,D.accounts,t);
+ if(ARG.k){
+  const b=B.find(x=>x.key===ARG.k);
+  if(!b)return `<div class="empty">Gone.</div>`;
+  return `<h2 class="sec">${esc(b.title)}</h2>
+   ${b.jobs.length?b.jobs.map(jobRow).join(""):`<div class="empty">Nothing in here.</div>`}
+   <button class="btn sec" onclick="go('today')">Back</button>`;
+ }
+ const owed=D.jobs.filter(j=>j.invNo&&!j.paidAt&&!j.legal)
+   .reduce((n,j)=>{const f=feeFor(j);return n+(f.amount||0)},0);
+ const late=D.jobs.filter(j=>j.invNo&&!j.paidAt&&!j.legal&&(ago(j.invDate)||0)>14);
+ return `
+ ${B.map(b=>`<button class="bk ${b.jobs.length?"":"z"}" data-k="${b.key}" onclick="go('today',{k:'${b.key}'})">
+   <span class="n">${b.jobs.length}</span>
+   <span class="t"><b>${b.title}</b><span>${b.jobs.length?esc(b.action):"nothing here"}</span></span>
+   <span class="go">${b.jobs.length?"›":""}</span></button>`).join("")}
+ ${owed?`<div class="pan"><div class="ln"><k>Out for collection</k><v>${money0(owed)}</v></div>
+   ${late.length?`<div class="ln"><k>Over 14 days</k><v style="color:var(--hot)">${late.length}</v></div>`:""}</div>`:""}
+ ${exceptions()}`;
+};
+/* §4: a delivery job sitting at Ready with no invoice surfaces after 24h as an
+   exception row — it does not get a standing card */
+function exceptions(){
+ const x=D.jobs.filter(j=>!j.legal&&j.state==="Ready"&&!j.invNo
+   &&Core.forkOf(j,D.accounts)==="delivery"&&(ago(j.readyDate)||0)>=1);
+ if(!x.length)return "";
+ return `<h2 class="sec">Needs an invoice</h2>`+x.map(jobRow).join("");
+}
+function jobRow(j){
+ const f=feeFor(j), a=acct(j.accountId);
+ return `<button class="row" onclick="go('job',{id:'${j.id}'})">
+  <span class="t"><b>${esc(jobLabel(j))}</b><span>${esc(a.name||"")}${j.ownerLabel?" · "+esc(j.ownerLabel):""}</span></span>
+  <span class="amt ${f.amount==null?"unk":""}">${f.amount==null?"SUBS NEEDED":money0(f.amount)}</span>
+ </button>`;
+}
+
+/* §6 screen 6 — Release. Uploads the PDF, serves it through the invoice link,
+   stamps the 21-day window. There is no path here for an unpaid delivery job. */
+R.release=()=>{
+ const j=job(ARG.id); if(!j)return `<div class="empty">Gone.</div>`;
+ const a=acct(j.accountId), can=Core.canServePdf(j,D.accounts), exp=Core.expiryOf(j);
+ if(!can)return `<div class="warnbox">This is a delivery account. The file stays locked until cleared funds.</div>
+  <button class="btn sec" onclick="go('job',{id:'${j.id}'})">Back</button>`;
+ return `<h2 class="sec">Release the file</h2>
+  <div class="pan">
+   <div class="ln"><k>To</k><v>${esc(a.name)}</v></div>
+   <div class="ln"><k>Property</k><v>${esc(shortAddr(j.address))}</v></div>
+   ${j.paidAt?`<div class="ln"><k>Paid</k><v>${fmt(j.paidAt)}</v></div>`:""}
+   <div class="ln"><k>Link expires</k><v>${exp?fmt(exp):fmt(addDays(today(),Core.RELEASE_DAYS))}</v></div>
+  </div>
+  <p style="color:var(--ink3);font-size:13px">The Matterport link lives inside the PDF. At expiry the space is deleted by hand; the record stays.</p>
+  <label><span class="t">Paste the file link</span><input class="in" id="rKey" value="${esc(j.pdfKey||"")}" placeholder="https://..."></label>
+  <button class="btn" onclick="doRelease('${j.id}')">${j.releasedAt?"Update the link":"Release it"}</button>
+  ${j.releasedAt?`<button class="btn sec" onclick="extend('${j.id}')">Extend 30 days — $${Core.EXTEND_FEE}</button>`:""}
+  <button class="btn sec" onclick="go('job',{id:'${j.id}'})">Back</button>`;
+};
+
+R.job=()=>{
+ const j=job(ARG.id); if(!j)return `<div class="empty">Gone.</div>`;
+ const a=acct(j.accountId), f=feeFor(j), fork=Core.forkOf(j,D.accounts);
+ const act=Core.nextAction(j,D.accounts);
+ const v=Core.violations(j,D.accounts,D.jobs);
+ const exp=Core.expiryOf(j);
+ const cls=j.state==="Paid"||j.state==="Released"?"go":j.state==="Invoiced"?"warn":"";
+ return `
+ <div style="margin:18px 0 6px"><span class="state ${cls}">${esc(j.state)}</span>
+  <span class="state" style="margin-left:6px">${fork}</span></div>
+ <h2 style="font:700 21px var(--sans);margin:10px 0 2px">${esc(jobLabel(j))}</h2>
+ <div style="color:var(--ink3);font-size:14px">${esc(a.name||"")}${a.contact?" · "+esc(a.contact):""}</div>
+ ${v.length?`<div class="warnbox">${v.map(esc).join("<br>")}</div>`:""}
+
+ <div class="pan">
+  <div class="ln"><k>Property</k><v>${esc(j.address||"—")}</v></div>
+  ${j.ownerLabel?`<div class="ln"><k>Homeowner <span style="color:var(--ink3)">(label only)</span></k><v>${esc(j.ownerLabel)}</v></div>`:""}
+  ${j.access?`<div class="ln"><k>Access</k><v>${esc(j.access)}</v></div>`:""}
+  ${j.claimNo?`<div class="ln"><k>Claim</k><v>${esc(j.claimNo)}</v></div>`:""}
+  <div class="ln"><k>Estimate</k><v>${j.total?money(j.total):"not entered"}</v></div>
+  <div class="ln"><k>Your fee</k><v class="${f.amount==null?"amt unk":""}">${f.amount==null?"SUBS NEEDED":money(f.amount)}</v></div>
+  <div class="ln"><k>Basis</k><v style="font-weight:400;color:var(--ink2);font-size:12.5px">${esc(f.reason)}</v></div>
+  ${j.invNo?`<div class="ln"><k>Invoice</k><v>${esc(j.invNo)} · ${fmt(j.invDate)}</v></div>`:""}
+  ${j.paidAt?`<div class="ln"><k>Paid</k><v>${fmt(j.paidAt)}${j.paidSource?" · "+esc(j.paidSource):""}</v></div>`:""}
+  ${j.releasedAt?`<div class="ln"><k>Released</k><v>${fmt(j.releasedAt)}${exp?" · expires "+fmt(exp):""}</v></div>`:""}
+ </div>
+
+ ${!j.total&&["Ready","Delivered","Approved"].includes(j.state)
+  ?`<button class="btn sec" onclick="ask('${j.id}','total','Estimate total','number')">Enter the estimate total</button>`:""}
+
+ ${act&&!v.length?`<button class="btn" onclick="advance('${j.id}')">${esc(act.label)}</button>`:""}
+ ${act&&v.length?`<button class="btn" disabled>${esc(act.label)}</button>`:""}
+
+ ${j.state==="Invoiced"?`<button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Open the invoice</button>`:""}
+ ${j.state==="Ready"&&fork==="delivery"?`<button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Preview invoice</button>`:""}
+ ${j.walkAt&&!j.readyDate?`<button class="btn sec" onclick="go('dispatch',{id:'${j.id}'})">Dispatch the scan</button>`:""}
+ ${j.releasedAt?`<button class="btn sec" onclick="extend('${j.id}')">Extend 30 days — $${Core.EXTEND_FEE}</button>`:""}
+
+ <h2 class="sec">Notes</h2>
+ ${notesFor(j.id).slice(0,8).map(n=>`<div class="note">${esc(n.text)}</div>`).join("")||`<div class="empty">None.</div>`}
+ <button class="btn sec" onclick="addNote('${j.id}')">Add a note</button>
+ <button class="btn sec" onclick="go('today')">Back</button>`;
+};
+
+R.newjob=()=>`
+ <h2 class="sec">New job — four fields</h2>
+ <label><span class="t">Hiring contractor</span>
+  <select class="in" id="nAcct">
+   <option value="">— choose —</option>
+   ${D.accounts.filter(a=>!a.banned).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join("")}
+   <option value="__new">+ New contractor</option>
+  </select></label>
+ <div id="nNewCo" style="display:none">
+  <label><span class="t">Company name</span><input class="in" id="nCoName" autocomplete="off"></label>
+  <label><span class="t">Their phone</span><input class="in" id="nCoPhone" type="tel"></label>
+ </div>
+ <label><span class="t">Property address</span><input class="in" id="nAddr" autocomplete="off"></label>
+ <label><span class="t">How to get in</span><input class="in" id="nAccess" placeholder="lockbox 4412 / meet Mario 8am"></label>
+ <label><span class="t">Claim number <span style="color:var(--ink3)">optional</span></span>
+  <input class="in" id="nClaim" autocomplete="off"></label>
+ <button class="btn" onclick="createJob()">Create the job</button>
+ <button class="btn sec" onclick="go('today')">Cancel</button>`;
+
+R.dispatch=()=>{
+ const j=job(ARG.id); if(!j)return `<div class="empty">Gone.</div>`;
+ const txt=`${j.address}\n${j.walkAt?fmt(j.walkAt):"today"}\nAccess: ${j.access||"call me"}\nText me when it's uploaded.`;
+ return `<h2 class="sec">Dispatch</h2>
+  <div class="pan"><div style="white-space:pre-wrap;font:14px var(--sans)">${esc(txt)}</div></div>
+  <button class="btn" onclick="shareText(${JSON.stringify(txt).replace(/"/g,"&quot;")})">Send this text</button>
+  <button class="btn sec" onclick="go('job',{id:'${j.id}'})">Back</button>`;
+};
+
+R.invoice=()=>{
+ const j=job(ARG.id); if(!j)return `<div class="empty">Gone.</div>`;
+ const f=feeFor(j), a=acct(j.accountId);
+ if(f.amount==null)return `<div class="warnbox">This fee can't be computed yet — ${esc(f.reason)}.</div>
+  <button class="btn sec" onclick="go('job',{id:'${j.id}'})">Back</button>`;
+ return `<h2 class="sec">Invoice</h2>
+  <div class="pan">
+   <div class="ln"><k>Bill to</k><v>${esc(a.name)}</v></div>
+   <div class="ln"><k>Number</k><v>${esc(j.invNo||("INV-"+Core.nextInvNo(D.jobs)))}</v></div>
+   <div class="ln"><k>Estimate</k><v>${money(j.total)}</v></div>
+   <div class="ln"><k>Rate</k><v>${esc(f.reason)}</v></div>
+   <div class="ln"><k>Amount due</k><v style="font-size:19px">${money(f.amount)}</v></div>
+   ${a.terms?`<div class="ln"><k>Terms</k><v style="font-weight:400;font-size:12.5px">${esc(a.terms)}</v></div>`:""}
+  </div>
+  ${!j.invNo?`<button class="btn" onclick="issue('${j.id}')">Issue this invoice</button>`:""}
+  <button class="btn sec" onclick="printInvoice('${j.id}')">Print / save PDF</button>
+  <button class="btn sec" onclick="go('job',{id:'${j.id}'})">Back</button>`;
+};
+
+/* §6 screen 7 — Accounts. Setting terms is the primary action, so the detail
+   opens inline rather than as another screen. */
+R.accounts=()=>{
+ if(ARG.id){
+  const a=acct(ARG.id);
+  return `<h2 style="font:700 21px var(--sans);margin:20px 0 4px">${esc(a.name)}</h2>
+  <div style="color:var(--ink3);font-size:14px;margin-bottom:12px">${esc(a.contact||"")}${a.phone?" · "+esc(a.phone):""}</div>
+  ${a.banned?`<div class="warnbox">Banned — ${esc(a.bannedNote||"no new jobs")}</div>`:""}
+  <div class="pan">
+   <div class="ln"><k>Fork</k><v>${a.ledger?"ledger":esc(a.fork)}</v></div>
+   <div class="ln"><k>Fresh estimate</k><v>${a.feePct}%</v></div>
+   <div class="ln"><k>Supplement</k><v>${a.supPct}% of the increase</v></div>
+   ${a.ledger?`<div class="ln"><k>Rules</k><v style="font-weight:400;font-size:12px;color:var(--ink2)">${
+     (a.rules||[]).map(r=>(r.retainerCovers?"retainer":r.pct+"% "+r.feeBasis)+" ≥ "+money0(r.minTotal)).join("<br>")}</v></div>`:""}
+  </div>
+  <label><span class="t">Terms printed on the invoice</span>
+   <textarea class="in" id="aTerms" placeholder="${a.fork==="approval"?"Due on carrier approval.":"Due on receipt. File released on cleared funds."}">${esc(a.terms||"")}</textarea></label>
+  <button class="btn" onclick="saveTerms('${a.id}')">Save terms</button>
+  ${!a.ledger?`<button class="btn sec" onclick="flipFork('${a.id}')">Switch to ${a.fork==="delivery"?"approval":"delivery"} fork</button>`:""}
+  <button class="btn sec" onclick="go('accounts')">Back</button>`;
+ }
+ return `<h2 class="sec">Accounts</h2>
+ ${D.accounts.map(a=>{
+   const n=D.jobs.filter(j=>j.accountId===a.id&&j.state!=="Lost").length;
+   return `<button class="row" onclick="go('accounts',{id:'${a.id}'})">
+    <span class="t"><b>${esc(a.name)}${a.banned?" — BANNED":""}</b>
+     <span>${a.ledger?"ledger":esc(a.fork)} · ${a.feePct}% / ${a.supPct}% · ${n} job${n===1?"":"s"}</span></span>
+    <span class="go">›</span></button>`;}).join("")}`;
+};
+
+R.ledger=()=>{
+ const led=D.accounts.filter(a=>a.ledger);
+ const legal=D.jobs.filter(j=>j.legal);
+ return `<h2 class="sec">Ledger</h2>
+ ${led.map(a=>{
+   const js=D.jobs.filter(j=>j.accountId===a.id&&j.state!=="Lost");
+   let earned=0,unknown=0;
+   js.forEach(j=>{const f=feeFor(j);if(f.amount==null)unknown++;else earned+=f.amount;});
+   const paid=D.payments.filter(p=>p.accountId===a.id).reduce((n,p)=>n+(+p.amount||0),0);
+   return `<div class="pan">
+    <div style="font:600 16px var(--sans);margin-bottom:8px">${esc(a.name)}</div>
+    <div class="ln"><k>Earned on jobs</k><v>${money(earned)}</v></div>
+    ${unknown?`<div class="ln"><k>Not computable</k><v class="amt unk">${unknown} job${unknown===1?"":"s"} — subs needed</v></div>`:""}
+    <div class="ln"><k>Payments recorded</k><v>${money(paid)}</v></div>
+    <div class="ln"><k>Balance</k><v style="font-size:18px">${money(earned-paid)}</v></div>
+   </div>`;}).join("")}
+ <h2 class="sec">Legal</h2>
+ ${legal.length?legal.map(jobRow).join(""):`<div class="empty">Nothing in legal.</div>`}`;
+};
+
+R.signin=()=>`
+ <h2 class="sec">Sign in</h2>
+ <label><span class="t">Email</span><input class="in" id="sEmail" type="email" value="benny@chairmanremodeling.com"></label>
+ <label><span class="t">Password</span><input class="in" id="sPass" type="password"></label>
+ <button class="btn" onclick="signIn()">Sign in</button>
+ <p style="color:var(--ink3);font-size:13px">Your data lives in Supabase. This device keeps a local copy so the app works with no signal.</p>`;
+
+/* ===================== actions ===================== */
+function advance(id){
+ const j=job(id), act=Core.nextAction(j,D.accounts);
+ if(!act)return;
+ if(act.needs==="walkAt"&&!j.walkAt){ask(id,"walkAt","Walk date","date");return;}
+ if(act.to==="Invoiced"){go("invoice",{id});return;}
+ if(act.to==="Paid"){markPaid(id);return;}
+ j.state=act.to;
+ if(act.stamps)j[act.stamps]=today();
+ if(act.to==="Released"){j.releasedAt=null;j.state="Paid";go("release",{id});return;}
+ save();render();toast(act.label);
+}
+const addDays=(iso,n)=>{const d=new Date(iso+"T12:00:00");d.setDate(d.getDate()+n);
+ return d.toISOString().slice(0,10);};
+function doRelease(id){
+ const j=job(id);
+ if(!Core.canServePdf(j,D.accounts))return toast("Not paid — the file stays locked");
+ j.pdfKey=($("#rKey")&&$("#rKey").value.trim())||j.pdfKey||"";
+ if(!j.releasedAt)j.releasedAt=today();
+ j.state="Released";j.expiresAt=Core.expiryOf(j);
+ const v=Core.violations(j,D.accounts,D.jobs);
+ if(v.length){j.releasedAt=null;j.state="Paid";return toast(v[0]);}
+ save();go("job",{id});toast("Released — link runs to "+fmt(j.expiresAt));
+}
+function markPaid(id){
+ const j=job(id), f=feeFor(j);
+ const src=prompt("Paid how? (Zelle)","Zelle");
+ if(src===null)return;
+ j.paidAt=today();j.paidSource=src||"Zelle";j.paidAmount=f.amount;j.state="Paid";
+ save();render();toast("Paid — cleared funds");
+}
+function issue(id){
+ const j=job(id), v=Core.violations(j,D.accounts,D.jobs);
+ if(v.length)return toast(v[0]);
+ j.invNo="INV-"+Core.nextInvNo(D.jobs);
+ j.invDate=today();j.state="Invoiced";
+ D.seq.invNo=Core.nextInvNo(D.jobs);
+ save();render();toast(j.invNo+" issued");
+}
+function extend(id){const j=job(id);
+ const d=new Date(today()+"T12:00:00");d.setDate(d.getDate()+Core.EXTEND_DAYS);
+ j.extendedUntil=d.toISOString().slice(0,10);save();render();
+ toast("Extended to "+fmt(j.extendedUntil)+" — bill $"+Core.EXTEND_FEE);}
+function ask(id,field,label,type){
+ const cur=job(id)[field]||"";
+ const val=prompt(label,cur);
+ if(val===null)return;
+ job(id)[field]=type==="number"?(+val||0):val;
+ save();render();
+}
+function addNote(id){
+ const t=prompt("Note");
+ if(!t)return;
+ D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),text:t});
+ save();render();
+}
+function saveTerms(id){acct(id).terms=$("#aTerms").value.trim();save();toast("Terms saved");}
+function flipFork(id){const a=acct(id);a.fork=a.fork==="delivery"?"approval":"delivery";save();render();
+ toast(a.name+" → "+a.fork);}
+function shareText(t){
+ if(navigator.share)navigator.share({text:t}).catch(()=>{});
+ else{navigator.clipboard&&navigator.clipboard.writeText(t);toast("Copied");}
+}
+function createJob(){
+ const sel=$("#nAcct").value;
+ let accountId=sel;
+ if(sel==="__new"){
+  const nm=$("#nCoName").value.trim();
+  if(!nm)return toast("Company name");
+  const a={id:uid(),name:nm,contact:"",phone:$("#nCoPhone").value.trim(),email:"",
+   fork:"delivery",feePct:2,supPct:7.5,banned:false,terms:"",reimbursables:true,ledger:false,rules:[]};
+  D.accounts.push(a);accountId=a.id;
+ }
+ if(!accountId)return toast("Pick the contractor");
+ const a=acct(accountId);
+ if(a.banned){toast("Call me — no job created");return;}
+ const addr=$("#nAddr").value.trim();
+ if(!addr)return toast("Property address");
+ const j={id:uid(),accountId,address:addr,access:$("#nAccess").value.trim(),
+  claimNo:$("#nClaim").value.trim(),insurer:"",ownerLabel:"",state:"Intake",
+  walkAt:null,walkConfirmed:false,scanSource:"matterport",scanDayId:null,
+  mportStatus:"",mportLink:"",readyDate:null,loss:"",jobType:"fresh",baseline:null,
+  total:0,feeOverride:null,feeOverrideReason:"",deliveredAt:null,approvedAt:null,
+  invNo:null,invDate:null,paidAt:null,paidAmount:null,paidSource:"",
+  releasedAt:null,expiresAt:null,extendedUntil:null,pdfKey:null,legal:false};
+ D.jobs.unshift(j);save();go("job",{id:j.id});toast("Job created");
+}
+async function signIn(){
+ const email=$("#sEmail").value.trim(),password=$("#sPass").value;
+ try{
+  const r=await fetch(url("/auth/v1/token?grant_type=password"),{method:"POST",
+   headers:{apikey:CLOUD.key,"content-type":"application/json"},
+   body:JSON.stringify({email,password})});
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.error_description||d.msg||"Sign-in failed");
+  SESS=d;localStorage.setItem("chairman_sess",JSON.stringify(d));
+  toast("Signed in");await pull();go("today");
+ }catch(e){toast(e.message);}
+}
+/* the invoice document */
+function printInvoice(id){
+ const j=job(id),a=acct(j.accountId),f=feeFor(j),me=D.me||{};
+ const fork=Core.forkOf(j,D.accounts);
+ const S="font-family:Helvetica,Arial,sans-serif";
+ $("#print").innerHTML=`
+ <div style="${S};color:#000;max-width:7.5in">
+  <table style="width:100%;border-collapse:collapse;border-bottom:2pt solid #000"><tr>
+   <td style="padding-bottom:8pt">
+    <div style="font:bold 15pt Helvetica;letter-spacing:2pt">CHAIRMAN ESTIMATING CO</div>
+    <div style="font:9pt Helvetica;color:#444;margin-top:3pt">
+     ${esc(me.name||"Benny Mancillas")} · ${esc(me.phone||"(713) 806-1233")} · ${esc(me.email||"benny@chairmanremodeling.com")}</div></td>
+   <td style="text-align:right;padding-bottom:8pt">
+    <div style="font:bold 22pt Helvetica">INVOICE</div>
+    <div style="font:10pt Helvetica;color:#444">${esc(j.invNo||"")}</div></td>
+  </tr></table>
+  <table style="width:100%;margin-top:12pt;font:10pt/1.5 Helvetica"><tr>
+   <td style="vertical-align:top;width:55%"><b>BILL TO</b><br>${esc(a.name)}<br>
+    ${esc(a.contact||"")}${a.phone?"<br>"+esc(a.phone):""}</td>
+   <td style="vertical-align:top"><b>PROPERTY</b><br>${esc(j.address)}
+    ${j.claimNo?"<br>Claim "+esc(j.claimNo):""}<br>Date ${fmt(j.invDate||today())}</td>
+  </tr></table>
+  <table style="width:100%;border-collapse:collapse;margin-top:16pt;font:10.5pt Helvetica">
+   <tr style="border-top:1.25pt solid #000;border-bottom:1.25pt solid #000">
+    <th style="text-align:left;padding:7pt 0;letter-spacing:.6pt">DESCRIPTION</th>
+    <th style="text-align:right;padding:7pt 0;letter-spacing:.6pt">AMOUNT</th></tr>
+   <tr><td style="padding:10pt 0;border-bottom:.5pt solid #ccc">
+     Xactimate estimate — ${esc(j.loss||"insurance")} loss<br>
+     <span style="font-size:9pt;color:#444">${esc(f.reason)} · estimate ${money(j.total)}</span></td>
+    <td style="text-align:right;padding:10pt 0;border-bottom:.5pt solid #ccc;font-weight:bold">${money(f.amount)}</td></tr>
+   <tr><td style="text-align:right;padding:10pt 0;font-weight:bold">TOTAL DUE</td>
+    <td style="text-align:right;padding:10pt 0;font:bold 14pt Helvetica;border-bottom:3pt double #000">${money(f.amount)}</td></tr>
+  </table>
+  <div style="margin-top:14pt;border:1.25pt solid #000;padding:9pt 11pt;font:10pt/1.6 Helvetica">
+   <b>ZELLE</b> ${esc(me.zelle||me.phone||"(713) 806-1233")}<br>
+   <b>REGISTERED TO</b> ${esc(me.zelleName||"Chairman Remodeling Group — Benny Mancillas")}</div>
+  <div style="margin-top:9pt;padding:7pt 10pt;border:1.25pt solid #000;font:bold 10pt Helvetica;text-align:center">
+   ${fork==="approval"
+     ? "THE ESTIMATE HAS BEEN DELIVERED. PAYMENT IS DUE ON CARRIER APPROVAL."
+     : "THE COMPLETED ESTIMATE IS RELEASED ONCE PAYMENT IS RECEIVED."}</div>
+  ${a.terms?`<div style="margin-top:12pt;font:9pt/1.5 Helvetica;color:#222">${esc(a.terms)}</div>`:""}
+ </div>`;
+ const was=document.title;
+ document.title=[j.invNo||"INVOICE",a.name,shortAddr(j.address),today()].filter(Boolean).join(" — ");
+ setTimeout(()=>{window.print();setTimeout(()=>{document.title=was;$("#print").innerHTML="";},600);},120);
+}
+
+/* ===================== chrome ===================== */
+const NAV=[["today","◉","Today"],["newjob","＋","New"],["accounts","▤","Accounts"],["ledger","§","Ledger"]];
+function render(){
+ if(!SESS){$("#app").innerHTML=R.signin();$("#nav").innerHTML="";$("#sub").textContent="not signed in";chip();return;}
+ const t=today();
+ $("#app").innerHTML=(R[V]||R.today)();
+ $("#nav").innerHTML=NAV.map(([k,i,l])=>`<button class="${V===k?"on":""}" onclick="go('${k}')">
+   <i>${i}</i>${l}</button>`).join("");
+ const open=D.jobs.filter(j=>!j.legal&&!["Released","Paid","Lost"].includes(j.state)).length;
+ $("#sub").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"})
+   +" · "+open+" open";
+ chip();
+}
+document.getElementById("app").addEventListener("change",e=>{
+ if(e.target.id==="nAcct"){const n=document.getElementById("nNewCo");
+  if(n)n.style.display=e.target.value==="__new"?"block":"none";}
+});
+window.addEventListener("pageshow",()=>pull());
+setInterval(pull,25000);
+render();pull();
+</script>
+</body></html>

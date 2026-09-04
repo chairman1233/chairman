@@ -18,3 +18,9 @@
   for = "/sw.js"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# v0 rebuild — served alongside v1 so a rollback is just a URL
+[[headers]]
+  for = "/v2/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

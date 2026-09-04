@@ -1359,15 +1359,23 @@ const paidTotal=j=>payList(j).reduce((s,p)=>s+(+p.amount||0),0);
 function fee(j){
  const total=+j.total||0, adv=(+j.advance||0)+paidTotal(j), p=jobPct(j);
  const pct=total*(p/100);
- let feeOnly=0, kind=j.feeMode||"pct", base=total;
+ let feeOnly=0, kind=j.feeMode||"pct", base=total, unknown=false;
  if(kind==="flat"){ feeOnly=+j.flat||0; }
- else if(kind==="aftersubs"){ base=Math.max(0,total-subTotal(j)); feeOnly=base*(p/100); }
+ /* AFTERSUBS WITH NO SUB COSTS IS UNKNOWN, NOT ZERO-SUBS. Every historical
+    aftersubs job has empty subCosts, so "total × 40%" quietly invented a
+    number — that's how a $37K expectation got carried on a job whose real
+    figure nobody knows. Unknown must read as unknown. */
+ else if(kind==="aftersubs"){
+  const st=subTotal(j);
+  if(!st&&!(j.subs||[]).length){ base=total; feeOnly=0; unknown=true; }
+  else { base=Math.max(0,total-st); feeOnly=base*(p/100); }
+ }
  else if(kind==="hourly"){ base=jobMin(j)||0; feeOnly=hourlyAmount(j); }
  else if(kind==="retainer"){ feeOnly=0; }          /* covered — nothing to invoice */
  else { kind="pct"; feeOnly=pct; }
  const extras=extrasTotal(j);
  const gross=feeOnly+extras;              /* everything they owe before any advance */
- return {pct,rate:p,feeOnly,extras,gross,adv,kind,base,subs:subTotal(j),
+ return {pct,rate:p,feeOnly,extras,gross,adv,kind,base,unknown,subs:subTotal(j),
   hourRate:jobRate(j),mins:jobMin(j)||0,
   wouldBe:kind==="retainer"?pct:0,
   due:Math.max(0,gross-adv), over:adv>gross?adv-gross:0};
@@ -7206,6 +7214,16 @@ const ME_TITLE=()=>((D.me||{}).title||"").trim()||"Insurance Estimator · Xactim
 const ME_PHONE=()=>((D.me||{}).phone||"").trim()||"(713) 806-1233";
 const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"benny@chairmanremodeling.com";
 const ME_ZELLE=()=>((D.me||{}).zelle||"").trim()||ME_PHONE();
+/* THE FORK. Two kinds of contractor, and the invoice must not lie to either.
+   delivery — they pay on delivery; the file is held until cleared funds.
+   approval — they cannot get carrier approval WITHOUT the file, so it goes
+              first and the invoice follows their approval.
+   Putting "released once payment is received" on an approval account's
+   invoice contradicts how he actually works with Nick and Jordan. */
+const forkOf=j=>{
+ const a=j&&j.accountId&&(typeof ACCOUNTS==="function")&&ACCOUNTS().find(x=>x.id===j.accountId);
+ return (a&&a.fork)||"delivery";
+};
 /* the name the Zelle account is registered under — contractors send to the
    wrong handle when the invoice only says a phone number */
 const ZELLE_NAME=()=>((D.me||{}).zelleName||"").trim()||"Chairman Remodeling Group — Benny Mancillas";
