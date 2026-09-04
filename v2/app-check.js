@@ -130,6 +130,34 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   if (!/MARK_BOX/.test(src) || !/lum>135/.test(src))
     fail("the logo is not cropped and hard-cut — the frame and shadow will print");
   else ok("the logo is cropped to the mark and hard-cut, no frame or shadow");
+  /* his mark is black on white and must not be recoloured for the screen —
+     it sits on a white plate instead */
+  if (/buildMark\([^)]*\[\s*2[0-9]{2}\s*,/.test(src))
+    fail("the mark is being recoloured/inverted for the dark UI");
+  else ok("the mark is never inverted — it sits on a white plate");
+  if (!/\.plate\{/.test(html)) fail("no white plate behind the mark");
+  else ok("the white plate is in the stylesheet");
+}
+
+/* ---- 7d. TWO REAL LAYOUTS, NOT ONE PHONE PAGE STRETCHED ---- */
+{
+  if (!/@media\(min-width:1024px\)/.test(html))
+    fail("there is no desktop layout at all — this is the phone page on a monitor");
+  else ok("a desktop layout exists at ≥1024px");
+  const desk = html.slice(html.indexOf("@media(min-width:1024px)"), html.indexOf("@media print"));
+  if (!/#side\{display:flex/.test(desk)) fail("desktop has no persistent side rail");
+  else ok("desktop gets a persistent left rail");
+  if (!/nav\{display:none\}/.test(desk)) fail("the phone bottom bar is still showing on desktop");
+  else ok("the phone bottom bar is hidden on desktop");
+  if (!/\.bkgrid\{display:grid/.test(desk)) fail("buckets do not lay out as a grid on desktop");
+  else ok("buckets become a grid on desktop");
+  if (!/max-width:1180px/.test(desk)) fail("desktop content is still pinned to a phone column");
+  else ok("desktop content uses the full working width");
+  /* and the phone layout must survive */
+  if (!/nav\{position:fixed/.test(html)) fail("the mobile bottom nav is gone");
+  else ok("mobile keeps its fixed bottom nav");
+  if (!/--tap:56px/.test(html)) fail("mobile tap targets shrank");
+  else ok("mobile tap targets stay at 56px");
 }
 
 /* ---- 8. the homeowner is a label and nothing else ---- */
