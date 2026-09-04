@@ -258,6 +258,12 @@ const fmt=d=>{if(!d)return "—";const x=new Date(String(d).slice(0,10)+"T12:00:
  return x.toLocaleDateString("en-US",{month:"short",day:"numeric"});};
 const ago=d=>d?Math.max(0,Math.round((new Date(today())-new Date(String(d).slice(0,10)))/864e5)):null;
 const acct=id=>D.accounts.find(a=>a.id===id)||{};
+/* who is paying. A direct job has no GC account — the homeowner is the payer,
+   which is the ONLY thing that changes. */
+const payerOf=j=>j&&j.direct
+ ? {name:j.ownerLabel||"Homeowner",contact:"",phone:j.ownerPhone||"",email:"",terms:"",direct:true}
+ : acct(j&&j.accountId);
+const payerName=j=>j&&j.direct?(j.ownerLabel||"Homeowner")+" — direct":(acct(j.accountId).name||"");
 const job=id=>D.jobs.find(j=>j.id===id);
 const shortAddr=a=>String(a||"").split(",")[0].trim();
 const jobLabel=j=>shortAddr(j.address)||j.ownerLabel||"Untitled";
@@ -415,7 +421,7 @@ function exceptions(){
 function jobRow(j){
  const f=feeFor(j), a=acct(j.accountId);
  return `<button class="row" onclick="go('job',{id:'${j.id}'})">
-  <span class="t"><b>${esc(jobLabel(j))}</b><span>${esc(a.name||"")}${j.ownerLabel?" · "+esc(j.ownerLabel):""}</span></span>
+  <span class="t"><b>${esc(jobLabel(j))}</b><span>${esc(payerName(j))}${!j.direct&&j.ownerLabel?" · "+esc(j.ownerLabel):""}</span></span>
   <span class="amt ${f.amount==null?"unk":""}">${f.amount==null?"SUBS NEEDED":money0(f.amount)}</span>
  </button>`;
 }
@@ -452,13 +458,13 @@ R.job=()=>{
  <div style="margin:18px 0 6px"><span class="state ${cls}">${esc(j.state)}</span>
   <span class="state" style="margin-left:6px">${fork}</span></div>
  <h2 style="font:700 21px var(--sans);margin:10px 0 2px">${esc(jobLabel(j))}</h2>
- <div style="color:var(--ink3);font-size:14px">${esc(a.name||"")}${a.contact?" · "+esc(a.contact):""}</div>
+ <div style="color:var(--ink3);font-size:14px">${esc(payerName(j))}${j.direct?(j.ownerPhone?" · "+esc(j.ownerPhone):""):(a.contact?" · "+esc(a.contact):"")}</div>
  ${v.length?`<div class="warnbox">${v.map(esc).join("<br>")}</div>`:""}
 
  <div class="cols"><div>
  <div class="pan">
   <div class="ln"><k>Property</k><v>${esc(j.address||"—")}</v></div>
-  ${j.ownerLabel?`<div class="ln"><k>Homeowner <span style="color:var(--ink3)">(label only)</span></k><v>${esc(j.ownerLabel)}</v></div>`:""}
+  ${j.ownerLabel?`<div class="ln"><k>Homeowner${j.direct?" <span style=\"color:var(--ink3)\">(the client — they pay)</span>":" <span style=\"color:var(--ink3)\">(label only)</span>"}</k><v>${esc(j.ownerLabel)}${j.direct&&j.ownerPhone?" · "+esc(j.ownerPhone):""}</v></div>`:""}
   ${j.access?`<div class="ln"><k>Access</k><v>${esc(j.access)}</v></div>`:""}
   ${j.claimNo?`<div class="ln"><k>Claim</k><v>${esc(j.claimNo)}</v></div>`:""}
   <div class="ln"><k>Estimate</k><v>${j.total?money(j.total):"not entered"}</v></div>
@@ -489,16 +495,24 @@ R.job=()=>{
 };
 
 R.newjob=()=>`
- <h2 class="sec">New job — four fields</h2>
- <label><span class="t">Hiring contractor</span>
+ <h2 class="sec">New job</h2>
+ <label><span class="t">Who called you?</span>
   <select class="in" id="nAcct">
    <option value="">— choose —</option>
    ${D.accounts.filter(a=>!a.banned).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join("")}
    <option value="__new">+ New contractor</option>
+   <option value="__owner">Homeowner called me direct</option>
   </select></label>
  <div id="nNewCo" style="display:none">
   <label><span class="t">Company name</span><input class="in" id="nCoName" autocomplete="off"></label>
   <label><span class="t">Their phone</span><input class="in" id="nCoPhone" type="tel"></label>
+ </div>
+ <!-- A homeowner can call for an estimate. That does not make them a GC
+      account and it does not turn this into a homeowner product — it is just
+      a job whose caller is the owner, billed to the owner. -->
+ <div id="nOwner" style="display:none">
+  <label><span class="t">Homeowner name</span><input class="in" id="nOwnName" autocomplete="off"></label>
+  <label><span class="t">Their phone</span><input class="in" id="nOwnPhone" type="tel" inputmode="tel"></label>
  </div>
  <label><span class="t">Property address</span><input class="in" id="nAddr" autocomplete="off"></label>
  <label><span class="t">How to get in</span><input class="in" id="nAccess" placeholder="lockbox 4412 / meet Mario 8am"></label>
@@ -523,7 +537,7 @@ R.invoice=()=>{
   <button class="btn sec" onclick="go('job',{id:'${j.id}'})">Back</button>`;
  return `<h2 class="sec">Invoice</h2>
   <div class="pan">
-   <div class="ln"><k>Bill to</k><v>${esc(a.name)}</v></div>
+   <div class="ln"><k>Bill to</k><v>${esc(payerName(j))}</v></div>
    <div class="ln"><k>Number</k><v>${esc(j.invNo||("INV-"+Core.nextInvNo(D.jobs)))}</v></div>
    <div class="ln"><k>Estimate</k><v>${money(j.total)}</v></div>
    <div class="ln"><k>Rate</k><v>${esc(f.reason)}</v></div>
@@ -692,7 +706,13 @@ function shareText(t){
 }
 function createJob(){
  const sel=$("#nAcct").value;
- let accountId=sel;
+ let accountId=sel, direct=false, ownName="", ownPhone="";
+ if(sel==="__owner"){
+  ownName=$("#nOwnName").value.trim();
+  if(!ownName)return toast("Homeowner's name");
+  ownPhone=$("#nOwnPhone").value.trim();
+  direct=true;accountId="";
+ }
  if(sel==="__new"){
   const nm=$("#nCoName").value.trim();
   if(!nm)return toast("Company name");
@@ -700,13 +720,14 @@ function createJob(){
    fork:"delivery",feePct:2,supPct:7.5,banned:false,terms:"",reimbursables:true,ledger:false,rules:[]};
   D.accounts.push(a);accountId=a.id;
  }
- if(!accountId)return toast("Pick the contractor");
- const a=acct(accountId);
- if(a.banned){toast("Call me — no job created");return;}
+ if(!accountId&&!direct)return toast("Pick who called you");
+ if(accountId){const a=acct(accountId);
+  if(a.banned){toast("Call me — no job created");return;}}
  const addr=$("#nAddr").value.trim();
  if(!addr)return toast("Property address");
- const j={id:uid(),accountId,address:addr,access:$("#nAccess").value.trim(),
-  claimNo:$("#nClaim").value.trim(),insurer:"",ownerLabel:"",state:"Intake",
+ const j={id:uid(),accountId,direct,ownerPhone:ownPhone,
+  address:addr,access:$("#nAccess").value.trim(),
+  claimNo:$("#nClaim").value.trim(),insurer:"",ownerLabel:ownName,state:"Intake",
   walkAt:null,walkConfirmed:false,scanSource:"matterport",scanDayId:null,
   mportStatus:"",mportLink:"",readyDate:null,loss:"",jobType:"fresh",baseline:null,
   total:0,feeOverride:null,feeOverrideReason:"",deliveredAt:null,approvedAt:null,
@@ -747,8 +768,8 @@ async function printInvoice(id){
     <div style="font:10pt Helvetica;color:#444">${esc(j.invNo||"")}</div></td>
   </tr></table>
   <table style="width:100%;margin-top:12pt;font:10pt/1.5 Helvetica"><tr>
-   <td style="vertical-align:top;width:55%"><b>BILL TO</b><br>${esc(a.name)}<br>
-    ${esc(a.contact||"")}${a.phone?"<br>"+esc(a.phone):""}</td>
+   <td style="vertical-align:top;width:55%"><b>BILL TO</b><br>${esc(j.direct?(j.ownerLabel||"Homeowner"):a.name)}<br>
+    ${esc(j.direct?(j.ownerPhone||""):(a.contact||""))}${!j.direct&&a.phone?"<br>"+esc(a.phone):""}</td>
    <td style="vertical-align:top"><b>PROPERTY</b><br>${esc(j.address)}
     ${j.claimNo?"<br>Claim "+esc(j.claimNo):""}<br>Date ${fmt(j.invDate||today())}</td>
   </tr></table>
@@ -810,7 +831,9 @@ function render(){
 }
 document.getElementById("app").addEventListener("change",e=>{
  if(e.target.id==="nAcct"){const n=document.getElementById("nNewCo");
-  if(n)n.style.display=e.target.value==="__new"?"block":"none";}
+  if(n)n.style.display=e.target.value==="__new"?"block":"none";
+  const o=document.getElementById("nOwner");
+  if(o)o.style.display=e.target.value==="__owner"?"block":"none";}
 });
 window.addEventListener("pageshow",()=>pull());
 setInterval(pull,25000);

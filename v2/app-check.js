@@ -212,11 +212,40 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   else ok("five buckets remain, in order");
 }
 
+/* ---- 7f. A HOMEOWNER CAN CALL. That must not be blocked, and must not turn
+       the app into a homeowner product — it is one option on New Job. ---- */
+{
+  if (!/__owner/.test(src)) fail("there is no way to log a homeowner-called job");
+  else ok("New Job offers \"Homeowner called me direct\"");
+  ["nOwnName", "nOwnPhone"].forEach(f => {
+    if (!new RegExp(f).test(src)) fail("the homeowner form is missing " + f);
+  });
+  ok("name, phone and address are captured for a direct job");
+  if (!/if\(!accountId&&!direct\)\s*return toast/.test(src))
+    fail("a job with no GC account is still blocked");
+  else ok("a job is no longer blocked just because the caller isn't a GC");
+  if (!/const payerOf=/.test(src)) fail("there is no single payer resolver");
+  else ok("one payer resolver — the account, or the homeowner on a direct job");
+  if (!/j\.direct\?\(j\.ownerLabel\|\|"Homeowner"\):a\.name/.test(src.replace(/\s+/g, "")))
+    fail("the invoice does not bill the homeowner on a direct job");
+  else ok("a direct job bills the homeowner, not a blank company");
+  /* and the fee still computes with no account at all */
+  const f = C.feeOf({ id: "d1", accountId: "", total: 50000, jobType: "fresh" }, [], []);
+  if (f.amount !== 1000) fail("a direct job does not price at the default 2%", "got " + f.amount);
+  else ok("a direct job prices at the default 2%");
+  if (C.forkOf({ accountId: "" }, []) !== "delivery")
+    fail("a direct job is not on the delivery fork");
+  else ok("a direct job is delivery fork — they pay, then the file goes");
+}
+
 /* ---- 8. the homeowner is a label and nothing else ---- */
 {
-  if (/ownerLabel[^;]{0,80}(mailto|tel:|billTo|invoice)/i.test(src))
-    fail("the homeowner is being contacted or billed somewhere");
-  else ok("the homeowner is a display label only — never billed, never contacted");
+  /* On a GC job the homeowner is a label. On a job the homeowner called in
+     themselves they ARE the client, so the rule is scoped to j.direct. */
+  const gcPaths = src.replace(/j\.direct\?[^:]{0,200}:/g, "");
+  if (/ownerLabel[^;]{0,80}(mailto|tel:)/i.test(gcPaths))
+    fail("a homeowner on a GC job is being contacted");
+  else ok("on a GC job the homeowner stays a label — never billed, never contacted");
 }
 
 /* ---- 9. migration is lossless and idempotent ---- */
