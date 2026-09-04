@@ -317,6 +317,12 @@ async function pull(){
   /* NEVER discard a write that hasn't reached the cloud yet. If this device is
      dirty, its copy wins and gets pushed — otherwise tapping "paid" on the
      phone would vanish the moment the desktop's poll came back. */
+  /* A device holding far less than the cloud is stale, not authoritative —
+     that is how a test seed or a half-loaded tab looks. Take the cloud and
+     say so, rather than pushing the thin copy over his real board. */
+  if(theirs>mine+2){D=Object.assign({},BLANK,rem.data);dirty=false;
+   localStorage.setItem("chairman_est_v0",JSON.stringify(D));
+   toast("Restored "+theirs+" jobs from the cloud");return render();}
   if(dirty){push();return render();}
   if(rts>(D._ts||0)+1500){D=Object.assign({},BLANK,rem.data);
    localStorage.setItem("chairman_est_v0",JSON.stringify(D));}
@@ -389,6 +395,8 @@ const R={};
    a ninth screen — the spec allows eight and means it. */
 R.today=()=>{
  const t=today(), B=Core.buckets(D.jobs,D.accounts,t);
+ B.forEach(b=>{if(b.key==="unpaid"||b.key==="bill"||b.key==="send")
+   b.money=b.jobs.reduce((n,j)=>{const f=feeFor(j);return n+(f.amount||0)},0);});
  if(ARG.k){
   const b=B.find(x=>x.key===ARG.k);
   if(!b)return `<div class="empty">Gone.</div>`;
@@ -403,7 +411,7 @@ R.today=()=>{
  <div class="bkgrid">
  ${B.map(b=>`<button class="bk ${b.jobs.length?"":"z"}" data-k="${b.key}" onclick="go('today',{k:'${b.key}'})">
    <span class="n">${b.jobs.length}</span>
-   <span class="t"><b>${b.title}</b><span>${b.jobs.length?esc(b.action):"nothing here"}</span></span>
+   <span class="t"><b>${b.title}</b><span>${b.jobs.length?esc(b.action)+(b.money?" · "+money0(b.money):""):""}</span></span>
    <span class="go">${b.jobs.length?"›":""}</span></button>`).join("")}
  </div>
  ${owed?`<div class="pan"><div class="ln"><k>Out for collection</k><v>${money0(owed)}</v></div>
@@ -481,6 +489,7 @@ R.job=()=>{
  ${act&&!v.length?`<button class="btn" onclick="advance('${j.id}')">${esc(act.label)}</button>`:""}
  ${act&&v.length?`<button class="btn" disabled>${esc(act.label)}</button>`:""}
 
+ ${j.invNo?`<button class="btn" onclick="printInvoice('${j.id}')">⎙ Print invoice ${esc(j.invNo)}</button>`:""}
  ${j.state==="Invoiced"?`<button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Open the invoice</button>`:""}
  ${j.state==="Ready"&&fork==="delivery"?`<button class="btn sec" onclick="go('invoice',{id:'${j.id}'})">Preview invoice</button>`:""}
  ${j.walkAt&&!j.readyDate?`<button class="btn sec" onclick="go('dispatch',{id:'${j.id}'})">Dispatch the scan</button>`:""}
@@ -492,6 +501,40 @@ R.job=()=>{
  <button class="btn sec" onclick="addNote('${j.id}')">Add a note</button>
  <button class="btn sec" onclick="go('today')">Back</button>
  </div></div>`;
+};
+
+/* Everything that isn't in this morning's buckets still exists. Pipeline is
+   what's moving, Completed is what's done, Owed is what he's chasing. */
+const ACTIVE=["Intake","Scheduled","Scanned","Ready","Delivered","Approved"];
+const owedJobs=()=>D.jobs.filter(j=>!j.legal&&j.invNo&&!j.paidAt)
+  .sort((a,b)=>(ago(a.invDate)||0)<(ago(b.invDate)||0)?1:-1);
+function jobRowAged(j){
+ const f=feeFor(j),d=ago(j.invDate)||0;
+ return `<button class="row" onclick="go('job',{id:'${j.id}'})">
+  <span class="t"><b>${esc(jobLabel(j))}</b><span>${esc(payerName(j))} · ${esc(j.invNo||"")} · ${d} day${d===1?"":"s"}</span></span>
+  <span class="amt ${d>14?"":""}" style="${d>14?"color:var(--hot)":""}">${f.amount==null?"SUBS NEEDED":money0(f.amount)}</span>
+ </button>`;
+}
+R.jobs=()=>{
+ const act=D.jobs.filter(j=>!j.legal&&ACTIVE.includes(j.state));
+ const done=D.jobs.filter(j=>!j.legal&&["Paid","Released","Expired"].includes(j.state))
+   .sort((a,b)=>String(b.paidAt||b.releasedAt||"").localeCompare(String(a.paidAt||a.releasedAt||"")));
+ const owed=owedJobs();
+ const sum=a=>a.reduce((n,j)=>{const f=feeFor(j);return n+(f.amount||0)},0);
+ const byState=st=>act.filter(j=>j.state===st);
+ return `
+ ${owed.length?`<h2 class="sec">Who owes me — ${money0(sum(owed))}</h2>
+  ${owed.map(jobRowAged).join("")}`:""}
+ <h2 class="sec">Pipeline — ${act.length} moving</h2>
+ ${act.length?ACTIVE.map(st=>{const g=byState(st);return g.length
+   ?`<div class="ln" style="border:0;padding:14px 2px 4px"><k style="font-weight:700;color:var(--ink2)">${st}</k><v style="color:var(--ink3)">${g.length}</v></div>`+g.map(jobRow).join("")
+   :"";}).join(""):`<div class="empty">Nothing in progress.</div>`}
+ <h2 class="sec">Completed — ${done.length}</h2>
+ ${done.length?done.map(j=>{const f=feeFor(j);
+   return `<button class="row" onclick="go('job',{id:'${j.id}'})">
+    <span class="t"><b>${esc(jobLabel(j))}</b><span>${esc(payerName(j))} · ${esc(j.state)}${j.paidAt?" "+fmt(j.paidAt):j.releasedAt?" "+fmt(j.releasedAt):""}</span></span>
+    <span class="amt" style="color:var(--go)">${j.paidAmount!=null?money0(j.paidAmount):(f.amount==null?"—":money0(f.amount))}</span>
+   </button>`;}).join(""):`<div class="empty">Nothing finished yet.</div>`}`;
 };
 
 R.newjob=()=>`
@@ -582,7 +625,25 @@ R.accounts=()=>{
 R.ledger=()=>{
  const led=D.accounts.filter(a=>a.ledger);
  const legal=D.jobs.filter(j=>j.legal);
- return `<h2 class="sec">Ledger</h2>
+ /* the haul — fee COLLECTED, not estimate volume */
+ const ym=today().slice(0,7), yr=today().slice(0,4);
+ const paid=D.jobs.filter(j=>j.paidAt&&!j.legal);
+ const amtOf=j=>j.paidAmount!=null?+j.paidAmount:((feeFor(j).amount)||0);
+ const month=paid.filter(j=>String(j.paidAt).slice(0,7)===ym);
+ const year =paid.filter(j=>String(j.paidAt).slice(0,4)===yr);
+ const owed=owedJobs(), owedSum=owed.reduce((n,j)=>{const f=feeFor(j);return n+(f.amount||0)},0);
+ return `
+ <h2 class="sec">The haul — fee collected</h2>
+ <div class="pan">
+  <div class="ln"><k>This month</k><v style="font-size:19px;color:var(--go)">${money0(month.reduce((n,j)=>n+amtOf(j),0))}</v></div>
+  <div class="ln"><k>Year to date</k><v style="font-size:19px;color:var(--go)">${money0(year.reduce((n,j)=>n+amtOf(j),0))}</v></div>
+  <div class="ln"><k>Out for collection</k><v style="font-size:19px;color:${owed.length?"var(--hot)":"var(--ink)"}">${money0(owedSum)}</v></div>
+ </div>
+ ${month.length?`<h2 class="sec">Paid this month</h2>
+  ${month.map(j=>`<button class="row" onclick="go('job',{id:'${j.id}'})">
+    <span class="t"><b>${esc(jobLabel(j))}</b><span>${esc(payerName(j))} · ${fmt(j.paidAt)}${j.paidSource?" · "+esc(j.paidSource):""}</span></span>
+    <span class="amt" style="color:var(--go)">${money0(amtOf(j))}</span></button>`).join("")}`:""}
+ <h2 class="sec">Ledger</h2>
  ${led.map(a=>{
    const js=D.jobs.filter(j=>j.accountId===a.id&&j.state!=="Lost");
    let earned=0,unknown=0;
@@ -808,7 +869,7 @@ async function printInvoice(id){
 }
 
 /* ===================== chrome ===================== */
-const NAV=[["today","◉","Today"],["newjob","＋","New"],["accounts","▤","Accounts"],["ledger","§","Ledger"]];
+const NAV=[["today","◉","Today"],["jobs","▦","Jobs"],["newjob","＋","New"],["ledger","$","Money"],["accounts","▤","Accounts"]];
 function sideHTML(){
  const open=D.jobs.filter(j=>!j.legal&&!["Released","Paid","Lost"].includes(j.state)).length;
  return `<div class="brand"><span class="plate"><img id="sideMark" alt="" src="${_markDark||"../logo-print.jpg"}"></span>

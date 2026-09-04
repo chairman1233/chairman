@@ -73,10 +73,16 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
 
 /* ---- 6. six buckets on the home screen, eight screens maximum ---- */
 {
+  /* SPEC §6 says eight. Benny added a ninth on purpose: "Jobs" — pipeline,
+     completed, and who owes him. Those lists existed in v1, he uses them, and
+     hiding a finished job because it left the 7am buckets is what he objected
+     to. Nine is the ceiling now; a tenth still fails. */
   const screens = [...src.matchAll(/^R\.(\w+)\s*=/gm)].map(m => m[1]);
   const real = screens.filter(s => s !== "signin");
-  if (real.length > 8) fail("more than eight screens", real.join(", "));
-  else ok(real.length + " screens (" + real.join(", ") + ") — within the eight");
+  if (real.length > 9) fail("more than nine screens", real.join(", "));
+  else ok(real.length + " screens (" + real.join(", ") + ")");
+  if (!real.includes("jobs")) fail("the Jobs list (pipeline / completed / owed) is missing");
+  else ok("Jobs carries pipeline, completed and who-owes");
   if (C.BUCKETS.length !== 5) fail("bucket count changed unexpectedly");
   else ok("five buckets on the home screen");
 }
@@ -236,6 +242,43 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   if (C.forkOf({ accountId: "" }, []) !== "delivery")
     fail("a direct job is not on the delivery fork");
   else ok("a direct job is delivery fork — they pay, then the file goes");
+}
+
+/* ---- 7g. THE THINGS HE SAID WERE MISSING ---- */
+{
+  /* ghost cards: an empty bucket says nothing, it does not fake a job */
+  if (/b\.jobs\.length\?esc\(b\.action\)[^:]*:"nothing here"/.test(src.replace(/\s+/g, "")))
+    fail("an empty bucket still prints filler text");
+  else ok("an empty bucket is blank — no ghost");
+  /* dollars on the money buckets, not just a count */
+  if (!/b\.money=b\.jobs\.reduce/.test(src.replace(/\s+/g, "")))
+    fail("the money buckets carry a count but no dollars");
+  else ok("Invoiced-Not-Paid, Approved-Bill-It and Paid-Send-It show the dollars");
+  /* completed work is still reachable */
+  if (!/\["Paid","Released","Expired"\]\.includes\(j\.state\)/.test(src.replace(/\s+/g, "")))
+    fail("finished jobs are not listed anywhere");
+  else ok("completed jobs (paid / released) have their own list");
+  /* the pipeline */
+  if (!/const ACTIVE=\["Intake","Scheduled","Scanned","Ready","Delivered","Approved"\]/.test(src))
+    fail("in-progress jobs are not listed");
+  else ok("pipeline lists scheduled, scanned, ready, delivered, approved");
+  /* who owes, with the age */
+  if (!/const owedJobs=/.test(src)) fail("there is no who-owes-me list");
+  else ok("who-owes-me lists amount and days outstanding");
+  /* the haul */
+  if (!/This month/.test(src) || !/Year to date/.test(src))
+    fail("month and YTD collected are missing");
+  else ok("Money shows fee collected this month and YTD");
+  if (!/paidAmount!=null\?\+j\.paidAmount/.test(src.replace(/\s+/g, "")))
+    fail("the haul is counting estimate volume, not fee collected");
+  else ok("the haul counts what actually cleared, not estimate volume");
+  /* print, on the job, one thumb */
+  if (!/Print invoice \$\{esc\(j\.invNo\)\}/.test(src))
+    fail("there is no Print invoice button on the job screen");
+  else ok("Print invoice sits on the job itself");
+  /* a thin device must not overwrite a fat cloud */
+  if (!/theirs>mine\+2/.test(src)) fail("a stale device can still push over the real board");
+  else ok("a device holding far less than the cloud restores instead of pushing");
 }
 
 /* ---- 8. the homeowner is a label and nothing else ---- */
