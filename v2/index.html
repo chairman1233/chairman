@@ -120,9 +120,7 @@ nav button i{display:block;font-style:normal;font-size:19px;margin-bottom:3px}
 </style></head>
 <body>
 <header><div class="wrap hd">
- <svg class="mk" viewBox="0 0 124 136" aria-hidden="true"><path fill="#EEF1F4" fill-rule="evenodd"
-  d="M62 2 118 34v40H86V58L62 44 38 58v34l24 14 24-14v-4h32v14l-56 32L6 102V34L62 2Z
-     M62 26 94 44v10H78v-2L62 44 46 54v34l16 10 16-10v-2h16v10L62 114 30 96V44L62 26Z"/></svg>
+ <img class="mk" id="mark" alt="" src="../logo-print.jpg">
  <div class="grow"><h1>Chairman Estimating</h1><div class="sub" id="sub">loading</div></div>
  <button class="chip" id="syncChip" onclick="pull()">sync</button>
 </div></header>
@@ -134,6 +132,45 @@ nav button i{display:block;font-style:normal;font-size:19px;margin-bottom:3px}
 <script src="./core.js"></script>
 <script src="./migrate.js"></script>
 <script>
+/* ---- HIS MARK, from his own file. Never a substitute I drew.
+   The source is a 3D render: black mark, thin square frame, soft drop shadow,
+   on white. Measured off the file, the mark itself sits at x 26.9–71.2%,
+   y 23.6–75.3%. Crop to that, hard-cut everything lighter than the mark, and
+   paint it — white for the dark UI, black for paper. ---- */
+const MARK_BOX={x:0.269,y:0.236,w:0.443,h:0.517,pad:0.02};
+let _markLight="",_markDark="";
+function buildMark(src,rgb){
+ return new Promise(res=>{
+  const img=new Image();img.crossOrigin="anonymous";
+  img.onload=()=>{
+   try{
+    const W=img.naturalWidth,H=img.naturalHeight,p=MARK_BOX.pad;
+    const sx=W*(MARK_BOX.x-p), sy=H*(MARK_BOX.y-p);
+    const sw=W*(MARK_BOX.w+p*2), sh=H*(MARK_BOX.h+p*2);
+    const side=Math.max(sw,sh);
+    const c=document.createElement("canvas");c.width=c.height=512;
+    const x=c.getContext("2d");
+    x.drawImage(img,sx-(side-sw)/2,sy-(side-sh)/2,side,side,0,0,512,512);
+    const d=x.getImageData(0,0,512,512);
+    for(let i=0;i<d.data.length;i+=4){
+     const lum=(d.data[i]+d.data[i+1]+d.data[i+2])/3;
+     if(lum>135){d.data[i+3]=0;}                       /* frame + shadow gone */
+     else{d.data[i]=rgb[0];d.data[i+1]=rgb[1];d.data[i+2]=rgb[2];d.data[i+3]=255;}
+    }
+    x.putImageData(d,0,0);res(c.toDataURL("image/png"));
+   }catch(e){res("");}
+  };
+  img.onerror=()=>res("");
+  img.src=src;
+ });
+}
+async function loadMarks(){
+ _markLight=await buildMark("../logo-print.jpg",[238,241,244]);   /* dark UI */
+ _markDark =await buildMark("../logo-print.jpg",[0,0,0]);         /* paper */
+ const el=document.getElementById("mark");
+ if(el&&_markLight)el.src=_markLight;
+}
+
 /* ===================== state ===================== */
 const CLOUD={url:"https://sxfchjywhdvpzcnldrym.supabase.co",
              key:"sb_publishable_mH4-N3aJ21twFJqpuBhrnw_gfdMMnee"};
@@ -557,7 +594,9 @@ function printInvoice(id){
  $("#print").innerHTML=`
  <div style="${S};color:#000;max-width:7.5in">
   <table style="width:100%;border-collapse:collapse;border-bottom:2pt solid #000"><tr>
-   <td style="padding-bottom:8pt">
+   ${_markDark?`<td style="width:46pt;padding-bottom:8pt;vertical-align:middle">
+     <img src="${_markDark}" alt="" style="width:42pt;height:42pt;object-fit:contain"></td>`:""}
+   <td style="padding-bottom:8pt${_markDark?";padding-left:11pt":""}">
     <div style="font:bold 15pt Helvetica;letter-spacing:2pt">CHAIRMAN ESTIMATING CO</div>
     <div style="font:9pt Helvetica;color:#444;margin-top:3pt">
      ${esc(me.name||"Benny Mancillas")} · ${esc(me.phone||"(713) 806-1233")} · ${esc(me.email||"benny@chairmanremodeling.com")}</div></td>
@@ -615,6 +654,6 @@ document.getElementById("app").addEventListener("change",e=>{
 });
 window.addEventListener("pageshow",()=>pull());
 setInterval(pull,25000);
-render();pull();
+loadMarks();render();pull();
 </script>
 </body></html>

@@ -111,6 +111,24 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   else ok("v0 never writes to the v1 table — rollback stays clean");
 }
 
+/* ---- 7c. HIS LOGO, AND ONLY HIS.
+       I have twice replaced his real mark with a hexagon I drew. His asset is
+       logo-print.jpg; nothing else may stand in for it. ---- */
+{
+  if (/viewBox="0 0 124 136"/.test(src))
+    fail("a hand-drawn mark is standing in for his logo again");
+  else ok("no invented mark anywhere in v0");
+  if (!/logo-print\.jpg/.test(src)) fail("his logo file is not being used at all");
+  else ok("the header and the letterhead both load his own logo file");
+  if (!fs.existsSync(__dirname + "/../logo-print.jpg")) fail("logo-print.jpg is missing from the repo");
+  else ok("logo-print.jpg is present");
+  /* and it must be cropped to the mark, not the whole render with its frame
+     and drop shadow — that printed as a grey box */
+  if (!/MARK_BOX/.test(src) || !/lum>135/.test(src))
+    fail("the logo is not cropped and hard-cut — the frame and shadow will print");
+  else ok("the logo is cropped to the mark and hard-cut, no frame or shadow");
+}
+
 /* ---- 8. the homeowner is a label and nothing else ---- */
 {
   if (/ownerLabel[^;]{0,80}(mailto|tel:|billTo|invoice)/i.test(src))
