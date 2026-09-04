@@ -281,6 +281,49 @@ const src = html.match(/<script>([\s\S]*)<\/script>/)[1];
   else ok("a device holding far less than the cloud restores instead of pushing");
 }
 
+/* ---- 7h. ORDER, AGE, PARTNERS, AND ONE CHIP ---- */
+{
+  /* every row carries the date it came in and how long it has sat */
+  if (!/const inDateOf=/.test(src) || !/const ageOf=/.test(src))
+    fail("jobs have no in-date or age");
+  else ok("every job carries a date in and an age");
+  if (!/class="jr-d"/.test(src)) fail("the list does not show the date column");
+  else ok("the list line is date · age · who · state · next · amount");
+  if (!/_sort==="age"/.test(src)) fail("the list cannot be sorted by age");
+  else ok("the list sorts oldest-first or biggest-first");
+
+  /* GREEN DYNASTY ARE PARTNERS. The hold language must never reach them. */
+  if (!/fork==="ledger"\?""/.test(src.replace(/\s+/g, "")))
+    fail("a ledger/partner invoice still prints hold-until-paid language");
+  else ok("a ledger account prints no hold language — partners are not on Mario's terms");
+  /* prove it with the real rule, not just the string */
+  const gd = [{ id: "bobby", name: "Green Dynasty Group", ledger: true, rules: [] }];
+  if (C.forkOf({ accountId: "bobby" }, gd) !== "ledger")
+    fail("Green Dynasty is not resolving as a ledger account");
+  else ok("Green Dynasty resolves as ledger, not delivery");
+
+  /* one chip, silent when synced */
+  if (/synced\s*"\+new Date/.test(src)) fail("the app still announces 'synced'");
+  else ok("synced is silence — the chip only speaks when queued, failed or offline");
+  const chipFn = (src.match(/function chip\(\)\{[\s\S]*?\n\}/) || [""])[0];
+  if (!/style\.display=state\?"":"none"/.test(chipFn.replace(/\s+/g, "")))
+    fail("the chips are always visible");
+  else ok("both chip mounts hide when there is nothing to report");
+
+  /* the confusing label is gone and there is a way back */
+  const coreNoComments = require("fs").readFileSync(__dirname + "/core.js", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  if (/ESX done/.test(coreNoComments))
+    fail('"ESX done" is still a button');
+  else ok('"ESX done" is renamed to what it actually is');
+  if (typeof C.prevAction !== "function") fail("there is no way to undo a state tap");
+  else ok("a job can be stepped back one state");
+  const back = C.prevAction({ state: "Approved" }, []);
+  if (!back || back.to !== "Delivered" || !back.clears.includes("approvedAt"))
+    fail("stepping back from Approved does not clear approvedAt");
+  else ok("stepping back from Approved returns it to Delivered and clears the stamp");
+}
+
 /* ---- 8. the homeowner is a label and nothing else ---- */
 {
   /* On a GC job the homeowner is a label. On a job the homeowner called in

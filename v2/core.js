@@ -28,17 +28,36 @@ function nextAction(job, accounts) {
   const s = job.state;
   if (s === "Intake")    return { label: "Schedule the walk", to: "Scheduled", needs: "walkAt" };
   if (s === "Scheduled") return { label: "Scanned",           to: "Scanned" };
-  if (s === "Scanned")   return { label: "ESX done",          to: "Ready", stamps: "readyDate" };
+  /* "ESX done" meant nothing on the screen — it is the estimate being finished.
+     The label now says the real next move, and it differs by fork. */
+  if (s === "Scanned")   return { label: "Estimate done", to: "Ready", stamps: "readyDate" };
   if (s === "Ready")     return f === "approval"
-                              ? { label: "Delivered",  to: "Delivered", stamps: "deliveredAt" }
-                              : { label: "Invoice",    to: "Invoiced" };
-  if (s === "Delivered") return { label: "Approved",   to: "Approved", stamps: "approvedAt" };
+                              ? { label: "Send him the PDF", to: "Delivered", stamps: "deliveredAt" }
+                              : { label: "Invoice",          to: "Invoiced" };
+  /* Approved is Nick texting that the CARRIER approved — never automatic */
+  if (s === "Delivered") return { label: "He says the carrier approved", to: "Approved", stamps: "approvedAt" };
   if (s === "Approved")  return { label: "Invoice",    to: "Invoiced" };
   if (s === "Invoiced")  return { label: "Mark paid",  to: "Paid", stamps: "paidAt" };
   if (s === "Paid")      return f === "delivery"
                               ? { label: "Release the file", to: "Released", stamps: "releasedAt" }
                               : null;
   return null;
+}
+
+/* one step back, and what it un-stamps. Nothing here deletes money. */
+function prevAction(job, accounts) {
+  const f = forkOf(job, accounts), s = job.state;
+  const B = {
+    Scheduled: ["Intake",    []],
+    Scanned:   ["Scheduled", []],
+    Ready:     ["Scanned",   ["readyDate"]],
+    Delivered: ["Ready",     ["deliveredAt"]],
+    Approved:  ["Delivered", ["approvedAt"]],
+    Invoiced:  [f === "approval" ? "Approved" : "Ready", ["invNo", "invDate"]],
+    Paid:      ["Invoiced",  ["paidAt", "paidAmount", "paidSource"]],
+    Released:  ["Paid",      ["releasedAt", "expiresAt"]]
+  }[s];
+  return B ? { to: B[0], clears: B[1] } : null;
 }
 
 /* ---- §3 fee math — computed, never typed --------------------------------
@@ -162,13 +181,13 @@ function expiryOf(job) {
 
 if (typeof module !== "undefined") module.exports = {
   FORKS, LEDGER_STATES, forkOf, statesFor, nextAction, feeOf, ledgerFee, subTotalOf,
-  BUCKETS, buckets, INV_START, nextInvNo, violations, canServePdf, expiryOf,
+  BUCKETS, buckets, INV_START, nextInvNo, violations, canServePdf, expiryOf, prevAction,
   RELEASE_DAYS, EXTEND_DAYS, EXTEND_FEE
 };
 
 /* browser: one namespace, same functions the gate runs */
 if (typeof window !== "undefined") {
   window.Core = { FORKS, LEDGER_STATES, forkOf, statesFor, nextAction, feeOf, ledgerFee,
-    subTotalOf, BUCKETS, buckets, INV_START, nextInvNo, violations, canServePdf, expiryOf,
+    subTotalOf, BUCKETS, buckets, INV_START, nextInvNo, violations, canServePdf, expiryOf, prevAction,
     RELEASE_DAYS, EXTEND_DAYS, EXTEND_FEE };
 }
