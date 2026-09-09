@@ -94,14 +94,25 @@ const JOB={id:"borland",status:"Complete",owner:"Catherine Borland",
  const out=ctx.__inv(JOB);
  if(!/Benny Mancillas/.test(out))fail("his full name is missing from the invoice");
  else ok("full name prints even when the profile holds only \"Benny\"");
- if(!/Chairman Remodeling Group LLC/.test(out))fail("the legal entity name is missing");
- else ok("legal entity prints on the letterhead");
+ /* HE TRADES AS CHAIRMAN ESTIMATING CO NOW. The retired name must not appear
+    on any document — EXCEPT the Zelle registration, which is a bank record and
+    stays exactly as payers already have it, or money bounces. */
+ if(!/Chairman Estimating Co/.test(out))fail("the trading entity is missing from the letterhead");
+ else ok("letterhead reads Chairman Estimating Co");
+ const outNoZelle=out.replace(/Chairman Remodeling Group — Benny Mancillas/g,"");
+ if(/Chairman Remodeling Group/.test(outNoZelle))fail("the retired entity is still printing on paperwork");
+ else ok("the retired Chairman Remodeling Group name is off the paperwork");
+ if(!/Chairman Remodeling Group — Benny Mancillas/.test(out))
+  fail("the Zelle registration changed — payments would bounce");
+ else ok("Zelle registration unchanged — money still lands where payers expect");
+ if(!/www\.chairmanestimating\.com/.test(out))fail("the website is not on the invoice");
+ else ok("www.chairmanestimating.com prints on the invoice");
  if(!/806-1233/.test(out))fail("no phone anywhere on the invoice");
  else ok("phone prints");
- if(!/benny@chairmanremodeling\.com/.test(out))fail("no email anywhere on the invoice");
- else ok("business email prints");
- if(/chairmansolutions@gmail/.test(out))fail("the old personal gmail is still on the invoice");
- else ok("the personal gmail is off his paperwork");
+ if(!/benny@chairmanestimating\.com/.test(out))fail("the new business email is not on the invoice");
+ else ok("benny@chairmanestimating.com prints");
+ if(/chairmansolutions@gmail|benny@chairmanremodeling/.test(out))fail("an old email is still on the invoice");
+ else ok("the old emails are off his paperwork");
  if(/(ZELLE|PAYABLE TO)[^<]*<br>\s*<b/.test(out.replace(/&nbsp;/g," ").replace(/\s+/g," ")))
   fail("payment block has an empty value");
  else ok("payment block carries real values, no blank fields");

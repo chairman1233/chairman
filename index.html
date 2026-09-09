@@ -1058,7 +1058,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-170 · the fork, the outbox, the paper";
+const BUILD="C-171 · Chairman Estimating Co";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -7258,15 +7258,24 @@ const ME_NAME =()=>{const n=((D.me||{}).name||"").trim();
    company that doesn't exist. Use what he typed if it's already an entity, fill
    in his real registered name when what he typed is just a shorthand of it, and
    otherwise print exactly what he typed. */
-const BIZ_CANON="Chairman Remodeling Group LLC";
+/* THE ENTITY. He no longer trades as Chairman Remodeling Group — the
+   estimating business is Chairman Estimating Co. The Zelle registration is a
+   BANK record and is deliberately NOT renamed with it: money must keep landing
+   in the account the payer already has on file. */
+const BIZ_CANON="Chairman Estimating Co";
+const RETIRED_BIZ=/^chairman\s+remodeling/i;   /* the name he no longer trades under */
 const BIZ_LEGAL=()=>{const b=((D.me||{}).biz||"").trim();
  if(!b)return BIZ_CANON;
+ /* a profile still holding the retired name is stale, not authoritative —
+    honouring it is how old paperwork keeps going out under a dead entity */
+ if(RETIRED_BIZ.test(b))return BIZ_CANON;
  if(/\b(llc|l\.l\.c|inc|corp|co)\b\.?/i.test(b))return b;
  return BIZ_CANON.toLowerCase().startsWith(b.toLowerCase())?BIZ_CANON:b;};
 const ME_TITLE=()=>((D.me||{}).title||"").trim()||"Insurance Estimator · Xactimate Certified";
 const ME_PHONE=()=>((D.me||{}).phone||"").trim()||"(713) 806-1233";
-const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"benny@chairmanremodeling.com";
+const ME_EMAIL=()=>((D.me||{}).email||"").trim()||"benny@chairmanestimating.com";
 const ME_ZELLE=()=>((D.me||{}).zelle||"").trim()||ME_PHONE();
+const ME_SITE=()=>((D.me||{}).site||"").trim()||"www.chairmanestimating.com";
 /* THE FORK. Two kinds of contractor, and the invoice must not lie to either.
    delivery — they pay on delivery; the file is held until cleared funds.
    approval — they cannot get carrier approval WITHOUT the file, so it goes
@@ -7389,7 +7398,7 @@ function invoiceHTML(j){
    <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif;width:50%">
     <div style="font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666;margin-bottom:3pt">FROM</div>
     <b>${esc(ME_NAME())}</b><br>${esc(ME_TITLE())}<br>
-    ${ME_PHONE()?esc(ME_PHONE())+"<br>":""}${ME_EMAIL()?esc(ME_EMAIL()):""}</td>
+    ${ME_PHONE()?esc(ME_PHONE())+"<br>":""}${ME_EMAIL()?esc(ME_EMAIL())+"<br>":""}${esc(ME_SITE())}</td>
    <td style="vertical-align:top;font:10pt/1.55 Helvetica,Arial,sans-serif">
     <div style="font:bold 8.5pt Helvetica,Arial,sans-serif;letter-spacing:1.2pt;color:#666;margin-bottom:3pt">BILL TO</div>
     <b>${esc(B.name)}</b><br>
@@ -7447,7 +7456,7 @@ function invoiceHTML(j){
 
   <div style="text-align:center;font:8.5pt/1.6 Helvetica,Arial,sans-serif;color:#555;margin-top:14pt;border-top:.5pt solid #ccc;padding-top:7pt">
    <b style="color:#111">${esc(BIZ_LEGAL())}</b> &nbsp;·&nbsp; ${esc(ME_NAME())}, ${esc(ME_TITLE())}<br>
-   ${esc(ME_PHONE())} &nbsp;·&nbsp; ${esc(ME_EMAIL())}<br>
+   ${esc(ME_PHONE())} &nbsp;·&nbsp; ${esc(ME_EMAIL())} &nbsp;·&nbsp; ${esc(ME_SITE())}<br>
    <span style="color:#888">Thank you for your business.</span></div>
  </div>`;
 }
@@ -7534,11 +7543,11 @@ function contractHTML(a,opts){
    ${row("CONTRACTOR",esc(opts.name||a.name))}
    ${row("CONTACT",esc(opts.contact||""))}
    ${opts.addr?row("FIRST ASSIGNMENT",esc(opts.addr)):""}
-   ${row("ESTIMATOR","Chairman Remodeling Group LLC, through its Estimating Division — "+esc(me.name||"Benny Mancillas")+" · "+esc(me.phone||"713-806-1233"))}
+   ${row("ESTIMATOR",BIZ_LEGAL()+" — "+esc(me.name||"Benny Mancillas")+" · "+esc(me.phone||"713-806-1233"))}
   </table>
   ${P(`This Agreement covers estimating work the Contractor assigns to Estimator. Each assigned property is one "Assignment." It is not a construction contract, and it does not make Estimator a party to any agreement between the Contractor and its client.`)}
   ${H("1 · WHO YOU ARE DEALING WITH")}
-  ${P("Estimator provides professional insurance estimating services only. The Contractor is dealing with the estimating division of Chairman Remodeling Group — not with a competing contractor. On every Assignment, Estimator acts solely as an estimator: the property owner is and remains the Contractor's client, and Estimator will not solicit that client for construction work.")}
+  ${P("Estimator provides professional insurance estimating services only. The Contractor is dealing with Chairman Estimating Co — an estimating firm, not a competing contractor. On every Assignment, Estimator acts solely as an estimator: the property owner is and remains the Contractor's client, and Estimator will not solicit that client for construction work.")}
   ${H("2 · SERVICES AND RATE")}
   ${P("For each Assignment, Estimator prepares a line-item Xactimate estimate and provides a reasonable number of revisions, phone negotiations, and email rebuttals with the carrier. Rates for this Contractor:")}
   ${SUB("Fresh estimates:",`<b>${esc(String(opts.pct))}%</b> of the estimate total`)}
@@ -7572,7 +7581,7 @@ function contractHTML(a,opts){
     <div style="font:10.5pt Georgia,serif;margin-top:4pt">${esc(me.name||"Benny Mancillas")}</div>
     <div style="height:12pt"></div>
     <div style="border-bottom:1pt solid #1B1B1E"></div>
-    <div style="font:7.5pt Helvetica,Arial,sans-serif;color:#5A5C60;margin-top:2pt">Chairman Remodeling Group LLC — Estimating Division</div></td>
+    <div style="font:7.5pt Helvetica,Arial,sans-serif;color:#5A5C60;margin-top:2pt">${esc(BIZ_LEGAL())}</div></td>
   </tr></table>
  </div>`;
 }
