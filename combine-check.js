@@ -84,7 +84,7 @@ ctx.__setup([ACCT], JOBS);
   const r = { anthony: ctx.__rate("anthony"), strat: ctx.__rate("strat"), scan: ctx.__rate("scan") };
   if (!/2% of Estimate/.test(r.anthony)) fail("the fresh estimate does not show 2% of the estimate", r.anthony);
   else ok("estimate line reads: " + r.anthony);
-  if (!/7\.5% of recovery/.test(r.strat)) fail("the supplement does not show % of recovery", r.strat);
+  if (!/7\.5% of supplement/.test(r.strat)) fail("the supplement does not name its basis", r.strat);
   else ok("supplement line reads: " + r.strat);
   if (!/scan only|Flat/.test(r.scan)) fail("the scan is not marked flat", r.scan);
   else ok("scan line reads: " + r.scan);
@@ -96,12 +96,15 @@ ctx.__setup([ACCT], JOBS);
   else ok("the supplement line is labelled SUPPLEMENT");
   if (!/^<b>MATTERPORT SCAN<\/b>/.test(d.c)) fail("the scan line is not labelled MATTERPORT SCAN");
   else ok("the scan line is labelled MATTERPORT SCAN");
-  if (!/not on the estimate total/.test(d.s))
-    fail("the supplement line does not explain it is billed on the recovery");
-  else ok("the supplement line explains it is billed on the recovery, not the total");
-  if (!/Nothing recovered, nothing billed/.test(d.s))
-    fail("the supplement line drops the nothing-recovered promise");
-  else ok('the supplement line keeps "nothing recovered, nothing billed"');
+  /* HE BILLS FOR THE WORK HE DID, not for the carrier's answer. His Term 6 has
+     always said the fee is earned on delivery, so no line may imply that
+     payment waits on a recovery — that hands the contractor a reason to hold. */
+  if (/nothing recovered, nothing billed/i.test(d.s))
+    fail("the supplement line still makes the fee contingent on recovery");
+  else ok("the supplement line does not make the fee contingent on recovery");
+  if (!/earned on delivery/i.test(d.s))
+    fail("the supplement line does not state the fee is earned on delivery");
+  else ok("the supplement line states the fee is earned on delivery");
 }
 
 /* 3. the document itself */

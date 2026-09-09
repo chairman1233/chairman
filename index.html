@@ -7367,7 +7367,10 @@ function rateLabel(j,f){
  if(f.kind==="flat")return "Flat fee";
  if(f.kind==="hourly")return dur(f.mins)+" at "+money0(f.hourRate)+"/hr";
  if(f.kind==="aftersubs")return f.rate+"% after subs ("+money(f.base)+")";
- if(isSupplement(j))return f.rate+"% of recovery ("+money(supRecovered(j))+")";
+ /* Billed on the supplement scope he WROTE, not on what the carrier later
+    allows. His Term 6 has always said the fee is earned on delivery — the
+    invoice must not undercut that by implying payment waits on the carrier. */
+ if(isSupplement(j))return f.rate+"% of supplement ("+money(j.total)+")";
  return f.rate+"% of Estimate ("+money(j.total)+")";
 }
 function lineDesc(j,f){
@@ -7378,10 +7381,10 @@ function lineDesc(j,f){
    ? ", "+esc(String(j.loss).toLowerCase())+" loss" : "";
  const head=`<b>${isSupplement(j)?"SUPPLEMENT":"ESTIMATE"}</b> — Professional Xactimate estimating services${loss} (${addr}).`;
  const basis=isSupplement(j)
-  ? `Supplement prepared and negotiated on scope the carrier's estimate did not cover.
-     Billed at <b>${f.rate}% of the additional ${money(supRecovered(j))} recovered</b>${
-       (+j.supBase>0)?" above the adjuster's "+money(+j.supBase):""} — not on the estimate total.
-     Nothing recovered, nothing billed.`
+  ? `Supplement written, documented and submitted on scope the carrier's estimate did not cover${
+      (+j.supBase>0)?" (carrier's original: "+money(+j.supBase)+")":""}.
+     Billed at <b>${f.rate}% of the ${money(j.total)} supplement scope</b>. The fee is for the work
+     performed and is earned on delivery — see Carrier Outcome below.`
   : `New estimate written from scratch. Billed at <b>${f.rate}% of the ${money(j.total)} estimate total</b>.`;
  const inc=`Includes${j.mportLink?" Matterport scan access,":""} phone negotiations, email rebuttals with the carrier, and a reasonable number of revisions.`;
  return head+" "+basis+" "+inc;
@@ -7454,7 +7457,7 @@ function combinedHTML(a,js,no){
   <div style="margin-top:10pt;padding:7pt 10pt;border:.5pt solid #999;font:9pt/1.55 Helvetica;color:#222">
    <b style="letter-spacing:.4pt">HOW THIS IS BILLED</b><br>
    <b>New estimate</b> — ${esc(String(a.feePct!=null?a.feePct:2))}% of the estimate total.
-   &nbsp;·&nbsp; <b>Supplement</b> — ${esc(String(a.supPct!=null?a.supPct:7.5))}% of the additional amount recovered above the carrier's estimate; nothing recovered, nothing billed.
+   &nbsp;·&nbsp; <b>Supplement</b> — ${esc(String(a.supPct!=null?a.supPct:7.5))}% of the supplement scope prepared and submitted. Earned on delivery.
    &nbsp;·&nbsp; <b>Matterport scan</b> — flat, quoted per property when no estimate is written.</div>
 
   <div style="text-align:center;font:8.5pt/1.6 Helvetica;color:#555;margin-top:14pt;border-top:.5pt solid #ccc;padding-top:7pt">
@@ -7616,7 +7619,7 @@ function invoiceHTML(j){
    <b style="letter-spacing:.4pt">HOW THIS IS BILLED</b><br>
    <b>New estimate</b> — ${esc(String(acctOf(j)&&acctOf(j).feePct!=null?acctOf(j).feePct:2))}% of the estimate total.
    &nbsp;·&nbsp;
-   <b>Supplement</b> — ${esc(String(acctOf(j)&&acctOf(j).supPct!=null?acctOf(j).supPct:7.5))}% of the additional amount recovered above the carrier's estimate; if nothing is recovered, nothing is billed.
+   <b>Supplement</b> — ${esc(String(acctOf(j)&&acctOf(j).supPct!=null?acctOf(j).supPct:7.5))}% of the supplement scope prepared and submitted. Earned on delivery.
    <br><span style="color:#555">This invoice is billed as a <b>${isSup?"supplement":"new estimate"}</b>.</span></div>
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">TERMS &amp; CONDITIONS</div>
