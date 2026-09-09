@@ -1058,7 +1058,7 @@ body .col .ch .n{color:inherit}
 <nav id="nav"></nav>
 <script>
 "use strict";
-const BUILD="C-171 · Chairman Estimating Co";
+const BUILD="C-172 · the invoice explains itself";
 const LOGO_DEFAULT="";
 
 const $=s=>document.querySelector(s);
@@ -7300,6 +7300,168 @@ const forkOfAcct=a=>a?(a.partner?"partner":(a.fork||"delivery")):"delivery";
 /* the name the Zelle account is registered under — contractors send to the
    wrong handle when the invoice only says a phone number */
 const ZELLE_NAME=()=>((D.me||{}).zelleName||"").trim()||"Chairman Remodeling Group — Benny Mancillas";
+/* ---- ONE INVOICE, SEVERAL PROPERTIES ------------------------------------
+   He bills a contractor who has three things running at once. Three separate
+   invoices for $1,408, $604 and $200 is three things for Nick to lose. This
+   issues ONE number covering the lot, each property its own line with its own
+   basis, and stamps every job with that number so nothing gets billed twice. */
+function billableFor(acctId){
+ return D.jobs.filter(j=>j.accountId===acctId&&!j.invNo&&!j.sealed
+   &&["Complete","Invoiced"].includes(j.status)&&fee(j).due>0&&!fee(j).unknown);
+}
+function combineSheet(acctId){
+ const a=ACCOUNTS().find(x=>x.id===acctId)||{};
+ const js=billableFor(acctId);
+ if(!js.length){toast("Nothing ready to bill for "+(a.name||"this account"));return;}
+ const tot=js.reduce((n,j)=>n+fee(j).due,0);
+ sheet("One invoice — "+esc(a.name||""),`
+  <p class="xs dim" style="margin:0 0 12px">Everything finished and not yet billed. Untick anything you want to hold back.</p>
+  ${js.map(j=>`<label class="tog" style="align-items:flex-start">
+    <div class="grow"><div class="t" style="margin:0">${esc(shortAddr(j.address)||jobName(j))}</div>
+     <div class="xs dim">${esc(rateLabel(j,fee(j)))} · ${money(fee(j).due)}</div></div>
+    <input type="checkbox" class="cmbJ" value="${j.id}" checked style="width:24px;height:24px"></label>`).join("")}
+  <div class="ln2" style="margin-top:10px"><span class="k">Total</span><b id="cmbTot">${money(tot)}</b></div>
+  <button class="btn" onclick="combineIssue('${acctId}')">Issue one invoice</button>`);
+ setTimeout(()=>{document.querySelectorAll(".cmbJ").forEach(c=>c.onchange=()=>{
+  let t=0;document.querySelectorAll(".cmbJ:checked").forEach(x=>{const jj=job(x.value);if(jj)t+=fee(jj).due;});
+  const el=document.getElementById("cmbTot");if(el)el.textContent=money(t);});},60);
+}
+function combineIssue(acctId){
+ const ids=[...document.querySelectorAll(".cmbJ:checked")].map(c=>c.value);
+ if(!ids.length){toast("Pick at least one");return;}
+ const no="INV-"+nextInvNo();
+ ids.forEach(id=>{const j=job(id);if(!j)return;
+  j.invNo=no;j.invDate=today();j.status="Invoiced";
+  D.notes.unshift({id:uid(),jobId:id,kind:"Note",pin:false,created:new Date().toISOString(),
+   text:"[Billed] Included on combined invoice "+no+" — "+money(fee(j).due)+"."});});
+ D.invNo=Math.max(+D.invNo||1010,+no.replace(/\D/g,"")+1);
+ save();close_();
+ _combineIds=ids;
+ printCombined(acctId,ids,no);
+}
+let _combineIds=[];
+async function printCombined(acctId,ids,no){
+ const a=ACCOUNTS().find(x=>x.id===acctId)||{};
+ const js=ids.map(job).filter(Boolean);
+ if(!js.length)return;
+ _logoForPrint=await cleanPrintLogo();
+ document.getElementById("printarea").innerHTML=combinedHTML(a,js,no);
+ const was=document.title;
+ document.title=safeFile([no,a.name,plural(js.length,"property"),today()].filter(Boolean).join(" — "));
+ printThen(was);
+}
+
+/* ---- WHAT KIND OF WORK IS THIS, AND WHY IS THE RATE WHAT IT IS ----
+   A contractor should never have to ask why one line is 2% and another 7.5%.
+   A fresh estimate is a percentage of the estimate total; a supplement is a
+   percentage of what was actually recovered ABOVE the carrier's number; a
+   standalone scan is a flat service with no estimate to absorb it. One set of
+   helpers so the single-job and combined invoices can never disagree. */
+const isSupplement=j=>!!(j&&(j.isSupplement||/suppl/i.test(String(j.workType||""))
+  ||(j.supBase!=null&&j.supBase!=="")));
+const isScanOnly=j=>!!(j&&j.feeMode==="flat"&&(j.mport==="Done"||/scan|matterport/i.test(
+  String(j.next&&j.next.text||"")+String(j.workType||"")))&&!(+j.total>0));
+const supRecovered=j=>Math.max(0,(+((j&&j.total)||0))-(+((j&&j.supBase)||0)));
+function rateLabel(j,f){
+ if(isScanOnly(j))return "Flat — scan only";
+ if(f.kind==="flat")return "Flat fee";
+ if(f.kind==="hourly")return dur(f.mins)+" at "+money0(f.hourRate)+"/hr";
+ if(f.kind==="aftersubs")return f.rate+"% after subs ("+money(f.base)+")";
+ if(isSupplement(j))return f.rate+"% of recovery ("+money(supRecovered(j))+")";
+ return f.rate+"% of Estimate ("+money(j.total)+")";
+}
+function lineDesc(j,f){
+ const addr=esc(shortAddr(j.address)||jobName(j));
+ if(isScanOnly(j))return `<b>MATTERPORT SCAN</b> — 3D capture of ${addr}, delivered as a shareable
+   Matterport link. Billed as a standalone scan; no estimate was written for this property.`;
+ const loss=j.loss&&String(j.loss).toLowerCase()!=="other"
+   ? ", "+esc(String(j.loss).toLowerCase())+" loss" : "";
+ const head=`<b>${isSupplement(j)?"SUPPLEMENT":"ESTIMATE"}</b> — Professional Xactimate estimating services${loss} (${addr}).`;
+ const basis=isSupplement(j)
+  ? `Supplement prepared and negotiated on scope the carrier's estimate did not cover.
+     Billed at <b>${f.rate}% of the additional ${money(supRecovered(j))} recovered</b>${
+       (+j.supBase>0)?" above the adjuster's "+money(+j.supBase):""} — not on the estimate total.
+     Nothing recovered, nothing billed.`
+  : `New estimate written from scratch. Billed at <b>${f.rate}% of the ${money(j.total)} estimate total</b>.`;
+ const inc=`Includes${j.mportLink?" Matterport scan access,":""} phone negotiations, email rebuttals with the carrier, and a reasonable number of revisions.`;
+ return head+" "+basis+" "+inc;
+}
+/* the combined document. Same letterhead, same terms, one row per property. */
+function combinedHTML(a,js,no){
+ const me=D.me||{}, S="font-family:Helvetica,Arial,sans-serif";
+ const dateStr=new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+ const tot=js.reduce((n,j)=>n+fee(j).due,0);
+ const fork=(typeof forkOf==="function")?forkOf(js[0]):"delivery";
+ const rows=js.map(j=>{const f=fee(j);return `<tr>
+   <td style="padding:9pt 8pt;border-bottom:.5pt solid #ddd;font:10pt/1.5 Helvetica,Arial,sans-serif">${lineDesc(j,f)}</td>
+   <td style="padding:9pt 8pt;border-bottom:.5pt solid #ddd;font:10pt Helvetica,Arial,sans-serif;white-space:nowrap">${esc(rateLabel(j,f))}</td>
+   <td style="padding:9pt 8pt;border-bottom:.5pt solid #ddd;text-align:right;font:bold 10.5pt Helvetica,Arial,sans-serif;white-space:nowrap">${money(f.due)}</td></tr>`;}).join("");
+ return `
+ <div style="${S};color:#000">
+  <table style="width:100%;border-collapse:collapse;border-bottom:2pt solid #000"><tr>
+   <td style="width:46pt;padding-bottom:8pt;vertical-align:middle">${PRINT_MARK(46)}</td>
+   <td style="padding:0 0 8pt 11pt;vertical-align:middle">
+    <div style="font:bold 15pt Helvetica;letter-spacing:2.2pt">${esc(BIZ_LEGAL().toUpperCase())}</div>
+    <div style="font:8.5pt Helvetica;letter-spacing:1.4pt;color:#555;margin-top:3pt">ESTIMATING DIVISION &nbsp;·&nbsp; HOUSTON, TEXAS</div></td>
+   <td style="text-align:right;padding-bottom:8pt;vertical-align:middle">
+    <div style="font:bold 23pt Helvetica;letter-spacing:2pt">INVOICE</div>
+    <div style="font:10pt Helvetica;color:#555;margin-top:2pt">${esc(no)}</div></td>
+  </tr></table>
+
+  <table style="width:100%;margin-top:12pt;border-collapse:collapse"><tr>
+   <td style="vertical-align:top;width:50%;font:10pt/1.55 Helvetica">
+    <div style="font:bold 8.5pt Helvetica;letter-spacing:1.2pt;color:#666">FROM</div>
+    <b>${esc(ME_NAME())}</b><br>${esc(ME_TITLE())}<br>${esc(ME_PHONE())}<br>${esc(ME_EMAIL())}<br>${esc(ME_SITE())}</td>
+   <td style="vertical-align:top;font:10pt/1.55 Helvetica">
+    <div style="font:bold 8.5pt Helvetica;letter-spacing:1.2pt;color:#666">BILL TO</div>
+    <b>${esc(a.name||"")}</b><br>${esc(a.contact||"")}${a.phone?"<br>"+esc(a.phone):""}${a.email?"<br>"+esc(a.email):""}</td>
+  </tr></table>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:12pt;background:#f2f2f2;border:.75pt solid #bbb;
+   -webkit-print-color-adjust:exact;print-color-adjust:exact">
+   <tr><td style="padding:5pt 8pt;font:bold 9.5pt Helvetica">Invoice #:</td><td style="padding:5pt 8pt;font:9.5pt Helvetica">${esc(no)}</td>
+       <td style="padding:5pt 8pt;font:bold 9.5pt Helvetica">Date:</td><td style="padding:5pt 8pt;font:9.5pt Helvetica">${dateStr}</td></tr>
+   <tr><td style="padding:5pt 8pt;font:bold 9.5pt Helvetica">Properties:</td>
+       <td colspan="3" style="padding:5pt 8pt;font:9.5pt Helvetica">${js.map(j=>esc(shortAddr(j.address)||jobName(j))).join(" · ")}</td></tr>
+  </table>
+
+  <div style="font:bold 11pt Helvetica;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">SERVICES</div>
+  <table style="width:100%;border-collapse:collapse">
+   <tr style="border-top:1.25pt solid #111;border-bottom:1.25pt solid #111">
+    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica;letter-spacing:.6pt">DESCRIPTION</th>
+    <th style="padding:6pt 8pt;text-align:left;font:bold 9.5pt Helvetica;letter-spacing:.6pt;width:150pt">RATE</th>
+    <th style="padding:6pt 8pt;text-align:right;font:bold 9.5pt Helvetica;letter-spacing:.6pt;width:78pt">AMOUNT</th></tr>
+   ${rows}
+   <tr><td colspan="2" style="padding:9pt 8pt 4pt;text-align:right;font:bold 12pt Helvetica;letter-spacing:.5pt">TOTAL DUE</td>
+    <td style="padding:9pt 8pt 4pt;text-align:right;font:bold 14pt Helvetica;white-space:nowrap;border-bottom:3pt double #111">${money(tot)}</td></tr>
+  </table>
+
+  <div style="font:bold 11pt Helvetica;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">PAYMENT</div>
+  <table style="width:100%;border-collapse:collapse"><tr>
+   <td style="vertical-align:top;font:10pt/1.65 Helvetica;padding:7pt 10pt;border:.75pt solid #111">
+    <b>ZELLE</b> &nbsp;${esc(ME_ZELLE())}<br>
+    <b>REGISTERED TO</b> &nbsp;${esc(ZELLE_NAME())}<br>
+    <span style="color:#444">Payment due upon receipt.${a.terms?" "+esc(a.terms):""}</span></td>
+   <td style="vertical-align:middle;text-align:right;width:38%;padding-left:12pt">
+    <div style="font:8.5pt Helvetica;letter-spacing:1.2pt;color:#666">AMOUNT DUE</div>
+    <div style="font:bold 20pt Helvetica;margin-top:2pt">${money(tot)}</div></td>
+  </tr></table>
+  ${fork!=="partner"?`<div style="margin-top:8pt;padding:7pt 10pt;border:1.25pt solid #111;
+   font:bold 10.5pt Helvetica;letter-spacing:.3pt;text-align:center">
+   ${fork==="approval"?"THE ESTIMATES HAVE BEEN DELIVERED. PAYMENT IS DUE ON CARRIER APPROVAL."
+    :"THE COMPLETED ESTIMATES ARE RELEASED ONCE PAYMENT IS RECEIVED."}</div>`:""}
+
+  <div style="margin-top:10pt;padding:7pt 10pt;border:.5pt solid #999;font:9pt/1.55 Helvetica;color:#222">
+   <b style="letter-spacing:.4pt">HOW THIS IS BILLED</b><br>
+   <b>New estimate</b> — ${esc(String(a.feePct!=null?a.feePct:2))}% of the estimate total.
+   &nbsp;·&nbsp; <b>Supplement</b> — ${esc(String(a.supPct!=null?a.supPct:7.5))}% of the additional amount recovered above the carrier's estimate; nothing recovered, nothing billed.
+   &nbsp;·&nbsp; <b>Matterport scan</b> — flat, quoted per property when no estimate is written.</div>
+
+  <div style="text-align:center;font:8.5pt/1.6 Helvetica;color:#555;margin-top:14pt;border-top:.5pt solid #ccc;padding-top:7pt">
+   <b style="color:#111">${esc(BIZ_LEGAL())}</b> &nbsp;·&nbsp; ${esc(ME_NAME())}, ${esc(ME_TITLE())}<br>
+   ${esc(ME_PHONE())} &nbsp;·&nbsp; ${esc(ME_EMAIL())} &nbsp;·&nbsp; ${esc(ME_SITE())}</div>
+ </div>`;
+}
 function invoiceHTML(j){
  const f=fee(j),me=D.me,B=billParty(j);
  const no=j.invNo||peekInvNo();
@@ -7339,10 +7501,8 @@ function invoiceHTML(j){
     reads like one. */
  const S="font-family:Helvetica,Arial,sans-serif";
  const PC="-webkit-print-color-adjust:exact;print-color-adjust:exact";
- const rateTxt=f.kind==="flat"?"Flat fee"
-  :f.kind==="hourly"?dur(f.mins)+" at "+money0(f.hourRate)+"/hr"
-  :f.kind==="aftersubs"?f.rate+"% after subs ("+money(f.base)+")"
-  :f.rate+"% of Estimate ("+money(j.total)+")";
+ const isSup=isSupplement(j), isScan=isScanOnly(j);
+ const rateTxt=rateLabel(j,f);
  const sv=+me.siteFee||265, svDay=Math.max(0,sv-15), mpExt=79;
  /* the numbered terms. 4, 5 and 6 are the ones he asked for by name:
     carrier talks the claim down — non-refundable; contractor loses the job —
@@ -7350,8 +7510,11 @@ function invoiceHTML(j){
  const TERMS=[
   ["Delivery on Payment","The completed estimate, including all Xactimate files, PDFs and supporting documentation, is delivered once payment has been received and cleared. Drafts or partial scopes shared before payment remain the property of the Estimator and are not licensed for submission to any carrier."],
   ["Zelle","Payment is made by Zelle to "+ZELLE_NAME()+" at "+ME_ZELLE()+". Confirm the registered name before sending — payments to any other handle cannot be credited to this invoice."],
-  ["Scope of Fee","The fee covers the initial estimate, a reasonable number of revisions, phone negotiations, and email rebuttals with the carrier. Matterport scan access is included for fourteen (14) days after payment is received."],
-  ["Matterport Access","Scan files remain available for two weeks after payment, then are permanently deleted. A one-month extension is available for $"+mpExt+".00 if requested before the window expires."],
+  ["Scope of Fee","The fee covers the initial estimate, a reasonable number of revisions, phone negotiations, and email rebuttals with the carrier. Where Estimator writes the estimate for a property, scan access for that property is included for fourteen (14) days after payment is received."],
+  ["Matterport Access","Included scan access applies to the property Estimator has estimated. Files remain available for two weeks after payment, then are permanently deleted. A one-month extension is available for $"+mpExt+".00 if requested before the window expires."],
+  /* He scans properties for contractors as a standalone service — that is not
+     covered by an estimating fee, because there is no estimate to absorb it. */
+  ["Standalone Scans","A Matterport scan requested on a property Estimator is not writing an estimate for is a separate service, quoted and billed on its own. It is not covered by the estimating fee for any other property."],
   ["Site Visits","Any on-site visit is billed separately at $"+sv+".00 per visit (or $"+svDay+".00 per day for extended site work). Site visits are not included in the fee."],
   ["Carrier Outcome — Non-Refundable","The fee is earned upon delivery of the estimate. It is not contingent on, and is not refundable for, the carrier's approval, denial, reduction, or negotiation of any portion of the claim — including supplements and claims adjusted or negotiated downward."],
   ["Job Retention — Non-Refundable","The fee pays for estimating services actually rendered and is earned on delivery. It is not refundable if the contractor loses, withdraws from, or does not win the underlying job."],
@@ -7363,8 +7526,7 @@ function invoiceHTML(j){
  const svcRows=[];
  svcRows.push(`<tr>
   <td style="padding:8pt;border-bottom:.5pt solid #ddd;font:10.5pt/1.5 Helvetica,Arial,sans-serif">
-   Professional Xactimate estimating services — ${esc(j.loss||"insurance")} ${esc((j.workType==="Project"?"project":"estimate").toLowerCase())}
-   (${esc(jobName(j))}). Includes full estimate${j.mportLink?", Matterport scan access":""}, phone negotiations, email rebuttals, and a limited number of revisions.
+   ${lineDesc(j,f)}
    ${links.length?`<div style="margin-top:4pt">${links.join(" &nbsp;·&nbsp; ")}</div>`:""}</td>
   <td style="padding:8pt;border-bottom:.5pt solid #ddd;text-align:center;font:10.5pt Helvetica,Arial,sans-serif">1</td>
   <td style="padding:8pt;border-bottom:.5pt solid #ddd;font:10.5pt Helvetica,Arial,sans-serif;white-space:nowrap">${esc(rateTxt)}</td>
@@ -7448,6 +7610,14 @@ function invoiceHTML(j){
    ${forkOf(j)==="approval"
      ? "THE ESTIMATE HAS BEEN DELIVERED. PAYMENT IS DUE ON CARRIER APPROVAL."
      : "THE COMPLETED ESTIMATE IS RELEASED ONCE PAYMENT IS RECEIVED."}</div>`:""}
+
+  <!-- the two rates, side by side, so the basis is never a mystery -->
+  <div style="margin-top:10pt;padding:7pt 10pt;border:.5pt solid #999;font:9pt/1.55 Helvetica,Arial,sans-serif;color:#222">
+   <b style="letter-spacing:.4pt">HOW THIS IS BILLED</b><br>
+   <b>New estimate</b> — ${esc(String(acctOf(j)&&acctOf(j).feePct!=null?acctOf(j).feePct:2))}% of the estimate total.
+   &nbsp;·&nbsp;
+   <b>Supplement</b> — ${esc(String(acctOf(j)&&acctOf(j).supPct!=null?acctOf(j).supPct:7.5))}% of the additional amount recovered above the carrier's estimate; if nothing is recovered, nothing is billed.
+   <br><span style="color:#555">This invoice is billed as a <b>${isSup?"supplement":"new estimate"}</b>.</span></div>
 
   <div style="font:bold 11pt Helvetica,Arial,sans-serif;letter-spacing:.5pt;margin:14pt 0 4pt;border-bottom:1.5pt solid #111;padding-bottom:3pt">TERMS &amp; CONDITIONS</div>
   <div style="font:8.5pt/1.5 Helvetica,Arial,sans-serif;color:#222;text-align:justify">
@@ -8161,6 +8331,9 @@ R.account=({id})=>{
  </div>
  <div class="row" style="gap:10px;margin-top:16px;flex-wrap:wrap">
   <button class="btn s" style="margin:0" onclick="newJobForAcct('${a.id}')">+ New job for them</button>
+  ${(()=>{const n=billableFor(a.id).length;return n>1
+    ?`<button class="btn s" style="margin:0" onclick="combineSheet('${a.id}')">⎙ One invoice — ${n} properties</button>`
+    :"";})()}
   <button class="btn sec s" style="margin:0" onclick="weeklyUpdate('${a.id}')">⎙ Weekly update</button>
   ${/green dynasty/i.test(a.name)
    ?`<span class="chip v-est" title="Partners — no contract needed">◆ Partner</span>`
